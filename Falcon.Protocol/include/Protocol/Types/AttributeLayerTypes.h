@@ -42,6 +42,7 @@ enum class EnvironmentAttributeValueType {
     Bool,
     Float,
     Color,
+    String,
 };
 
 class EnvironmentAttributeValue {
@@ -60,6 +61,9 @@ public:
 
     Color255RGBA mColorValue;
     int32_t mColorOperation = 0;
+
+    std::string mStringValue;
+    int32_t mStringOperation = 0;
 };
 
 enum class NoiseAlignmentType {

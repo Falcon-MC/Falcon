@@ -46,6 +46,8 @@ namespace {
         {ContainerType::ChestBoat, 34},
         {ContainerType::DecoratedPot, 35},
         {ContainerType::Crafter, 36},
+        {ContainerType::DiscPress, 38},
+        {ContainerType::VirtualContainer, 39},
     };
 
     const int32_t TYPE_ENTRY_COUNT = sizeof(TYPE_ENTRIES) / sizeof(TYPE_ENTRIES[0]);

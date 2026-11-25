@@ -41,4 +41,5 @@ public:
     bool mOutputTracked = false;
     uint32_t mTickDelay = 0;
     bool mExecutingOnFirstTick = false;
+    bool mLastOutputIsRawMessage = false;
 };

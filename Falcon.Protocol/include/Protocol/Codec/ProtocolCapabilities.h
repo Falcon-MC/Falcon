@@ -27,7 +27,7 @@ struct ProtocolCapabilities {
     bool mAnimateHand = true;
     bool mDimensionClouds = true;
     bool mTransactionHandOnEveryUse = true;
-    bool mCraftReservedAction = true;
+    bool mCraftDiscPressAction = true;
     bool mLevelChunkBiomeUpdate = true;
 
     /**
@@ -39,4 +39,20 @@ struct ProtocolCapabilities {
     bool mEducationAgentCapabilities = true;
     bool mSoundDataUpdateType = true;
     bool mDiagnosticsOptionalFields = true;
+
+    bool mPlaySoundStartDelay = true;
+    bool mPassengerOfBlockType = true;
+    bool mTextQueue = true;
+    bool mStructureKeepVoid = true;
+    bool mTransferScreenSettings = true;
+    bool mManagedChat = true;
+    bool mCommandRawMessage = true;
+    bool mEditorPackTypes = true;
+
+    bool mPlaySoundAttach = true;
+    bool mPassengerOfBlockPack = true;
+    bool mSctpRecoveryProfile = true;
+
+    // data store records name one flat variable, not a data store, property and path
+    bool mDataStoreVariables = true;
 };

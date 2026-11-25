@@ -39,6 +39,9 @@ void TextPacket::write(BinaryStream &stream, const PacketCodecContext &context) 
             stream.putArrayLength((uint32_t) mParameters.size());
             for (const std::string &parameter: mParameters)
                 stream.putString(parameter);
+            // jukebox popups: true waits behind the one showing, false replaces it and clears the queue
+            if (context.getCapabilities().mTextQueue)
+                stream.putBool(mQueue);
             break;
 
         default:
@@ -83,6 +86,7 @@ void TextPacket::read(ReadOnlyBinaryStream &stream, const PacketCodecContext &co
 
             for (uint32_t i = 0; i < parameterCount; i++)
                 mParameters.push_back(stream.getString());
+            mQueue = context.getCapabilities().mTextQueue && stream.getBool();
             break;
         }
 

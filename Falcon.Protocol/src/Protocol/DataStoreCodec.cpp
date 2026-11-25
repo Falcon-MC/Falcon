@@ -143,54 +143,90 @@ DataStoreChangeValue DataStoreCodec::readChangeValue(ReadOnlyBinaryStream &strea
     return value;
 }
 
-void DataStoreCodec::writeAction(BinaryStream &stream, const DataStoreAction &action, bool withPathUpdateCount) {
+void DataStoreCodec::writeUpdate(BinaryStream &stream, const DataStoreUpdate &update, bool variables) {
+    if (variables) {
+        stream.putString(update.mVariableName);
+        writeScalar(stream, update.mData);
+        stream.putLInt((uint32_t) update.mUpdateCount);
+        return;
+    }
+
+    stream.putString(update.mDataStoreName);
+    stream.putString(update.mProperty);
+    stream.putString(update.mPath);
+    writeScalar(stream, update.mData);
+    stream.putLInt((uint32_t) update.mUpdateCount);
+    stream.putLInt((uint32_t) update.mPathUpdateCount);
+}
+
+DataStoreUpdate DataStoreCodec::readUpdate(ReadOnlyBinaryStream &stream, bool variables) {
+    DataStoreUpdate update;
+    if (variables) {
+        update.mVariableName = stream.getString();
+        update.mData = readScalar(stream);
+        update.mUpdateCount = (int32_t) stream.getLInt();
+        return update;
+    }
+
+    update.mDataStoreName = stream.getString();
+    update.mProperty = stream.getString();
+    update.mPath = stream.getString();
+    update.mData = readScalar(stream);
+    update.mUpdateCount = (int32_t) stream.getLInt();
+    update.mPathUpdateCount = (int32_t) stream.getLInt();
+    return update;
+}
+
+void DataStoreCodec::writeAction(BinaryStream &stream, const DataStoreAction &action, bool variables) {
     stream.putUnsignedVarInt((uint32_t) action.mType);
     switch (action.mType) {
         case DataStoreActionType::Update:
-            stream.putString(action.mUpdate.mDataStoreName);
-            stream.putString(action.mUpdate.mProperty);
-            stream.putString(action.mUpdate.mPath);
-            writeScalar(stream, action.mUpdate.mData);
-            stream.putLInt((uint32_t) action.mUpdate.mUpdateCount);
-            if (withPathUpdateCount) {
-                stream.putLInt((uint32_t) action.mUpdate.mPathUpdateCount);
-            }
+            writeUpdate(stream, action.mUpdate, variables);
             break;
         case DataStoreActionType::Change:
+            if (variables) {
+                // the count comes before the value here, after it in an update
+                stream.putString(action.mChange.mVariableName);
+                stream.putLInt((uint32_t) action.mChange.mUpdateCount);
+                writeScalar(stream, action.mChange.mNewVariableValue);
+                break;
+            }
             stream.putString(action.mChange.mDataStoreName);
             stream.putString(action.mChange.mProperty);
             stream.putLInt((uint32_t) action.mChange.mUpdateCount);
             writeChangeValue(stream, action.mChange.mNewValue);
             break;
         case DataStoreActionType::Removal:
-            stream.putString(action.mRemoval.mDataStoreName);
+            stream.putString(variables ? action.mRemoval.mVariableName : action.mRemoval.mDataStoreName);
             break;
     }
 }
 
-DataStoreAction DataStoreCodec::readAction(ReadOnlyBinaryStream &stream, bool withPathUpdateCount) {
+DataStoreAction DataStoreCodec::readAction(ReadOnlyBinaryStream &stream, bool variables) {
     DataStoreAction action;
     uint32_t type = stream.getUnsignedVarInt();
     action.mType = (DataStoreActionType) type;
     switch (action.mType) {
         case DataStoreActionType::Update:
-            action.mUpdate.mDataStoreName = stream.getString();
-            action.mUpdate.mProperty = stream.getString();
-            action.mUpdate.mPath = stream.getString();
-            action.mUpdate.mData = readScalar(stream);
-            action.mUpdate.mUpdateCount = (int32_t) stream.getLInt();
-            if (withPathUpdateCount) {
-                action.mUpdate.mPathUpdateCount = (int32_t) stream.getLInt();
-            }
+            action.mUpdate = readUpdate(stream, variables);
             break;
         case DataStoreActionType::Change:
+            if (variables) {
+                action.mChange.mVariableName = stream.getString();
+                action.mChange.mUpdateCount = (int32_t) stream.getLInt();
+                action.mChange.mNewVariableValue = readScalar(stream);
+                break;
+            }
             action.mChange.mDataStoreName = stream.getString();
             action.mChange.mProperty = stream.getString();
             action.mChange.mUpdateCount = (int32_t) stream.getLInt();
             action.mChange.mNewValue = readChangeValue(stream);
             break;
         case DataStoreActionType::Removal:
-            action.mRemoval.mDataStoreName = stream.getString();
+            if (variables)
+                action.mRemoval.mVariableName = stream.getString();
+            else
+                action.mRemoval.mDataStoreName = stream.getString();
             break;
         default:
             throw BinaryDataException("Invalid data store action type " + std::to_string(type));

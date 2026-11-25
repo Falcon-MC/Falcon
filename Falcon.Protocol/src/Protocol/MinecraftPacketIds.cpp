@@ -482,6 +482,20 @@ const char *toString(MinecraftPacketIds id) {
             return "ClientboundPlayAudioContent";
         case MinecraftPacketIds::ServerboundRegisterAudioContent:
             return "ServerboundRegisterAudioContent";
+        case MinecraftPacketIds::Chat:
+            return "Chat";
+        case MinecraftPacketIds::ServerboundRequestOnlineMusicPlayback:
+            return "ServerboundRequestOnlineMusicPlayback";
+        case MinecraftPacketIds::ClientboundOnlineMusicPlaybackResponse:
+            return "ClientboundOnlineMusicPlaybackResponse";
+        case MinecraftPacketIds::PlayerToggleArmorVisibilityRequest:
+            return "PlayerToggleArmorVisibilityRequest";
+        case MinecraftPacketIds::ClientboundMusicPlaybackFailure:
+            return "ClientboundMusicPlaybackFailure";
+        case MinecraftPacketIds::VirtualContainerOpen:
+            return "VirtualContainerOpen";
+        case MinecraftPacketIds::VirtualContainerClose:
+            return "VirtualContainerClose";
         default:
             return "Unknown";
     }

@@ -13,6 +13,8 @@ void NetworkSettingsPacket::write(BinaryStream &stream, const PacketCodecContext
     stream.putBool(mClientThrottleEnabled);
     stream.putByte((unsigned char) mClientThrottleThreshold);
     stream.putLFloat(mClientThrottleScalar);
+    if (context.getCapabilities().mSctpRecoveryProfile)
+        stream.putByte((unsigned char) mSctpRecoveryProfile);
 }
 
 void NetworkSettingsPacket::read(ReadOnlyBinaryStream &stream, const PacketCodecContext &context) {
@@ -21,6 +23,8 @@ void NetworkSettingsPacket::read(ReadOnlyBinaryStream &stream, const PacketCodec
     mClientThrottleEnabled = stream.getBool();
     mClientThrottleThreshold = stream.getByte();
     mClientThrottleScalar = stream.getLFloat();
+    mSctpRecoveryProfile = context.getCapabilities().mSctpRecoveryProfile
+                           ? (SctpRecoveryProfile) stream.getByte() : SctpRecoveryProfile::Default;
 }
 
 void NetworkSettingsPacket::handle(const NetworkIdentifier &id, NetworkPacketHandler &handler) const {

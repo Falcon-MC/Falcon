@@ -125,8 +125,8 @@ namespace {
                 stream.putString(action.mPatternId);
                 stream.putByte((unsigned char) action.mTimesCrafted);
                 break;
-            case ItemStackRequestActionType::CraftReserved:
-                stream.putString(action.mReservedId);
+            case ItemStackRequestActionType::CraftDiscPress:
+                stream.putString(action.mTrackSoundEventId);
                 stream.putByte((unsigned char) action.mNumberOfRequestedCrafts);
                 break;
             case ItemStackRequestActionType::CraftResultsDeprecated:
@@ -210,8 +210,8 @@ namespace {
                 action.mPatternId = stream.getString();
                 action.mTimesCrafted = stream.getByte();
                 break;
-            case ItemStackRequestActionType::CraftReserved:
-                action.mReservedId = stream.getString();
+            case ItemStackRequestActionType::CraftDiscPress:
+                action.mTrackSoundEventId = stream.getString();
                 action.mNumberOfRequestedCrafts = stream.getByte();
                 break;
             case ItemStackRequestActionType::CraftResultsDeprecated: {
@@ -239,7 +239,7 @@ void ItemStackRequestPacket::write(BinaryStream &stream, const PacketCodecContex
         stream.putArrayLength((uint32_t) request.mActions.size());
         for (const ItemStackRequestAction &action: request.mActions) {
             const int32_t typeId = itemStackRequestActionIdForVersion(itemStackRequestActionTypeToId(action.mType),
-                                                                      context.getCapabilities().mCraftReservedAction);
+                                                                      context.getCapabilities().mCraftDiscPressAction);
             stream.putUnsignedVarInt((uint32_t) typeId);
             stream.putByte((unsigned char) itemStackRequestActionTypeToLegacyId(typeId));
             writeRequestActionData(stream, context, action);
@@ -265,7 +265,7 @@ void ItemStackRequestPacket::read(ReadOnlyBinaryStream &stream, const PacketCode
         request.mActions.reserve(actionCount);
         for (uint32_t j = 0; j < actionCount; j++) {
             ItemStackRequestActionType type = itemStackRequestActionTypeFromId(itemStackRequestActionIdFromVersion(
-                    (int32_t) stream.getUnsignedVarInt(), context.getCapabilities().mCraftReservedAction));
+                    (int32_t) stream.getUnsignedVarInt(), context.getCapabilities().mCraftDiscPressAction));
             stream.getByte();
             request.mActions.push_back(readRequestActionData(stream, context, type));
         }

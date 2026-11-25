@@ -84,6 +84,9 @@ namespace LevelSoundEvent {
     inline constexpr const char *BUNDLE_DROP_CONTENTS = "bundle.drop_contents";
     inline constexpr const char *FIRE_IGNITE = "ignite";
     inline constexpr const char *POWER_ON = "power.on";
+    inline constexpr const char *CONVERT_TO_FROSTBITE = "convert_to_frostbite";
+    inline constexpr const char *CONVERT_TO_ZOMBIE = "convert_to_zombie";
+    inline constexpr const char *CRACK = "crack";
     inline constexpr const char *POWER_OFF = "power.off";
 }
 

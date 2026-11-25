@@ -1,18 +1,18 @@
 #include "Protocol/Codec/Codec2193.h"
 
-#include "Protocol/MinecraftPackets.h"
+#include "Protocol/Codec/Codec2225.h"
 
 namespace Codec2193 {
 
     ProtocolCapabilities capabilities() {
-        ProtocolCapabilities capabilities;
+        ProtocolCapabilities capabilities = Codec2225::capabilities();
         capabilities.mProtocolVersion = 2193;
         capabilities.mAttributePayloads = false;
         capabilities.mPassengerOfBlock = false;
         capabilities.mAnimateHand = false;
         capabilities.mDimensionClouds = false;
         capabilities.mTransactionHandOnEveryUse = false;
-        capabilities.mCraftReservedAction = false;
+        capabilities.mCraftDiscPressAction = false;
         capabilities.mLevelChunkBiomeUpdate = false;
         capabilities.mPlayerListPlayFabId = false;
         capabilities.mStartGameEditorMigration = false;
@@ -35,7 +35,7 @@ namespace Codec2193 {
 
     std::shared_ptr<const ProtocolCodec> create() {
         std::shared_ptr<ProtocolCodec> codec = std::make_shared<ProtocolCodec>(capabilities());
-        MinecraftPackets::registerVanillaPackets(*codec);
+        Codec2225::registerPackets(*codec);
         removeLaterPackets(*codec);
         return codec;
     }

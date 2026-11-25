@@ -6,6 +6,24 @@
 #include <cstdint>
 #include <string>
 
+class TransferScreenSettings {
+public:
+    bool mHasTitleText = false;
+    std::string mTitleText;
+    bool mHasBodyText = false;
+    std::string mBodyText;
+    bool mHasTitleVisible = false;
+    bool mTitleVisible = false;
+    bool mHasBodyVisible = false;
+    bool mBodyVisible = false;
+    bool mHasCancelButtonText = false;
+    std::string mCancelButtonText;
+    bool mHasCancelButtonVisible = false;
+    bool mCancelButtonVisible = false;
+    bool mHasCancelButtonDelay = false;
+    float mCancelButtonDelaySeconds = 0.0f;
+};
+
 class TransferPacket : public Packet {
 public:
     static const MinecraftPacketIds ID = MinecraftPacketIds::Transfer;
@@ -27,4 +45,8 @@ public:
     bool mReloadWorld = false;
     bool mHasGatheringsConfigurationJoinInfo = false;
     GatheringsConfigurationJoinInfo mGatheringsConfigurationJoinInfo;
+
+    // loading screen of a server to server transfer; a world reload ignores it
+    bool mHasScreenSettings = false;
+    TransferScreenSettings mScreenSettings;
 };

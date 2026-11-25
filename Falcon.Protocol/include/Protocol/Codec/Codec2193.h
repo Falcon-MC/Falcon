@@ -18,7 +18,7 @@ namespace Codec2193 {
     ProtocolCapabilities capabilities();
 
     /**
-     * Removes the packets added after 2193.
+     * Removes the packets added between 2193 and 2225.
      */
     void removeLaterPackets(ProtocolCodec &codec);
 

@@ -15,6 +15,7 @@ enum class PlayerInputMode {
     Touch,
     Gamepad,
     MotionController,
+    GamepadAndMouse,
 };
 
 enum class PlayerClientPlayMode {
@@ -101,7 +102,7 @@ enum class PlayerAuthInputData {
     SneakReleasedRaw,
     SneakPressedRaw,
     SneakCurrentRaw,
-    InternalUpdate,
+    SwapOffhand,
 };
 
 class PlayerAuthInputPacket : public Packet {

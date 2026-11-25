@@ -1,6 +1,6 @@
 #include "Protocol/Types/StartGameTypes.h"
 
-void ServerConfigurationJoinInfo::write(BinaryStream &stream) const {
+void ServerConfigurationJoinInfo::write(BinaryStream &stream, bool managedChat) const {
     stream.putOptionalPresent(mHasGatheringsConfiguration);
     if (mHasGatheringsConfiguration)
         mGatheringsConfiguration.write(stream);
@@ -17,9 +17,15 @@ void ServerConfigurationJoinInfo::write(BinaryStream &stream) const {
         if (mPresenceConfiguration.mHasRichPresenceId)
             stream.putString(mPresenceConfiguration.mRichPresenceId);
     }
+
+    if (managedChat) {
+        stream.putOptionalPresent(mHasManagedChat);
+        if (mHasManagedChat)
+            stream.putBool(mManagedChat.mEnabled);
+    }
 }
 
-void ServerConfigurationJoinInfo::read(ReadOnlyBinaryStream &stream) {
+void ServerConfigurationJoinInfo::read(ReadOnlyBinaryStream &stream, bool managedChat) {
     mHasGatheringsConfiguration = stream.getOptionalPresent();
     if (mHasGatheringsConfiguration)
         mGatheringsConfiguration.read(stream);
@@ -36,6 +42,9 @@ void ServerConfigurationJoinInfo::read(ReadOnlyBinaryStream &stream) {
         if (mPresenceConfiguration.mHasRichPresenceId)
             mPresenceConfiguration.mRichPresenceId = stream.getString();
     }
+
+    mHasManagedChat = managedChat && stream.getOptionalPresent();
+    mManagedChat.mEnabled = mHasManagedChat && stream.getBool();
 }
 
 GameRuleData GameRuleData::ofBool(const std::string &name, bool value, bool editable) {

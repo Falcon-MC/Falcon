@@ -84,6 +84,10 @@ struct PresenceConfiguration {
     std::string mRichPresenceId;
 };
 
+struct ManagedChatJoinInfo {
+    bool mEnabled = false;
+};
+
 struct ServerConfigurationJoinInfo {
     bool mHasGatheringsConfiguration = false;
     GatheringsConfigurationJoinInfo mGatheringsConfiguration;
@@ -92,9 +96,13 @@ struct ServerConfigurationJoinInfo {
     bool mHasPresenceConfiguration = false;
     PresenceConfiguration mPresenceConfiguration;
 
-    void write(BinaryStream &stream) const;
+    // tells a joining client chat goes through mojang managed chat
+    bool mHasManagedChat = false;
+    ManagedChatJoinInfo mManagedChat;
 
-    void read(ReadOnlyBinaryStream &stream);
+    void write(BinaryStream &stream, bool managedChat) const;
+
+    void read(ReadOnlyBinaryStream &stream, bool managedChat);
 };
 
 struct GameRuleData {

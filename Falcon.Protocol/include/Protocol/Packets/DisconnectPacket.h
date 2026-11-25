@@ -2,6 +2,17 @@
 
 #include "Protocol/Packet.h"
 
+enum class SessionDisconnectReason : int32_t {
+    SessionRuntimeError = 151,
+    SessionInvalidResponse = 152,
+    SessionNetworkError = 153,
+    SessionServiceError = 154,
+    SessionServiceUnavailable = 155,
+    SessionThrottled = 156,
+    SessionRequestRejected = 157,
+    SessionUnknownError = 158
+};
+
 class DisconnectPacket : public Packet {
 public:
     static const MinecraftPacketIds ID = MinecraftPacketIds::Disconnect;

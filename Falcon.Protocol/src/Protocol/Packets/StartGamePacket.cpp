@@ -132,7 +132,7 @@ void StartGamePacket::write(BinaryStream &stream, const PacketCodecContext &cont
 
     stream.putOptionalPresent(mHasServerConfigurationJoinInfo);
     if (mHasServerConfigurationJoinInfo)
-        mServerConfigurationJoinInfo.write(stream);
+        mServerConfigurationJoinInfo.write(stream, context.getCapabilities().mManagedChat);
 
     stream.putString(mServerId);
     stream.putString(mScenarioId);
@@ -252,7 +252,7 @@ void StartGamePacket::read(ReadOnlyBinaryStream &stream, const PacketCodecContex
 
     mHasServerConfigurationJoinInfo = stream.getOptionalPresent();
     if (mHasServerConfigurationJoinInfo)
-        mServerConfigurationJoinInfo.read(stream);
+        mServerConfigurationJoinInfo.read(stream, context.getCapabilities().mManagedChat);
 
     mServerId = stream.getString();
     mScenarioId = stream.getString();

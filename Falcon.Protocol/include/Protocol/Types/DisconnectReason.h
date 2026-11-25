@@ -167,4 +167,5 @@ enum class DisconnectReason : int32_t {
     SessionThrottled = 156,
     SessionRequestRejected = 157,
     SessionUnknownError = 158,
+    BrokenData = 159,
 };

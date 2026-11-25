@@ -9,7 +9,6 @@
 #include "Protocol/Packets/AddItemActorPacket.h"
 #include "Protocol/Packets/AddPaintingPacket.h"
 #include "Protocol/Packets/AddPlayerPacket.h"
-#include "Protocol/Packets/AddVolumeEntityPacket.h"
 #include "Protocol/Packets/AdventureSettingsPacket.h"
 #include "Protocol/Packets/AgentActionEventPacket.h"
 #include "Protocol/Packets/AgentAnimationPacket.h"
@@ -36,6 +35,7 @@
 #include "Protocol/Packets/CameraSplinePacket.h"
 #include "Protocol/Packets/ChangeDimensionPacket.h"
 #include "Protocol/Packets/ChangeMobPropertyPacket.h"
+#include "Protocol/Packets/ChatPacket.h"
 #include "Protocol/Packets/ChunkRadiusUpdatedPacket.h"
 #include "Protocol/Packets/ClientCacheBlobStatusPacket.h"
 #include "Protocol/Packets/ClientCacheMissResponsePacket.h"
@@ -54,6 +54,8 @@
 #include "Protocol/Packets/ClientboundDebugRendererPacket.h"
 #include "Protocol/Packets/ClientboundMapItemDataPacket.h"
 #include "Protocol/Packets/ClientboundMatchmakingStatePacket.h"
+#include "Protocol/Packets/ClientboundMusicPlaybackFailurePacket.h"
+#include "Protocol/Packets/ClientboundOnlineMusicPlaybackResponsePacket.h"
 #include "Protocol/Packets/ClientboundPlayAudioContentPacket.h"
 #include "Protocol/Packets/ClientboundStonecutterSetRecipePacket.h"
 #include "Protocol/Packets/ClientboundTextureShiftPacket.h"
@@ -146,6 +148,7 @@
 #include "Protocol/Packets/PlayerLocationPacket.h"
 #include "Protocol/Packets/PlayerSkinPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
+#include "Protocol/Packets/PlayerToggleArmorVisibilityRequestPacket.h"
 #include "Protocol/Packets/PlayerToggleCrafterSlotRequestPacket.h"
 #include "Protocol/Packets/PlayerUpdateEntityOverridesPacket.h"
 #include "Protocol/Packets/PlayerVideoCapturePacket.h"
@@ -157,7 +160,6 @@
 #include "Protocol/Packets/RefreshEntitlementsPacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
 #include "Protocol/Packets/RemoveObjectivePacket.h"
-#include "Protocol/Packets/RemoveVolumeEntityPacket.h"
 #include "Protocol/Packets/RequestAbilityPacket.h"
 #include "Protocol/Packets/RequestChunkRadiusPacket.h"
 #include "Protocol/Packets/RequestNetworkSettingsPacket.h"
@@ -184,6 +186,7 @@
 #include "Protocol/Packets/ServerboundDataDrivenScreenClosedPacket.h"
 #include "Protocol/Packets/ServerboundMatchmakingCancelPacket.h"
 #include "Protocol/Packets/ServerboundRegisterAudioContentPacket.h"
+#include "Protocol/Packets/ServerboundRequestOnlineMusicPlaybackPacket.h"
 #include "Protocol/Packets/ServerboundStonecutterSetRecipePacket.h"
 #include "Protocol/Packets/ServerboundDataStorePacket.h"
 #include "Protocol/Packets/ServerboundDiagnosticsPacket.h"
@@ -249,6 +252,8 @@
 #include "Protocol/Packets/UpdateSoftEnumPacket.h"
 #include "Protocol/Packets/UpdateSubChunkBlocksPacket.h"
 #include "Protocol/Packets/UpdateTradePacket.h"
+#include "Protocol/Packets/VirtualContainerClosePacket.h"
+#include "Protocol/Packets/VirtualContainerOpenPacket.h"
 #include "Protocol/Packets/LecternUpdatePacket.h"
 #include "Protocol/Packets/VoxelShapesPacket.h"
 
@@ -285,7 +290,6 @@ void MinecraftPackets::registerVanillaPackets(ProtocolCodec &codec) {
     codec.registerPacket<AddItemActorPacket>();
     codec.registerPacket<AddPaintingPacket>();
     codec.registerPacket<AddPlayerPacket>();
-    codec.registerPacket<AddVolumeEntityPacket>();
     codec.registerPacket<AdventureSettingsPacket>();
     codec.registerPacket<AgentActionEventPacket>();
     codec.registerPacket<AgentAnimationPacket>();
@@ -312,6 +316,7 @@ void MinecraftPackets::registerVanillaPackets(ProtocolCodec &codec) {
     codec.registerPacket<CameraSplinePacket>();
     codec.registerPacket<ChangeDimensionPacket>();
     codec.registerPacket<ChangeMobPropertyPacket>();
+    codec.registerPacket<ChatPacket>();
     codec.registerPacket<ChunkRadiusUpdatedPacket>();
     codec.registerPacket<ClientCacheBlobStatusPacket>();
     codec.registerPacket<ClientCacheMissResponsePacket>();
@@ -330,6 +335,8 @@ void MinecraftPackets::registerVanillaPackets(ProtocolCodec &codec) {
     codec.registerPacket<ClientboundDebugRendererPacket>();
     codec.registerPacket<ClientboundMapItemDataPacket>();
     codec.registerPacket<ClientboundMatchmakingStatePacket>();
+    codec.registerPacket<ClientboundMusicPlaybackFailurePacket>();
+    codec.registerPacket<ClientboundOnlineMusicPlaybackResponsePacket>();
     codec.registerPacket<ClientboundPlayAudioContentPacket>();
     codec.registerPacket<ClientboundStonecutterSetRecipePacket>();
     codec.registerPacket<ClientboundTextureShiftPacket>();
@@ -422,6 +429,7 @@ void MinecraftPackets::registerVanillaPackets(ProtocolCodec &codec) {
     codec.registerPacket<PlayerLocationPacket>();
     codec.registerPacket<PlayerSkinPacket>();
     codec.registerPacket<PlayerStartItemCooldownPacket>();
+    codec.registerPacket<PlayerToggleArmorVisibilityRequestPacket>();
     codec.registerPacket<PlayerToggleCrafterSlotRequestPacket>();
     codec.registerPacket<PlayerUpdateEntityOverridesPacket>();
     codec.registerPacket<PlayerVideoCapturePacket>();
@@ -433,7 +441,6 @@ void MinecraftPackets::registerVanillaPackets(ProtocolCodec &codec) {
     codec.registerPacket<RefreshEntitlementsPacket>();
     codec.registerPacket<RemoveActorPacket>();
     codec.registerPacket<RemoveObjectivePacket>();
-    codec.registerPacket<RemoveVolumeEntityPacket>();
     codec.registerPacket<RequestAbilityPacket>();
     codec.registerPacket<RequestChunkRadiusPacket>();
     codec.registerPacket<RequestNetworkSettingsPacket>();
@@ -464,6 +471,7 @@ void MinecraftPackets::registerVanillaPackets(ProtocolCodec &codec) {
     codec.registerPacket<ServerboundMatchmakingCancelPacket>();
     codec.registerPacket<ServerboundPackSettingChangePacket>();
     codec.registerPacket<ServerboundRegisterAudioContentPacket>();
+    codec.registerPacket<ServerboundRequestOnlineMusicPlaybackPacket>();
     codec.registerPacket<ServerboundStonecutterSetRecipePacket>();
     codec.registerPacket<SetActorDataPacket>();
     codec.registerPacket<SetActorLinkPacket>();
@@ -525,6 +533,8 @@ void MinecraftPackets::registerVanillaPackets(ProtocolCodec &codec) {
     codec.registerPacket<UpdateSoftEnumPacket>();
     codec.registerPacket<UpdateSubChunkBlocksPacket>();
     codec.registerPacket<UpdateTradePacket>();
+    codec.registerPacket<VirtualContainerClosePacket>();
+    codec.registerPacket<VirtualContainerOpenPacket>();
     codec.registerPacket<LecternUpdatePacket>();
     codec.registerPacket<VoxelShapesPacket>();
 }

@@ -12,6 +12,13 @@ public:
         None
     };
 
+    // wire values: balanced is 2, fast is 1
+    enum class SctpRecoveryProfile : uint8_t {
+        Default = 0,
+        Fast = 1,
+        Balanced = 2
+    };
+
     NetworkSettingsPacket();
 
     MinecraftPacketIds getId() const override { return ID; }
@@ -29,4 +36,5 @@ public:
     bool mClientThrottleEnabled;
     int32_t mClientThrottleThreshold;
     float mClientThrottleScalar;
+    SctpRecoveryProfile mSctpRecoveryProfile = SctpRecoveryProfile::Default;
 };

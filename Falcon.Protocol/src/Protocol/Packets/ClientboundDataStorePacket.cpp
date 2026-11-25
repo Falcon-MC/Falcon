@@ -8,7 +8,7 @@ ClientboundDataStorePacket::ClientboundDataStorePacket() = default;
 void ClientboundDataStorePacket::write(BinaryStream &stream, const PacketCodecContext &context) const {
     stream.putArrayLength((uint32_t) mUpdates.size());
     for (const DataStoreAction &action: mUpdates) {
-        DataStoreCodec::writeAction(stream, action, true);
+        DataStoreCodec::writeAction(stream, action, context.getCapabilities().mDataStoreVariables);
     }
 }
 
@@ -16,7 +16,7 @@ void ClientboundDataStorePacket::read(ReadOnlyBinaryStream &stream, const Packet
     uint32_t length = stream.getArrayLength();
     mUpdates.reserve(length);
     for (uint32_t i = 0; i < length; i++) {
-        mUpdates.push_back(DataStoreCodec::readAction(stream, true));
+        mUpdates.push_back(DataStoreCodec::readAction(stream, context.getCapabilities().mDataStoreVariables));
     }
 }
 

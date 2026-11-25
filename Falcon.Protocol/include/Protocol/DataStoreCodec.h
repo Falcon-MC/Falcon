@@ -14,7 +14,11 @@ public:
 
     static DataStoreChangeValue readChangeValue(ReadOnlyBinaryStream &stream, int depth = 0);
 
-    static void writeAction(BinaryStream &stream, const DataStoreAction &action, bool withPathUpdateCount);
+    static void writeUpdate(BinaryStream &stream, const DataStoreUpdate &update, bool variables);
 
-    static DataStoreAction readAction(ReadOnlyBinaryStream &stream, bool withPathUpdateCount);
+    static DataStoreUpdate readUpdate(ReadOnlyBinaryStream &stream, bool variables);
+
+    static void writeAction(BinaryStream &stream, const DataStoreAction &action, bool variables);
+
+    static DataStoreAction readAction(ReadOnlyBinaryStream &stream, bool variables);
 };

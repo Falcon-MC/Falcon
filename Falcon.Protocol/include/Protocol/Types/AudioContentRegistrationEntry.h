@@ -5,6 +5,7 @@
 namespace AudioContentPlaybackType {
     inline constexpr const char *MUSIC = "Music";
     inline constexpr const char *SOUND = "Sound";
+    inline constexpr const char *CONCURRENT_MUSIC = "ConcurrentMusic";
 }
 
 class AudioContentRegistrationEntry {

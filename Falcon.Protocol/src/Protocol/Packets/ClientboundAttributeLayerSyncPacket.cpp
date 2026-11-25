@@ -15,6 +15,9 @@ namespace {
     const std::array<std::string, 5> COLOR_OPERATIONS = {
         "override", "alpha_blend", "add", "subtract", "multiply"
     };
+    const std::array<std::string, 1> STRING_OPERATIONS = {
+        "override"
+    };
 
     int32_t indexOf(const std::string &value, const std::string *values, size_t count) {
         for (size_t i = 0; i < count; i++) {
@@ -116,6 +119,11 @@ namespace {
                 writeColor255(stream, value.mColorValue);
                 stream.putString(COLOR_OPERATIONS[(size_t) value.mColorOperation]);
                 break;
+            case EnvironmentAttributeValueType::String:
+                stream.putUnsignedVarInt(3);
+                stream.putString(value.mStringValue);
+                stream.putString(STRING_OPERATIONS[(size_t) value.mStringOperation]);
+                break;
         }
     }
 
@@ -145,6 +153,12 @@ namespace {
                 value.mType = EnvironmentAttributeValueType::Color;
                 value.mColorValue = readColor255(stream);
                 value.mColorOperation = indexOf(stream.getString(), COLOR_OPERATIONS.data(), COLOR_OPERATIONS.size());
+                break;
+            case 3:
+                value.mType = EnvironmentAttributeValueType::String;
+                value.mStringValue = stream.getString();
+                value.mStringOperation = indexOf(stream.getString(), STRING_OPERATIONS.data(),
+                                                 STRING_OPERATIONS.size());
                 break;
         }
         return value;

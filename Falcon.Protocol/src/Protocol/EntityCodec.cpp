@@ -198,7 +198,8 @@ EntityLinkData EntityCodec::readEntityLink(ReadOnlyBinaryStream &stream) {
     return link;
 }
 
-void EntityCodec::writePassengerOfBlock(BinaryStream &stream, bool present, const PassengerOfBlockData &data) {
+void EntityCodec::writePassengerOfBlock(BinaryStream &stream, bool present, const PassengerOfBlockData &data,
+                                        bool blockType, bool packId) {
     stream.putOptionalPresent(present);
     if (!present)
         return;
@@ -208,9 +209,14 @@ void EntityCodec::writePassengerOfBlock(BinaryStream &stream, bool present, cons
     stream.putLFloat(data.mRotation);
     stream.putLFloat(data.mRotationLimit);
     stream.putByte((unsigned char) data.mEmoteType);
+    if (blockType)
+        stream.putLLong(data.mBlockType);
+    if (packId)
+        stream.putUuid(data.mPackId);
 }
 
-bool EntityCodec::readPassengerOfBlock(ReadOnlyBinaryStream &stream, PassengerOfBlockData &data) {
+bool EntityCodec::readPassengerOfBlock(ReadOnlyBinaryStream &stream, PassengerOfBlockData &data, bool blockType,
+                                       bool packId) {
     if (!stream.getOptionalPresent())
         return false;
 
@@ -219,6 +225,8 @@ bool EntityCodec::readPassengerOfBlock(ReadOnlyBinaryStream &stream, PassengerOf
     data.mRotation = stream.getLFloat();
     data.mRotationLimit = stream.getLFloat();
     data.mEmoteType = (PassengerOfBlockEmoteType) stream.getByte();
+    data.mBlockType = blockType ? stream.getLLong() : 0;
+    data.mPackId = packId ? stream.getUuid() : Uuid();
     return true;
 }
 

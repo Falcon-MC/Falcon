@@ -1,7 +1,7 @@
 #include "Protocol/Codec/Codec2169.h"
 
 #include "Protocol/Codec/Codec2193.h"
-#include "Protocol/MinecraftPackets.h"
+#include "Protocol/Codec/Codec2225.h"
 
 namespace {
 
@@ -19,7 +19,7 @@ namespace {
         capabilities.mDiagnosticsActorPosition = false;
 
         std::shared_ptr<ProtocolCodec> codec = std::make_shared<ProtocolCodec>(capabilities);
-        MinecraftPackets::registerVanillaPackets(*codec);
+        Codec2225::registerPackets(*codec);
         Codec2193::removeLaterPackets(*codec);
         codec->removePacket(MinecraftPacketIds::SetPlayerFurnaceOptions);
         codec->removePacket(MinecraftPacketIds::RecordStarted);

@@ -39,6 +39,7 @@ public:
     std::string mSourceName;
     std::string mMessage;
     std::vector<std::string> mParameters;
+    bool mQueue = false;
     bool mNeedsTranslation;
     std::string mXuid;
     std::string mPlatformChatId;

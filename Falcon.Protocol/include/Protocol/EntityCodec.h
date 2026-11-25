@@ -29,9 +29,11 @@ public:
 
     static EntityLinkData readEntityLink(ReadOnlyBinaryStream &stream);
 
-    static void writePassengerOfBlock(BinaryStream &stream, bool present, const PassengerOfBlockData &data);
+    static void writePassengerOfBlock(BinaryStream &stream, bool present, const PassengerOfBlockData &data,
+                                      bool blockType, bool packId);
 
-    static bool readPassengerOfBlock(ReadOnlyBinaryStream &stream, PassengerOfBlockData &data);
+    static bool readPassengerOfBlock(ReadOnlyBinaryStream &stream, PassengerOfBlockData &data, bool blockType,
+                                     bool packId);
 
     static void writePlayerAbilities(BinaryStream &stream, const PlayerAbilityData &abilities);
 

@@ -24,4 +24,5 @@ public:
     StructureEditorData mEditorData;
     bool mPowered = false;
     bool mWaterlogged = false;
+    bool mKeepStructureVoid = false;
 };

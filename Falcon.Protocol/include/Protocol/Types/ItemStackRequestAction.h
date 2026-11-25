@@ -25,7 +25,7 @@ enum class ItemStackRequestActionType {
     CraftRecipeOptional,
     CraftRepairAndDisenchant,
     CraftLoom,
-    CraftReserved,
+    CraftDiscPress,
     CraftNonImplemented,
     CraftResultsDeprecated,
 };
@@ -37,14 +37,14 @@ ItemStackRequestActionType itemStackRequestActionTypeFromId(int32_t id);
 int32_t itemStackRequestActionTypeToLegacyId(int32_t id);
 
 /**
- * Shifts an action ID for versions without CraftReserved, where every later action is one lower.
+ * Shifts an action ID for versions without CraftDiscPress, where every later action is one lower.
  */
-int32_t itemStackRequestActionIdForVersion(int32_t id, bool craftReserved);
+int32_t itemStackRequestActionIdForVersion(int32_t id, bool craftDiscPress);
 
 /**
- * The current action ID of an ID received from a version without CraftReserved.
+ * The current action ID of an ID received from a version without CraftDiscPress.
  */
-int32_t itemStackRequestActionIdFromVersion(int32_t id, bool craftReserved);
+int32_t itemStackRequestActionIdFromVersion(int32_t id, bool craftDiscPress);
 
 class ItemStackRequestAction {
 public:
@@ -75,7 +75,7 @@ public:
 
     std::string mPatternId;
 
-    std::string mReservedId;
+    std::string mTrackSoundEventId;
     int32_t mTimesCrafted = 0;
 
     std::vector<ItemStack> mResultItems;

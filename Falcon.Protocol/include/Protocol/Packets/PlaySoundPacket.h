@@ -46,4 +46,8 @@ public:
     int64_t mServerSoundHandle = 0;
     bool mHasPlaybackPosition = false;
     float mPlaybackPositionSeconds = 0.0f;
+    bool mHasStartDelay = false;
+    float mStartDelaySeconds = 0.0f;
+    bool mHasAttachedActor = false;
+    uint64_t mAttachedActorRuntimeId = 0;
 };

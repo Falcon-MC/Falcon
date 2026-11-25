@@ -42,6 +42,8 @@ enum class ContainerType {
     ChestBoat,
     DecoratedPot,
     Crafter,
+    DiscPress,
+    VirtualContainer,
 };
 
 int32_t containerTypeToId(ContainerType type);

@@ -55,7 +55,7 @@ namespace {
                 return 16;
             case ItemStackRequestActionType::CraftLoom:
                 return 17;
-            case ItemStackRequestActionType::CraftReserved:
+            case ItemStackRequestActionType::CraftDiscPress:
                 return 18;
             case ItemStackRequestActionType::CraftNonImplemented:
                 return 19;
@@ -174,8 +174,8 @@ namespace {
     void writeRequestActionData(BinaryStream &stream, const PacketCodecContext &context,
                                 const ItemStackRequestAction &action) {
         const int32_t ordinal = itemStackRequestActionJavaOrdinal(action.mType);
-        const int32_t reservedOrdinal = itemStackRequestActionJavaOrdinal(ItemStackRequestActionType::CraftReserved);
-        const bool shifted = !context.getCapabilities().mCraftReservedAction && ordinal > reservedOrdinal;
+        const int32_t discPressOrdinal = itemStackRequestActionJavaOrdinal(ItemStackRequestActionType::CraftDiscPress);
+        const bool shifted = !context.getCapabilities().mCraftDiscPressAction && ordinal > discPressOrdinal;
         stream.putByte((unsigned char) (shifted ? ordinal - 1 : ordinal));
 
         switch (action.mType) {
@@ -237,8 +237,8 @@ namespace {
                 stream.putString(action.mPatternId);
                 stream.putByte((unsigned char) action.mTimesCrafted);
                 break;
-            case ItemStackRequestActionType::CraftReserved:
-                stream.putString(action.mReservedId);
+            case ItemStackRequestActionType::CraftDiscPress:
+                stream.putString(action.mTrackSoundEventId);
                 stream.putByte((unsigned char) action.mNumberOfRequestedCrafts);
                 break;
             case ItemStackRequestActionType::CraftNonImplemented:
@@ -323,8 +323,8 @@ namespace {
                 action.mPatternId = stream.getString();
                 action.mTimesCrafted = stream.getByte();
                 break;
-            case ItemStackRequestActionType::CraftReserved:
-                action.mReservedId = stream.getString();
+            case ItemStackRequestActionType::CraftDiscPress:
+                action.mTrackSoundEventId = stream.getString();
                 action.mNumberOfRequestedCrafts = stream.getByte();
                 break;
             case ItemStackRequestActionType::CraftNonImplemented:
@@ -360,7 +360,7 @@ void InventoryCodec::writeItemStackRequest(BinaryStream &stream, const PacketCod
     stream.putArrayLength((uint32_t) request.mActions.size());
     for (const ItemStackRequestAction &action: request.mActions) {
         stream.putUnsignedVarInt((uint32_t) itemStackRequestActionIdForVersion(
-                itemStackRequestActionTypeToId(action.mType), context.getCapabilities().mCraftReservedAction));
+                itemStackRequestActionTypeToId(action.mType), context.getCapabilities().mCraftDiscPressAction));
         writeRequestActionData(stream, context, action);
     }
 
@@ -380,7 +380,7 @@ ItemStackRequest InventoryCodec::readItemStackRequest(ReadOnlyBinaryStream &stre
     request.mActions.reserve(actionCount);
     for (uint32_t i = 0; i < actionCount; i++) {
         ItemStackRequestActionType type = itemStackRequestActionTypeFromId(itemStackRequestActionIdFromVersion(
-                (int32_t) stream.getUnsignedVarInt(), context.getCapabilities().mCraftReservedAction));
+                (int32_t) stream.getUnsignedVarInt(), context.getCapabilities().mCraftDiscPressAction));
         request.mActions.push_back(readRequestActionData(stream, context, type));
     }
 

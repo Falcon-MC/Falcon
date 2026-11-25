@@ -43,7 +43,7 @@ enum class PlayerActionType {
     StopFlying,
     ReceivedServerData,
     StartUsingItem,
-    InternalUpdate,
+    SwapOffhand,
 };
 
 class PlayerBlockActionData {

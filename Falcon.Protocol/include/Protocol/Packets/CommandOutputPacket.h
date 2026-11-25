@@ -20,6 +20,8 @@ public:
     bool mInternal = false;
     std::string mMessageId;
     std::vector<std::string> mParameters;
+    bool mHasRawMessage = false;
+    std::string mRawMessage;
 };
 
 class CommandOutputPacket : public Packet {

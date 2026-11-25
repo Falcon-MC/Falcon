@@ -71,10 +71,11 @@ enum class ContainerSlotType {
     RecipeFoodContainer,
     RecipeBlocksContainer,
     RecipeFurnaceItemsContainer,
-    ReservedA,
-    ReservedB,
-    ReservedC,
-    ReservedD,
+    DiscPressBlockContainer,
+    DiscPressDyeContainer,
+    DiscPressDiscContainer,
+    DiscPressResultPreviewContainer,
+    VirtualContainer,
 };
 
 int32_t containerSlotTypeToId(ContainerSlotType type);

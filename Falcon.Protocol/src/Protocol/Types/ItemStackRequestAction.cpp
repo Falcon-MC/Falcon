@@ -22,7 +22,7 @@ namespace {
         ItemStackRequestActionType::CraftRecipeOptional,
         ItemStackRequestActionType::CraftRepairAndDisenchant,
         ItemStackRequestActionType::CraftLoom,
-        ItemStackRequestActionType::CraftReserved,
+        ItemStackRequestActionType::CraftDiscPress,
         ItemStackRequestActionType::CraftNonImplemented,
         ItemStackRequestActionType::CraftResultsDeprecated,
     };
@@ -46,14 +46,14 @@ ItemStackRequestActionType itemStackRequestActionTypeFromId(int32_t id) {
     return TYPES_BY_ID[id];
 }
 
-int32_t itemStackRequestActionIdForVersion(int32_t id, bool craftReserved) {
-    const int32_t reserved = itemStackRequestActionTypeToId(ItemStackRequestActionType::CraftReserved);
-    return craftReserved || id <= reserved ? id : id - 1;
+int32_t itemStackRequestActionIdForVersion(int32_t id, bool craftDiscPress) {
+    const int32_t discPress = itemStackRequestActionTypeToId(ItemStackRequestActionType::CraftDiscPress);
+    return craftDiscPress || id <= discPress ? id : id - 1;
 }
 
-int32_t itemStackRequestActionIdFromVersion(int32_t id, bool craftReserved) {
-    const int32_t reserved = itemStackRequestActionTypeToId(ItemStackRequestActionType::CraftReserved);
-    return craftReserved || id < reserved ? id : id + 1;
+int32_t itemStackRequestActionIdFromVersion(int32_t id, bool craftDiscPress) {
+    const int32_t discPress = itemStackRequestActionTypeToId(ItemStackRequestActionType::CraftDiscPress);
+    return craftDiscPress || id < discPress ? id : id + 1;
 }
 
 int32_t itemStackRequestActionTypeToLegacyId(int32_t id) {

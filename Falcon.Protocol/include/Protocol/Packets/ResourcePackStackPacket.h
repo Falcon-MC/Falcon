@@ -3,8 +3,14 @@
 #include "Protocol/Packet.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
+
+namespace EditorPackType {
+    inline constexpr uint8_t CORE = 0x1;
+    inline constexpr uint8_t ANNOTATION = 0x2;
+}
 
 class ResourcePackStackPacket : public Packet {
 public:
@@ -33,5 +39,6 @@ public:
     std::string mGameVersion;
     std::vector<ExperimentData> mExperiments;
     bool mExperimentsPreviouslyToggled;
-    bool mHasEditorPacks;
+    // EditorPackType bits; 2225 and older send one bool for the editor packs
+    uint8_t mEditorPackTypes;
 };
