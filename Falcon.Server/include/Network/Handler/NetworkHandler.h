@@ -141,6 +141,7 @@ public:
         std::unique_ptr<Connection> mConnection;
         // sent in place of mData: one encoding and one compression for every recipient
         std::shared_ptr<const SharedPacket> mShared;
+        std::shared_ptr<const std::string> mEncoded;
         // released once the shard has taken the data
         std::shared_ptr<std::atomic<size_t>> mPendingBytes;
     };
@@ -241,6 +242,10 @@ public:
     void setOutboundFilter(OutboundFilter filter);
 
     void setSendHook(SendHook hook);
+
+    bool hasSendHook() const {
+        return static_cast<bool>(mSendHook);
+    }
 
     // callers keep passing the server's context whatever version the client speaks
     void setContextResolver(ContextResolver resolver);

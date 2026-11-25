@@ -339,6 +339,8 @@ public:
     // to the players who have this one on screen: what a player wears or holds means nothing to the others
     void sendToPlayerViewers(const ServerPlayer &player, const Packet &packet, bool includeSelf);
 
+    void sendToActorViewers(const Actor &actor, const Packet &packet, bool includeSelf);
+
     // the few actors others stand on, from the index of the tick
     template <typename Visitor>
     void forEachCollidableActor(Visitor &&visit) {
@@ -1366,6 +1368,24 @@ private:
     std::vector<ServerActor *> mCollidableActors;
     std::unordered_map<int64_t, std::vector<ServerPlayer *>> mPlayerIndex;
     std::unordered_map<uint64_t, ServerPlayer *> mPlayersByRuntimeId;
+    struct PlayerVisibilityState {
+        ServerPlayer *mPlayer;
+        uint32_t mWorld;
+        DimensionType mDimension;
+        int32_t mChunkX;
+        int32_t mChunkZ;
+        bool mSpawned;
+        bool mPopulated;
+        std::string mUuid;
+        size_t mVisibleCount;
+
+        bool sameLocation(const PlayerVisibilityState &other) const {
+            return mWorld == other.mWorld && mDimension == other.mDimension && mChunkX == other.mChunkX
+                   && mChunkZ == other.mChunkZ && mSpawned == other.mSpawned && mPopulated == other.mPopulated
+                   && mUuid == other.mUuid;
+        }
+    };
+    std::unordered_map<uint64_t, PlayerVisibilityState> mPlayerVisibility;
     bool mPlayerIndexDirty = true;
     int32_t mPlayerIndexWalks = 0;
     uint64_t mActorSetSerial = 0;

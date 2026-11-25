@@ -125,10 +125,7 @@ namespace {
         packet.mEventData = 0;
         packet.mHasFirePosition = false;
 
-        for (const auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet, owner.getCodecContext());
-        }
+        owner.sendToActorViewers(actor, packet, true);
     }
 
     void broadcastAnimation(ServerNetworkHandler &owner, const Actor &actor, AnimatePacket::Action action) {
@@ -138,10 +135,7 @@ namespace {
         packet.mData = 0.0f;
         packet.mSwingSource.clear();
 
-        for (const auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet, owner.getCodecContext());
-        }
+        owner.sendToActorViewers(actor, packet, true);
     }
 
     void sendMotion(ServerNetworkHandler &owner, const ServerPlayer &player) {
@@ -150,10 +144,7 @@ namespace {
         packet.mMotion = player.getMotion();
         packet.mTick = (uint64_t) owner.getCurrentTick();
 
-        for (const auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet, owner.getCodecContext());
-        }
+        owner.sendToActorViewers(player, packet, true);
     }
 
     void damageArmor(ServerNetworkHandler &owner, ServerPlayer &victim, float baseDamage) {
@@ -321,10 +312,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
     swing.mEventData = 0;
     swing.mHasFirePosition = false;
-    for (const auto &entry: owner.getPlayers()) {
-        if (&entry.second != this && entry.second.isSpawned() && entry.second.sharesLevelWith(*this))
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), swing, owner.getCodecContext());
-    }
+    owner.sendToActorViewers(*this, swing, false);
 
     if (!isSpawned() || isDead() || isSpectator())
         return false;

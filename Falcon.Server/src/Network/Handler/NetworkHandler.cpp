@@ -34,8 +34,8 @@ namespace {
 
     // compressible bytes per shard pass before reading again; zlib does a few tens of MB/s: a chunk burst
     // spreads over short passes, not one long pass filling the receive queues and stalling every connection
-    const size_t MAX_OUTBOUND_BYTES_PER_PASS = 256 * 1024;
-    const std::chrono::milliseconds MAX_OUTBOUND_TIME_PER_PASS(4);
+    const size_t MAX_OUTBOUND_BYTES_PER_PASS = 1024 * 1024;
+    const std::chrono::milliseconds MAX_OUTBOUND_TIME_PER_PASS(8);
 
     size_t ioShardCount() {
         return (size_t) std::max(1u, std::min(MAX_IO_SHARDS, CpuCount::usable() / 2));
@@ -235,6 +235,8 @@ void NetworkHandler::_trackPending(OutboundCommand &command) {
 }
 
 size_t NetworkHandler::_pendingSize(const OutboundCommand &command) {
+    if (command.mEncoded != nullptr)
+        return command.mEncoded->size();
     return command.mShared != nullptr ? command.mShared->getPacketSize() : command.mData.size();
 }
 
@@ -347,7 +349,7 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
 void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet,
                                 const PacketCodecContext &context) {
     // same-protocol sessions share a codec context: most recipients reuse one encoding
-    std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
+    std::vector<std::pair<const PacketCodecContext *, std::shared_ptr<const std::string>>> encoded;
     if (mSendHook && !ids.empty() && !mSendHook(ids, packet.getId()))
         return;
     // corked, the commands go straight where they wait
@@ -363,26 +365,30 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
         if (!session.getCodec().supports(packet.getId()))
             continue;
 
-        const std::string *data = nullptr;
+        std::shared_ptr<const std::string> data;
         for (const auto &entry: encoded) {
             if (entry.first == &session) {
-                data = &entry.second;
+                data = entry.second;
                 break;
             }
         }
         if (data == nullptr) {
             BinaryStream stream;
             packet.writeWithHeader(stream, session);
-            encoded.emplace_back(&session, stream.getBuffer());
-            data = &encoded.back().second;
+            data = std::make_shared<const std::string>(stream.getBuffer());
+            encoded.emplace_back(&session, data);
         }
 
         OutboundCommand command;
         command.mKind = OutboundCommand::Kind::Data;
         command.mId = id;
-        command.mData = *data;
-        if (mOutboundFilter && !mOutboundFilter(id, command.mData))
-            continue;
+        if (mOutboundFilter) {
+            command.mData = *data;
+            if (!mOutboundFilter(id, command.mData))
+                continue;
+        } else {
+            command.mEncoded = std::move(data);
+        }
 
         command.mReliability = _toPeerReliability(packet);
         command.mCompressibility = _toPeerCompressibility(packet);
@@ -472,14 +478,18 @@ void NetworkHandler::sendToAll(const std::string &data, NetworkPeer::Reliability
         if (!_allowRaw(ids, data))
             return;
     }
-    for (std::unique_ptr<Shard> &shard: mShards) {
+    const bool corked = mCorked.load(std::memory_order_relaxed) && std::this_thread::get_id() == mCorkThread;
+    for (size_t index = 0; index < mShards.size(); ++index) {
         OutboundCommand command;
         command.mKind = OutboundCommand::Kind::Data;
         command.mData = data;
         command.mBroadcast = true;
         command.mReliability = reliability;
         command.mCompressibility = compressibility;
-        shard->mOutbound.push(std::move(command));
+        if (corked)
+            mCorkedCommands[index].push_back(std::move(command));
+        else
+            mShards[index]->mOutbound.push(std::move(command));
     }
 }
 
@@ -498,6 +508,9 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
 
         if (command.mShared != nullptr)
             it->second->getBatchedPeer()->sendShared(*command.mShared, command.mReliability);
+        else if (command.mEncoded != nullptr)
+            it->second->getBatchedPeer()->sendPacket(*command.mEncoded, command.mReliability,
+                                                     command.mCompressibility);
         else
             it->second->getBatchedPeer()->sendPacket(command.mData, command.mReliability, command.mCompressibility);
         return;
@@ -644,7 +657,8 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
 
         OutboundCommand command = std::move(shard.mBacklog.front());
         shard.mBacklog.pop_front();
-        if (command.mCompressibility == Compressibility::Compressible)
+        // shared batches compress and send during dispatch, already covered by the time budget
+        if (command.mShared == nullptr && command.mCompressibility == Compressibility::Compressible)
             bytes += command.mBroadcast ? command.mData.size() * shard.mConnections.size() : _pendingSize(command);
 
         if (command.mPendingBytes != nullptr)

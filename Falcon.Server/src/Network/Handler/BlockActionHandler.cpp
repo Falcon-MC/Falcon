@@ -420,7 +420,8 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
     if (type != 0 && PluginManager::findWithSubscribers(type) != nullptr) {
         std::vector<NetworkIdentifier> viewers;
         for (auto &entry: owner.getPlayers()) {
-            if (&entry.second != except && &owner.getLevelFor(entry.second) == &level
+            if (&entry.second != except && entry.second.getWorldId() == level.getWorldId()
+                && entry.second.getDimension() == level.getDimensionType()
                 && entry.second.getSentChunks().count(key) != 0)
                 viewers.push_back(entry.first);
         }
@@ -428,17 +429,27 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
         return;
     }
 
+    const bool individualHooks = owner.getNetworkHandler().hasSendHook();
+    std::vector<NetworkIdentifier> viewers;
+    if (!individualHooks)
+        viewers.reserve(owner.getPlayers().size());
     for (auto &entry: owner.getPlayers()) {
         if (&entry.second == except)
             continue;
 
-        if (&owner.getLevelFor(entry.second) != &level || entry.second.getSentChunks().count(key) == 0)
+        if (entry.second.getWorldId() != level.getWorldId()
+            || entry.second.getDimension() != level.getDimensionType() || entry.second.getSentChunks().count(key) == 0)
             continue;
 
-        owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
+        if (individualHooks)
+            owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
+        else
+            viewers.push_back(entry.first);
         if (packet.getId() == MinecraftPacketIds::UpdateBlock && isNearPlayer(entry.second, position))
             entry.second.awaitMovementChange();
     }
+    if (!individualHooks)
+        owner.getNetworkHandler().sendToMany(viewers, packet, owner.getCodecContext());
 }
 
 void BlockActionHandler::broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
