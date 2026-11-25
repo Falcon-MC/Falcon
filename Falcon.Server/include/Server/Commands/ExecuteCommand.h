@@ -17,6 +17,10 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
+    bool chainsCommands() const override {
+        return true;
+    }
+
 private:
     struct Context {
         Actor *mExecutor;

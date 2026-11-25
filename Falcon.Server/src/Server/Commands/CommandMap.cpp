@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <utility>
 
 namespace {
     std::string toLowerCase(const std::string &value) {
@@ -235,9 +236,15 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
     std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
 
     const size_t rawIndex = command->getRawArgumentIndex();
-    // the game reads ~ as a token of its own, spaces or not
-    if (rawIndex == (size_t) -1 && !takesMessage(*command))
-        splitRelativeCoordinates(arguments);
+    // the game reads ~ as a token of its own, spaces or not; a chained command splits under its own rules
+    if (rawIndex == (size_t) -1 && !takesMessage(*command)) {
+        const auto tail = command->chainsCommands() ? std::find(arguments.begin(), arguments.end(), "run")
+                                                    : arguments.end();
+        std::vector<std::string> split(arguments.begin(), tail);
+        splitRelativeCoordinates(split);
+        split.insert(split.end(), tail, arguments.end());
+        arguments = std::move(split);
+    }
     if (rawIndex != (size_t) -1 && arguments.size() > rawIndex) {
         const std::string raw = _skipFields(line, rawIndex + 1);
         if (!raw.empty()) {

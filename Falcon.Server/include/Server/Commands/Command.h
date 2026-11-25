@@ -37,6 +37,11 @@ public:
         return (size_t) -1;
     }
 
+    // its arguments after a "run" token are a command of their own, dispatched again
+    virtual bool chainsCommands() const {
+        return false;
+    }
+
     static CommandParamData makePlayerParameter(const std::string &name);
 
     static CommandParamData makeTypedParameter(const std::string &name, CommandParamType type, bool optional = false);
