@@ -445,9 +445,9 @@ void DefinitionProjectileActor::launchAt(ServerNetworkHandler &owner, const Acto
     _chooseDirection(owner, -1);
 }
 
-// toward the leg's goal while the target lives, else falling
+// the game's homing move, aimed or not: toward the leg's goal while the target lives, else falling
 bool DefinitionProjectileActor::steer(ServerNetworkHandler &owner, Vector3f &motion) {
-    if (!getProjectileComponent().mHoming || mHomingTarget == -1)
+    if (!getProjectileComponent().mHoming)
         return false;
 
     if (_homingTarget(owner) != nullptr) {

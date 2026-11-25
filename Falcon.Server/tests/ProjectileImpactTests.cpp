@@ -227,6 +227,51 @@ namespace {
         require(bullet.getPosition().y < startY, "a bullet without a target did not drop");
     }
 
+    // a homing bullet no one aimed falls 0.04 a tick, without the definition's inertia and gravity
+    void shulkerUnaimed(Arena &arena) {
+        DefinitionProjectileActor &bullet = definitionProjectile(arena, "minecraft:shulker_bullet",
+                                                                 Vector3f(-20.5f, 110.0f, -10.5f));
+        for (int32_t tick = 0; tick < 2; ++tick) {
+            bullet.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+            arena.mOwner.tickActors();
+        }
+        bullet.setMotion(Vector3f(0.0f, 0.0f, 0.5f));
+        arena.mOwner.tickActors();
+        const Vector3f motion = bullet.getMotion();
+        require(distance(motion, Vector3f(0.0f, -0.04f, 0.5f)) < 1.0e-6f,
+                "an unaimed shulker bullet did not fall like a homing one, motion " + std::to_string(motion.x) + " "
+                        + std::to_string(motion.y) + " " + std::to_string(motion.z));
+        arena.mOwner.removeActor(bullet.getUniqueId());
+    }
+
+    // a breeze sends a snowball back from where it met it, its new motion slowed and pulled down that same tick
+    void breezeReflects(Arena &arena) {
+        ServerActor &breeze = arena.spawn("minecraft:breeze", Vector3f(-30.5f, 100.0f, 30.5f));
+        const Vector3f standing = breeze.getPosition();
+        ServerActor &snowball = launch(arena, "minecraft:snowball", Vector3f(-30.5f, 100.9f, 26.5f));
+        const float gravity = snowball.getProjectileComponent().mGravity;
+        const float inertia = snowball.getProjectileComponent().mInertia;
+        const int64_t id = snowball.getUniqueId();
+        Vector3f before = snowball.getMotion();
+        for (int32_t tick = 0; tick < 20 && arena.alive(id) && snowball.getMotion().z > 0.0f; ++tick) {
+            before = snowball.getMotion();
+            breeze.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+            breeze.setPosition(standing);
+            arena.mOwner.tickActors();
+        }
+        require(arena.alive(id) && snowball.getMotion().z < 0.0f, "the breeze did not send the snowball back");
+        require(snowball.getPosition().z < standing.z, "the reflected snowball went on through the breeze");
+        const Vector3f after = snowball.getMotion();
+        const float kept = std::sqrt(after.x * after.x + after.z * after.z);
+        const float expected = std::sqrt(before.x * before.x + before.z * before.z) * 0.5f * inertia;
+        require(std::fabs(kept - expected) < 1.0e-4f,
+                "the reflected motion was not slowed by inertia: " + std::to_string(kept) + " for "
+                        + std::to_string(expected));
+        require(std::fabs(after.y - (before.y * 0.5f * inertia - gravity)) < 1.0e-4f,
+                "the reflected motion did not fall that tick: " + std::to_string(after.y));
+        arena.mOwner.removeActor(id);
+    }
+
     // a punch breaks a shulker bullet
     void shulkerPunched(Arena &arena) {
         ServerActor &attacker = arena.spawn("minecraft:cow", Vector3f(-10.5f, 100.0f, 40.5f));
@@ -287,9 +332,11 @@ int main() {
         evocationFangs(arena);
         shulkerHoming(arena);
         shulkerTargetLost(arena);
+        shulkerUnaimed(arena);
         shulkerPunched(arena);
         fireballReflected(arena);
         windChargeImmunity(arena);
+        breezeReflects(arena);
     } catch (const std::exception &error) {
         std::cout << "Projectile impact regression failed: " << error.what() << '\n';
         result = 1;
