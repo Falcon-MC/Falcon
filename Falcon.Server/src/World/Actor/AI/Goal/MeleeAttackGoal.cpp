@@ -72,20 +72,23 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor 
     if (damage <= 0.0f)
         return;
 
-    const float healthBefore = target.getHealth();
+    // a hit that lands pushes even when armor or resistance took all of it
+    bool landed = false;
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
         const ActorDamageSource source = ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
                                                                    mob.getPosition());
-        if (owner.hurt(*player, damage, source) == DamageResult::Blocked) {
+        const DamageResult result = owner.hurt(*player, damage, source);
+        if (result == DamageResult::Blocked) {
             owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
             mTicksSinceAttack = 0;
             return;
         }
+        landed = result == DamageResult::Dealt;
     } else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target)) {
-        owner.damageActor(*actor, damage, &mob);
+        landed = owner.damageActor(*actor, damage, &mob);
     }
 
-    if (target.getHealth() >= healthBefore)
+    if (!landed)
         return;
 
     mob.getAnger().onAttack(owner, mob, target);

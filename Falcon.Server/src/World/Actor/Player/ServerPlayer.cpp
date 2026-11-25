@@ -369,8 +369,6 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
             attackDamage = _applyAttackerModifiers(baseDamage,
                                                    attackDamage + target.getMeleeEnchantmentBonus(weapon));
-            if (attackDamage <= 0.0f)
-                return false;
 
             const bool critical = _isCriticalHit();
             const bool magic = target.getMeleeEnchantmentBonus(weapon) > 0.0f;
@@ -436,8 +434,6 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         damage = std::max(0.0f, damage + heldType->getAttackDamageBonus(held, *this));
 
     damage = _applyAttackerModifiers(baseDamage, damage + victim->getMeleeEnchantmentBonus(held));
-    if (damage <= 0.0f)
-        return false;
 
     const bool axe = data != nullptr && data->mToolType == ToolType::Axe;
     const bool coldTarget = victim->getAttackTime() <= 0;

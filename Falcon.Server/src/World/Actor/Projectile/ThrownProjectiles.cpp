@@ -1,5 +1,6 @@
 #include "World/Actor/Projectile/ProjectileActor.h"
 
+#include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/Hostile/BlazeActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -52,11 +53,26 @@ namespace {
         const Vector3f position = target.getPosition();
         owner.knockBack(target, position.x - hitPosition.x, position.z - hitPosition.z, force);
     }
+
+    // a harmless throwable still hurts the player for nothing and pushes, even into a raised shield
+    void strikePlayer(ServerNetworkHandler &owner, ServerActor &projectile, const Vector3f &hitPosition,
+                      ServerPlayer &player, float force) {
+        Actor *shooter = owner.getEntity(projectile.getOwnerUniqueId());
+        const Vector3f motion = projectile.getMotion();
+        const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
+
+        ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", player.getName());
+        source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
+        source.mAttacker = shooter;
+        source.fromOrigin(origin).asProjectile().withDamager(&projectile);
+        if (owner.hurt(player, 0.0f, source) != DamageResult::Ignored)
+            knockBackFrom(owner, player, hitPosition, force);
+    }
 }
 
 bool SnowballActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
     if (hitPlayer != nullptr)
-        knockBackFrom(owner, *hitPlayer, hitPosition, SNOWBALL_KNOCKBACK);
+        strikePlayer(owner, *this, hitPosition, *hitPlayer, SNOWBALL_KNOCKBACK);
 
     owner.spawnParticleEffect(owner.getLevelFor(*this), SNOWBALL_PARTICLE, hitPosition);
     return true;
@@ -87,7 +103,8 @@ bool IceBallActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPo
 }
 
 bool EggActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
-    (void) hitPlayer;
+    if (hitPlayer != nullptr)
+        strikePlayer(owner, *this, hitPosition, *hitPlayer, EGG_KNOCKBACK);
 
     _hatchChicks(owner, hitPosition);
     return true;

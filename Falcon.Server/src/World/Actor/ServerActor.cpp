@@ -212,13 +212,19 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     if (!isAlive() || amount < 0.0f || isInvulnerable())
         return false;
 
+    // a mob struck for nothing still flinches and is pushed: other actors ignore it
+    const bool living = dynamic_cast<MobActor *>(this) != nullptr;
+    if (amount <= 0.0f && !living)
+        return false;
+
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
         return false;
 
     if (!senseDamage(owner, amount, damageSource))
         return false;
 
-    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, damageSource) || amount <= 0.0f)
+    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, damageSource) || amount < 0.0f
+        || (amount <= 0.0f && !living))
         return false;
 
     // a hit from an attacker pushes: listeners see the game's push and may change it
@@ -234,7 +240,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
             return false;
 
         amount = event.mDamage;
-        if (amount <= 0.0f)
+        if (amount < 0.0f || (amount <= 0.0f && !living))
             return false;
     }
 
