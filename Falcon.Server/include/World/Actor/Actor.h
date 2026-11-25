@@ -7,6 +7,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "World/Level/Vibration/MovementGameEvents.h"
 #include "Protocol/Types/ItemStack.h"
 
 #include <cstdint>
@@ -394,6 +395,10 @@ public:
         mHandledBySculkCatalyst = true;
     }
 
+    MovementGameEventState &getMovementGameEventState() {
+        return mMovementGameEventState;
+    }
+
     // the experience this death drops, taken: it is not dropped any more; 0 when there is none to take
     virtual int32_t takeDeathExperience(ServerNetworkHandler &owner) {
         (void) owner;
@@ -571,6 +576,7 @@ public:
 
 protected:
     bool mHandledBySculkCatalyst = false;
+    MovementGameEventState mMovementGameEventState;
     void _changeFood(float food);
 
     static inline HealFilter sHealFilter;

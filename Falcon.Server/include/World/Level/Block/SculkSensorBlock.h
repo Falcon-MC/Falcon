@@ -39,6 +39,9 @@ public:
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
 
+    void onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                  const BlockState &state) const override;
+
     bool isSignalSource() const override {
         return true;
     }

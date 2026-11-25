@@ -1,15 +1,19 @@
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelEventGenericPacket.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/SculkSensorBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/SculkSensorBlock.h"
+#include "World/Level/Block/Systems/BlockContactSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
+#include "World/Level/Vibration/MovementGameEvents.h"
 #include "World/Level/Vibration/VibrationListener.h"
 #include "World/Level/Vibration/VibrationProperties.h"
 #include "World/Level/World.h"
@@ -416,6 +420,89 @@ namespace {
         level.postGameEvent(GameEvents::BLOCK_CHANGE, Vector3f(12.5f, 64.5f, 8.5f));
         require(ticksUntilActive(10) == 4, "with no input the calibrated sensor did not hear every frequency");
     }
+
+    void dampersMakeNoVibration() {
+        VibrationFixture fixture;
+        ServerActor *warden = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:warden", Vector3f(11.5f, 64.0f, 8.5f));
+        require(warden != nullptr, "no fixture warden");
+        fixture.post(GameEvents::ENTITY_MOVE, Vector3i(11, 64, 8), warden);
+        fixture.post(GameEvents::BLOCK_CHANGE, Vector3i(11, 64, 8), warden);
+        require(fixture.ticksUntilReceived(10) == 0, "a warden's own vibration was heard");
+        fixture.post(GameEvents::SCULK_TOUCH, Vector3i(11, 64, 8), warden);
+        require(fixture.ticksUntilReceived(10) == 3, "sculk_touch ignores the damper but was not heard");
+    }
+
+    void movementSteps() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(11.5f, 64.0f, 8.5f));
+        require(cow != nullptr, "no fixture cow");
+        cow->setOnGround(true);
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 0, "standing still made a step");
+
+        cow->setPosition(Vector3f(11.0f, 64.0f, 8.5f));
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 3, "a step on the ground made no entity_move");
+        require(fixture.mProbe->mReceived.front().mEvent == &GameEvents::ENTITY_MOVE, "the step was not entity_move");
+        require(cow->getMovementGameEventState().mDistance == 1.5f, "half a block did not add up to 1.5");
+
+        fixture.mProbe->mReceived.clear();
+        cow->setOnGround(false);
+        cow->setPosition(Vector3f(11.0f, 66.0f, 8.5f));
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 0, "a cow in the air made a vibration");
+
+        ServerActor *chicken =
+                fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:chicken", Vector3f(10.5f, 66.0f, 8.5f));
+        require(chicken != nullptr, "no fixture chicken");
+        chicken->setOnGround(false);
+        MovementGameEvents::track(fixture.mOwner, *chicken);
+        MovementGameEvents::track(fixture.mOwner, *chicken);
+        require(fixture.ticksUntilReceived(5) > 0 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::FLAP,
+                "a chicken in the air did not flap");
+    }
+
+    void landingAndSculkTouch() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(11.5f, 64.0f, 8.5f));
+        require(cow != nullptr, "no fixture cow");
+        BlockContactSystem::land(fixture.mOwner, *cow, 0.0f);
+        require(fixture.ticksUntilReceived(5) == 0, "landing without a fall made hit_ground");
+        BlockContactSystem::land(fixture.mOwner, *cow, 2.0f);
+        require(fixture.ticksUntilReceived(5) == 3 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::HIT_GROUND,
+                "a fall did not make hit_ground");
+
+        fixture.mProbe->mReceived.clear();
+        const Vector3i sensor(10, 64, 8);
+        const BlockState state = VanillaBlocks::SCULK_SENSOR().toBlockState();
+        fixture.place(sensor, state);
+        const Block *block = VanillaBlocks::fromState(state);
+        require(block != nullptr, "no sculk sensor block");
+        ServerActor *warden = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:warden", Vector3f(10.5f, 65.0f, 8.5f));
+        require(warden != nullptr, "no fixture warden");
+        block->onStepOn(fixture.mOwner, *warden, sensor, state);
+        require(fixture.ticksUntilReceived(5) == 0, "a warden touched the sculk");
+        block->onStepOn(fixture.mOwner, *cow, sensor, state);
+        require(fixture.ticksUntilReceived(5) == 2 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::SCULK_TOUCH,
+                "stepping on a sensor made no sculk_touch");
+    }
+
+    void playerBreaksBlock() {
+        VibrationFixture fixture;
+        NetworkIdentifier id;
+        ServerPlayer &player = fixture.mOwner.getPlayers().try_emplace(id, id, 4001).first->second;
+        player.setPosition(Vector3f(12.5f, 64.0f, 10.5f));
+        fixture.place(Vector3i(12, 64, 8), VanillaBlocks::STONE().toBlockState());
+        BlockActionHandler::breakBlock(fixture.mOwner, player, Vector3i(12, 64, 8));
+        require(fixture.ticksUntilReceived(10) == 4 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::BLOCK_DESTROY,
+                "breaking a block made no block_destroy");
+
+        fixture.mProbe->mReceived.clear();
+        fixture.place(Vector3i(12, 64, 8), VanillaBlocks::WHITE_WOOL().toBlockState());
+        BlockActionHandler::breakBlock(fixture.mOwner, player, Vector3i(12, 64, 8));
+        require(fixture.ticksUntilReceived(10) == 0, "breaking wool made a vibration");
+    }
 }
 
 int main() {
@@ -429,6 +516,10 @@ int main() {
         sourceRules();
         closestThenFrequency();
         savesTheSignalInFlight();
+        dampersMakeNoVibration();
+        movementSteps();
+        landingAndSculkTouch();
+        playerBreaksBlock();
         sculkSensorActivates();
         calibratedSensorFilters();
         std::cout << "vibration checks passed\n";

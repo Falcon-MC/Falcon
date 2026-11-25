@@ -17,6 +17,8 @@
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 
 #include <algorithm>
 #include <cmath>
@@ -203,6 +205,8 @@ void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
         const int32_t eventData = (int32_t) (((item.mDefinition->getRuntimeId() & 0xffff) << 16)
                                              | (item.mDamage & 0xffff));
         _broadcastEntityEvent(player, (uint8_t) EntityEventType::EatingItem, eventData);
+        // the game posts eat with every eating event, whatever is consumed: potions too
+        getLevelFor(player).postGameEvent(GameEvents::EAT, player.getEyePosition(), &player);
         return;
     }
 
