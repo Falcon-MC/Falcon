@@ -11,7 +11,6 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <utility>
@@ -173,23 +172,18 @@ namespace {
         return item.mCount - remaining;
     }
 
-    // FALCON_EVENT_HOPPER_TRANSFER for the one item about to move; false when a plugin keeps it
+    // false when a handler keeps the one item about to move
     bool allowedByPlugins(Level *level, const Vector3i &hopper, const ItemStack &source, bool pushing) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_HOPPER_TRANSFER);
-        if (plugins == nullptr)
+        ServerNetworkHandler *owner = level->getOwner();
+        if (owner == nullptr)
+            return true;
+        EventSignal<HopperTransferBeforeEvent> &transfer = owner->getEventBus().before().mHopperTransfer;
+        if (!transfer.hasSubscribers())
             return true;
 
-        ItemStack one = source;
-        one.mCount = 1;
-        PluginEvent event;
-        event.mType = FALCON_EVENT_HOPPER_TRANSFER;
-        event.mCancellable = true;
-        event.mLevel = level;
-        event.mBlockPosition = hopper;
-        event.mItem = &one;
-        event.mState = pushing;
-        plugins->dispatch(event);
-        return !event.mCancelled;
+        HopperTransferBeforeEvent event(*level, hopper, source, pushing);
+        transfer.emit(event);
+        return !event.isCancelled();
     }
 
     // a container actor (a chest or hopper minecart, a chest boat) whose box reaches into the block

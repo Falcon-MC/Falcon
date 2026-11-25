@@ -8,7 +8,6 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Protocol/Packets/LevelChunkPacket.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/NetworkChunkPublisherUpdatePacket.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/TickingAreaManager.h"
@@ -479,14 +478,10 @@ namespace {
             sendChunk(owner, player, level, chunkX, chunkZ, hash);
             level.registerChunkLoader(player.getRuntimeId(), chunkX, chunkZ);
             sent.insert(hash);
-            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_POST_CHUNK_SEND)) {
-                PluginEvent event;
-                event.mType = FALCON_EVENT_PLAYER_POST_CHUNK_SEND;
-                event.mPlayer = &player;
-                event.mLevel = &level;
-                event.mChunkX = chunkX;
-                event.mChunkZ = chunkZ;
-                plugins->dispatch(event);
+            EventSignal<PlayerChunkSentAfterEvent> &chunkSent = owner.getEventBus().after().mPlayerChunkSent;
+            if (chunkSent.hasSubscribers()) {
+                PlayerChunkSentAfterEvent event(player, level, chunkX, chunkZ);
+                chunkSent.emit(event);
             }
             ++added;
             ++state.mSendsThisTick;

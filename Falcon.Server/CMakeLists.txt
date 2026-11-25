@@ -1133,7 +1133,9 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     add_test(NAME brewing-idle-save COMMAND FalconBrewingStandTests idle-save)
     add_test(NAME brewing-ingredient-change COMMAND FalconBrewingStandTests ingredient-change)
     add_test(NAME brewing-countdown COMMAND FalconBrewingStandTests countdown)
-    set_tests_properties(brewing-idle-save brewing-ingredient-change brewing-countdown PROPERTIES TIMEOUT 60)
+    add_test(NAME brewing-plugin-events COMMAND FalconBrewingStandTests plugin-events)
+    set_tests_properties(brewing-idle-save brewing-ingredient-change brewing-countdown brewing-plugin-events
+            PROPERTIES TIMEOUT 60)
 
     add_executable(FalconSendEventTests tests/SendEventTests.cpp)
     target_link_libraries(FalconSendEventTests PRIVATE FalconTestCore)

@@ -14,7 +14,6 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Block/ObsidianBlock.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/BlockNames.h"
@@ -213,21 +212,15 @@ namespace {
         return chance;
     }
 
-    bool allowFire(ServerNetworkHandler &owner, Level &level, FalconEventType type, const Vector3i &position,
+    bool allowFire(Level &level, EventSignal<FireBeforeEvent> &signal, const Vector3i &position,
                    const Vector3i &source) {
-        PluginManager &plugins = owner.getPluginManager();
-        if (!plugins.hasSubscribers(type))
+        if (!signal.hasSubscribers())
             return true;
 
-        PluginEvent fireEvent;
-        fireEvent.mType = type;
-        fireEvent.mCancellable = true;
-        fireEvent.mLevel = &level;
-        fireEvent.mBlockPosition = position;
-        fireEvent.mBlockName = stateAt(level, position).mName;
-        fireEvent.mPosition = Vector3f((float) source.x + 0.5f, (float) source.y + 0.5f, (float) source.z + 0.5f);
-        plugins.dispatch(fireEvent);
-        return !fireEvent.mCancelled;
+        const BlockState block = stateAt(level, position);
+        FireBeforeEvent event(level, position, block, source);
+        signal.emit(event);
+        return !event.isCancelled();
     }
 
     void tryToCatchBlockOnFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int bound, int age,
@@ -238,7 +231,7 @@ namespace {
         if (nextInt(bound) >= burnAbility)
             return;
 
-        if (!allowFire(owner, level, FALCON_EVENT_BLOCK_BURN, position, source))
+        if (!allowFire(level, owner.getEventBus().before().mBlockBurn, position, source))
             return;
 
         // replaced by fire (likelier while the source is young) or destroyed
@@ -453,7 +446,7 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
                 if (threshold <= 0 || nextInt(bound) > threshold)
                     continue;
 
-                if (!allowFire(owner, level, FALCON_EVENT_FIRE_SPREAD, target, position))
+                if (!allowFire(level, owner.getEventBus().before().mFireSpread, target, position))
                     continue;
 
                 setFire(owner, level, target, "minecraft:fire", std::min(age + nextInt(5) / 4, MAX_AGE));

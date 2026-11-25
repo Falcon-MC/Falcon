@@ -27,7 +27,6 @@
 #include "Network/PacketSender.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
@@ -617,17 +616,11 @@ namespace {
             ItemStack fuel = state.mInventory.mItems[FurnaceInventory::SLOT_FUEL];
             int duration = fuelTime(fuel);
             if (duration > 0 && fuel.mCount > 0) {
-                if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_BURN)) {
-                    ItemStack burning = fuel;
-                    PluginEvent burnEvent;
-                    burnEvent.mType = FALCON_EVENT_FURNACE_BURN;
-                    burnEvent.mCancellable = true;
-                    burnEvent.mLevel = level;
-                    burnEvent.mBlockPosition = position;
-                    burnEvent.mItem = &burning;
-                    burnEvent.mAmount = (double) duration;
-                    plugins->dispatch(burnEvent);
-                    duration = burnEvent.mCancelled ? 0 : std::max(0, (int) burnEvent.mAmount);
+                EventSignal<FurnaceBurnBeforeEvent> &burn = owner.getEventBus().before().mFurnaceBurn;
+                if (burn.hasSubscribers()) {
+                    FurnaceBurnBeforeEvent burnEvent(*level, position, fuel, duration);
+                    burn.emit(burnEvent);
+                    duration = burnEvent.isCancelled() ? 0 : burnEvent.mBurnTime;
                 }
             }
             if (duration > 0 && fuel.mCount > 0) {
@@ -656,17 +649,11 @@ namespace {
                 if (state.mCookTime >= duration) {
                     ItemStack smelted = result;
                     bool allowed = true;
-                    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_SMELT)) {
-                        ItemStack source = input;
-                        PluginEvent smeltEvent;
-                        smeltEvent.mType = FALCON_EVENT_FURNACE_SMELT;
-                        smeltEvent.mCancellable = true;
-                        smeltEvent.mLevel = level;
-                        smeltEvent.mBlockPosition = position;
-                        smeltEvent.mItem = &source;
-                        smeltEvent.mResult = &smelted;
-                        plugins->dispatch(smeltEvent);
-                        allowed = !smeltEvent.mCancelled && !smelted.isAir()
+                    EventSignal<FurnaceSmeltBeforeEvent> &smelt = owner.getEventBus().before().mFurnaceSmelt;
+                    if (smelt.hasSubscribers()) {
+                        FurnaceSmeltBeforeEvent smeltEvent(*level, position, input, smelted);
+                        smelt.emit(smeltEvent);
+                        allowed = !smeltEvent.isCancelled() && !smelted.isAir()
                                   && (currentOutput.isAir() || stackMatches(currentOutput, smelted));
                     }
 
@@ -970,20 +957,13 @@ bool InventoryManager::_allowPluginOpen(const Vector3i &position) {
     if (mOwner == nullptr || mPlayer == nullptr)
         return true;
 
-    PluginManager &plugins = mOwner->getPluginManager();
-    if (!plugins.hasSubscribers(FALCON_EVENT_INVENTORY_OPEN) && !plugins.hasSubscribers(FALCON_EVENT_INVENTORY_CLOSE))
+    EventSignal<BlockContainerOpenBeforeEvent> &open = mOwner->getEventBus().before().mBlockContainerOpen;
+    if (!open.hasSubscribers())
         return true;
 
-    Level &level = mOwner->getLevelFor(*mPlayer);
-    PluginEvent openEvent;
-    openEvent.mType = FALCON_EVENT_INVENTORY_OPEN;
-    openEvent.mCancellable = true;
-    openEvent.mPlayer = mPlayer;
-    openEvent.mLevel = &level;
-    openEvent.mBlockPosition = position;
-    openEvent.mBlockName = level.getBlockState(position.x, position.y, position.z).mName;
-    plugins.dispatch(openEvent);
-    if (openEvent.mCancelled)
+    BlockContainerOpenBeforeEvent openEvent(*mPlayer, mOwner->getLevelFor(*mPlayer), position);
+    open.emit(openEvent);
+    if (openEvent.isCancelled())
         return false;
 
     mPluginOpen = true;
@@ -1009,15 +989,12 @@ void InventoryManager::dispatchPluginClose() {
         return;
 
     mPluginOpen = false;
-    Level &level = mOwner->getLevelFor(*mPlayer);
-    PluginEvent closeEvent;
-    closeEvent.mType = FALCON_EVENT_INVENTORY_CLOSE;
-    closeEvent.mPlayer = mPlayer;
-    closeEvent.mLevel = &level;
-    closeEvent.mBlockPosition = mPluginOpenPosition;
-    closeEvent.mBlockName =
-            level.getBlockState(mPluginOpenPosition.x, mPluginOpenPosition.y, mPluginOpenPosition.z).mName;
-    mOwner->getPluginManager().dispatch(closeEvent);
+    EventSignal<BlockContainerCloseAfterEvent> &close = mOwner->getEventBus().after().mBlockContainerClose;
+    if (!close.hasSubscribers())
+        return;
+
+    BlockContainerCloseAfterEvent closeEvent(*mPlayer, mOwner->getLevelFor(*mPlayer), mPluginOpenPosition);
+    close.emit(closeEvent);
 }
 
 bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {

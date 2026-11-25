@@ -73,7 +73,6 @@ class CommandBlockUpdatePacket;
 class Item;
 class NetherNetInstance;
 class PluginManager;
-struct PluginEvent;
 class PlayerMovementRegistry;
 struct KnockbackPreset;
 
@@ -1239,8 +1238,8 @@ private:
     bool _isEyeInsideSolidBlock(Level &level, const Vector3f &position, float height);
 
     void _dropInventoryOnDeath(ServerPlayer &player);
-    void _killPlayerWithPlugins(PluginManager &plugins, ServerPlayer &player, PluginEvent &deathEvent,
-                                bool ruleKeepsInventory);
+    void _killPlayerWithListeners(EventSignal<PlayerDeathBeforeEvent> &death, ServerPlayer &player,
+                                  std::string &deathMessage, bool ruleKeepsInventory);
     void _dropExperienceOnDeath(ServerPlayer &player, int32_t experience);
 
     void _respawnPlayer(ServerPlayer &player);

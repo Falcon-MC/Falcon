@@ -1,6 +1,4 @@
 #include "Network/ServerNetworkHandler.h"
-#include "Core/Utility/BinaryStream.h"
-#include "Core/NBT/NbtIo.h"
 
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Misc/ItemActor.h"
@@ -12,7 +10,6 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "Scripting/Content/CustomContentRegistry.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <chrono>
@@ -43,24 +40,10 @@ void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool chec
         return;
 
     Tag data = player.saveNbt(getWorldFor(player).getName());
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_DATA_SAVE)) {
-        BinaryStream stream;
-        NbtIo::writeTag(stream, data, NbtVariant::LittleEndian);
-        std::string payload = stream.getBuffer();
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_DATA_SAVE;
-        event.mPlayer = const_cast<ServerPlayer *>(&player);
-        event.mCustomName = player.getName();
-        event.mPacketData = &payload;
-        plugins->dispatch(event);
-        try {
-            ReadOnlyBinaryStream updated(payload);
-            Tag replacement = NbtIo::readTag(updated, NbtVariant::LittleEndian);
-            if (replacement.isCompound())
-                data = std::move(replacement);
-        } catch (const std::exception &error) {
-            LOG_WARN(LogAreaID::Server, "Player save callback returned invalid data: %s", error.what());
-        }
+    EventSignal<PlayerDataSaveBeforeEvent> &dataSave = mEventBus.before().mPlayerDataSave;
+    if (dataSave.hasSubscribers()) {
+        PlayerDataSaveBeforeEvent event(player, data);
+        dataSave.emit(event);
     }
     if (!player.getXuid().empty())
         data.putString(PlayerDataProvider::TAG_OWNER_XUID, player.getXuid());
@@ -317,12 +300,11 @@ void ServerNetworkHandler::autoSave(bool wait) {
         return;
 
     // before anything is written: a plugin can store its own state in the same save
-    if (mPluginManager->hasSubscribers(FALCON_EVENT_WORLD_SAVE)) {
+    EventSignal<WorldSaveAfterEvent> &worldSave = mEventBus.after().mWorldSave;
+    if (worldSave.hasSubscribers()) {
         for (World *world: mWorlds.getWorlds()) {
-            PluginEvent event;
-            event.mType = FALCON_EVENT_WORLD_SAVE;
-            event.mWorldName = world->getName();
-            mPluginManager->dispatch(event);
+            WorldSaveAfterEvent event(*world);
+            worldSave.emit(event);
         }
     }
 

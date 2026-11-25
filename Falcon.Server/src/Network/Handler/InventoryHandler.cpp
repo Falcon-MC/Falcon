@@ -1,9 +1,6 @@
 #include "Network/Handler/InventoryHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
-#include "Core/Json/Json.h"
-#include "Network/Crypto/Base64.h"
-#include "World/Item/EnchantmentData.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
@@ -35,7 +32,6 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
 #include "Protocol/Packets/CraftingEventPacket.h"
@@ -49,7 +45,6 @@
 #include "Protocol/Types/ContainerSlotType.h"
 #include "Protocol/Types/InventoryActionData.h"
 #include "Protocol/Types/InventorySource.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <random>
@@ -57,59 +52,6 @@
 #include <utility>
 
 namespace {
-    std::string encodeEnchantOptions(const std::vector<EnchantOptionData> &options) {
-        std::string json = "[";
-        for (const auto &option: options) {
-            if (json.size() > 1)
-                json += ',';
-            json += '[' + std::to_string(option.mCost) + ",\"" + Base64::encode(option.mEnchantName) + "\",[";
-            bool first = true;
-            for (const auto &enchant: option.mEnchants0) {
-                if (!first)
-                    json += ',';
-                first = false;
-                json += '[' + std::to_string(enchant.mType) + ',' + std::to_string(enchant.mLevel) + ']';
-            }
-            json += "]]";
-        }
-        return json + ']';
-    }
-
-    bool decodeEnchantOptions(const std::string &data, std::vector<EnchantOptionData> &result) {
-        const auto list = json::parse(data);
-        if (list == nullptr || !list->isArray() || list->mArray.size() > 3)
-            return false;
-
-        for (const auto &entry: list->mArray) {
-            if (entry == nullptr || !entry->isArray() || entry->mArray.size() != 3)
-                return false;
-            const auto &fields = entry->mArray;
-            const int32_t cost = fields[0]->integer(-1);
-            if (cost < 0 || cost > 32767 || !fields[1]->isString() || !fields[2]->isArray()
-                || fields[2]->mArray.size() > 64)
-                return false;
-
-            EnchantOptionData option;
-            option.mCost = cost;
-            const std::string &encodedName = fields[1]->mString;
-            if (encodedName.size() > 44'000
-                || (!encodedName.empty() && !Base64::decode(encodedName, option.mEnchantName))
-                || option.mEnchantName.size() > 32767)
-                return false;
-            for (const auto &enchant: fields[2]->mArray) {
-                if (enchant == nullptr || !enchant->isArray() || enchant->mArray.size() != 2)
-                    return false;
-                const int32_t id = enchant->mArray[0]->integer(-1);
-                const int32_t level = enchant->mArray[1]->integer(-1);
-                if (EnchantmentTable::findById(id) == nullptr || level <= 0 || level > 32767)
-                    return false;
-                option.mEnchants0.push_back({id, level});
-            }
-            result.push_back(std::move(option));
-        }
-        return true;
-    }
-
     void returnToInventory(ServerPlayer &player, ItemStack &item) {
         std::vector<int> touchedSlots;
         item.mCount = player.getInventory().addItemPartial(item, touchedSlots);
@@ -118,98 +60,6 @@ namespace {
 
         for (int slot: touchedSlots)
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
-    }
-
-    bool isBlockContainer(ContainerSlotType type) {
-        return type == ContainerSlotType::LevelEntity || type == ContainerSlotType::Barrel
-               || type == ContainerSlotType::ShulkerBox || type == ContainerSlotType::CrafterBlockContainer;
-    }
-
-    std::string containerName(ContainerSlotType type) {
-        if (isBlockContainer(type))
-            return "container";
-
-        switch (type) {
-            // plugins see a mount's equipment and chest as one container, numbered by containerSlot
-            case ContainerSlotType::HorseEquip:
-                return "container";
-            case ContainerSlotType::Hotbar:
-                return "hotbar";
-            case ContainerSlotType::Inventory:
-                return "inventory";
-            case ContainerSlotType::HotbarAndInventory:
-                return "hotbar_and_inventory";
-            case ContainerSlotType::Armor:
-                return "armor";
-            case ContainerSlotType::Offhand:
-                return "offhand";
-            case ContainerSlotType::Cursor:
-                return "cursor";
-            case ContainerSlotType::CraftingInput:
-                return "crafting_input";
-            case ContainerSlotType::CraftingOutput:
-            case ContainerSlotType::CreatedOutput:
-                return "crafting_output";
-            case ContainerSlotType::FurnaceIngredient:
-            case ContainerSlotType::BlastFurnaceIngredient:
-            case ContainerSlotType::SmokerIngredient:
-                return "furnace_ingredient";
-            case ContainerSlotType::FurnaceFuel:
-                return "furnace_fuel";
-            case ContainerSlotType::FurnaceResult:
-                return "furnace_result";
-            case ContainerSlotType::EnchantingInput:
-                return "enchanting_input";
-            case ContainerSlotType::EnchantingMaterial:
-                return "enchanting_material";
-            case ContainerSlotType::DynamicContainer:
-                return "bundle";
-            default:
-                return "other";
-        }
-    }
-
-    const char *transactionName(ItemStackRequestActionType type) {
-        switch (type) {
-            case ItemStackRequestActionType::Take:
-                return "take";
-            case ItemStackRequestActionType::Place:
-                return "place";
-            case ItemStackRequestActionType::Swap:
-                return "swap";
-            case ItemStackRequestActionType::Drop:
-                return "drop";
-            case ItemStackRequestActionType::Destroy:
-                return "destroy";
-            case ItemStackRequestActionType::Consume:
-                return "consume";
-            default:
-                return nullptr;
-        }
-    }
-
-    bool hasDestination(ItemStackRequestActionType type) {
-        return type == ItemStackRequestActionType::Take || type == ItemStackRequestActionType::Place
-               || type == ItemStackRequestActionType::Swap;
-    }
-
-    // the client numbers a mount's chest after its own equipment range; plugins get the container index
-    int containerSlot(const Container *openContainer, ContainerSlotType type, int slot) {
-        if (openContainer == nullptr || openContainer->getEquipmentSlotCount() == 0
-            || (!isBlockContainer(type) && type != ContainerSlotType::HorseEquip))
-            return slot;
-        const int index = openContainer->getNetworkSlotIndex(type, slot);
-        return index < 0 ? slot : index;
-    }
-
-    ItemStack itemAt(const PlayerInventory &inventory, Container *openContainer, ContainerSlotType type, int slot) {
-        if (isBlockContainer(type) || type == ContainerSlotType::HorseEquip) {
-            const int index = openContainer == nullptr ? -1 : openContainer->getNetworkSlotIndex(type, slot);
-            return index < 0 ? ItemStack::air() : openContainer->getContainerItem(index);
-        }
-
-        const ItemStack *item = inventory.resolveSlot(type, slot);
-        return item == nullptr ? ItemStack::air() : *item;
     }
 
     // ServerPlayer::attackActor bounds a hit the same way
@@ -307,69 +157,13 @@ namespace {
     }
 
     bool allowRequest(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request) {
-        PluginManager &plugins = owner.getPluginManager();
-        const bool transactions = plugins.hasSubscribers(FALCON_EVENT_INVENTORY_TRANSACTION);
-        if (!transactions)
+        EventSignal<InventoryRequestBeforeEvent> &requested = owner.getEventBus().before().mInventoryRequest;
+        if (!requested.hasSubscribers())
             return true;
 
-        const PlayerInventory &inventory = player.getInventory();
-        Container *openContainer = player.getInventoryManager().getContainer();
-        std::string actionsJson;
-        size_t actionCount = 0;
-        if (request.mActions.size() > 1) {
-            for (const ItemStackRequestAction &action: request.mActions) {
-                const char *name = transactionName(action.mType);
-                if (name == nullptr)
-                    continue;
-                const bool destination = hasDestination(action.mType);
-                actionsJson += actionCount++ == 0 ? "[" : ",";
-                actionsJson += "[\"" + std::string(name) + "\",\""
-                               + containerName(action.mSource.mContainerName.mContainer) + "\","
-                               + std::to_string(containerSlot(openContainer, action.mSource.mContainerName.mContainer,
-                                                              action.mSource.mSlot)) + ",\""
-                               + (destination ? containerName(action.mDestination.mContainerName.mContainer) : "")
-                               + "\","
-                               + std::to_string(destination ? containerSlot(openContainer,
-                                                                            action.mDestination.mContainerName.mContainer,
-                                                                            action.mDestination.mSlot) : -1)
-                               + "," + std::to_string(action.mCount) + "]";
-            }
-            if (actionCount > 1)
-                actionsJson += "]";
-        }
-
-        for (const ItemStackRequestAction &action: request.mActions) {
-            const char *name = transactionName(action.mType);
-            if (!transactions || name == nullptr)
-                continue;
-
-            const ContainerSlotType sourceType = action.mSource.mContainerName.mContainer;
-            ItemStack item = itemAt(inventory, openContainer, sourceType, action.mSource.mSlot);
-            PluginEvent transactionEvent;
-            transactionEvent.mType = FALCON_EVENT_INVENTORY_TRANSACTION;
-            transactionEvent.mCancellable = true;
-            transactionEvent.mPlayer = &player;
-            transactionEvent.mCause = name;
-            transactionEvent.mItem = &item;
-            transactionEvent.mAmount = (double) action.mCount;
-            transactionEvent.mSourceContainer = containerName(sourceType);
-            transactionEvent.mSourceSlot = containerSlot(openContainer, sourceType, action.mSource.mSlot);
-            if (hasDestination(action.mType)) {
-                const ContainerSlotType destinationType = action.mDestination.mContainerName.mContainer;
-                transactionEvent.mDestinationContainer = containerName(destinationType);
-                transactionEvent.mDestinationSlot = containerSlot(openContainer, destinationType, action.mDestination.mSlot);
-            }
-
-            // The first in a group carries the complete request. Individual callbacks still receive each action.
-            if (actionCount > 1) {
-                transactionEvent.mCustomData = std::move(actionsJson);
-                actionsJson = "[]";
-            }
-            plugins.dispatch(transactionEvent);
-            if (transactionEvent.mCancelled)
-                return false;
-        }
-        return true;
+        InventoryRequestBeforeEvent event(player, request);
+        requested.emit(event);
+        return !event.isCancelled();
     }
 
     void playBundleSounds(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request,
@@ -472,17 +266,12 @@ void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPla
 
     if (packet.mHotbarSlot != previousSlot && packet.mHotbarSlot >= 0
         && packet.mHotbarSlot < PlayerInventory::HOTBAR_SIZE) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_HELD)) {
-            ItemStack next = inventory.getItem(packet.mHotbarSlot);
-            PluginEvent heldEvent;
-            heldEvent.mType = FALCON_EVENT_PLAYER_ITEM_HELD;
-            heldEvent.mCancellable = true;
-            heldEvent.mPlayer = &player;
-            heldEvent.mSourceSlot = previousSlot;
-            heldEvent.mDestinationSlot = packet.mHotbarSlot;
-            heldEvent.mItem = &next;
-            plugins->dispatch(heldEvent);
-            if (heldEvent.mCancelled) {
+        EventSignal<PlayerItemHeldBeforeEvent> &held = owner.getEventBus().before().mPlayerItemHeld;
+        if (held.hasSubscribers()) {
+            PlayerItemHeldBeforeEvent heldEvent(player, previousSlot, packet.mHotbarSlot,
+                                                inventory.getItem(packet.mHotbarSlot));
+            held.emit(heldEvent);
+            if (heldEvent.isCancelled()) {
                 sendHeldItem(owner, player);
                 return;
             }
@@ -718,7 +507,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost,
                 beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice,
                 loomOpen && !leftLoom && gameType != (int32_t) GameType::Spectator,
-                cartographyOpen ? nullptr : &cartographyMaps, &cartographyExpansion, &player);
+                cartographyOpen ? nullptr : &cartographyMaps, &cartographyExpansion, &player, &owner.getEventBus());
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK)
             CartographyRecipes::applyExpansion(cartographyExpansion, cartographyMaps);
@@ -772,14 +561,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 owner._sendAttributes(player);
             }
             AnvilBlock::onUsed(owner, level, anvilPosition, gameType == (int32_t) GameType::Creative);
-            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ANVIL_USE)) {
-                PluginEvent anvilEvent;
-                anvilEvent.mType = FALCON_EVENT_ANVIL_USE;
-                anvilEvent.mPlayer = &player;
-                anvilEvent.mLevel = &level;
-                anvilEvent.mBlockPosition = anvilPosition;
-                anvilEvent.mAmount = (double) anvilLevelsConsumed;
-                plugins->dispatch(anvilEvent);
+            EventSignal<AnvilUseAfterEvent> &anvilUse = owner.getEventBus().after().mAnvilUse;
+            if (anvilUse.hasSubscribers()) {
+                AnvilUseAfterEvent anvilEvent(player, level, anvilPosition, anvilLevelsConsumed);
+                anvilUse.emit(anvilEvent);
             }
         }
 
@@ -804,7 +589,11 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     }
 
     player.getInventoryManager().storeFurnaceView(owner);
-    PluginEvents::armorChanged(player, armorBefore);
+    EventSignal<PlayerArmorChangeAfterEvent> &armorChange = owner.getEventBus().after().mPlayerArmorChange;
+    if (armorChange.hasSubscribers()) {
+        PlayerArmorChangeAfterEvent armorEvent(player, armorBefore);
+        armorChange.emit(armorEvent);
+    }
 
     for (const BundleSyncData &bundle: bundles) {
         const ItemStack *owned = inventory.resolveSlot(bundle.mOwnerContainer, bundle.mOwnerSlot);
@@ -821,16 +610,16 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
     }
 
+    EventSignal<PlayerDropItemBeforeEvent> &drop = owner.getEventBus().before().mPlayerDropItem;
     for (const ItemStack &dropped: droppedItems) {
-        ItemStack droppedCopy = dropped;
-        PluginEvent dropEvent;
-        dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
-        dropEvent.mCancellable = true;
-        dropEvent.mPlayer = &player;
-        dropEvent.mItem = &droppedCopy;
-        PluginManager::getInstance().dispatch(dropEvent);
+        bool cancelled = false;
+        if (drop.hasSubscribers()) {
+            PlayerDropItemBeforeEvent dropEvent(player, dropped);
+            drop.emit(dropEvent);
+            cancelled = dropEvent.isCancelled();
+        }
 
-        if (!dropEvent.mCancelled) {
+        if (!cancelled) {
             owner._throwItem(player, dropped);
             continue;
         }
@@ -904,30 +693,19 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
         packet.mOptions = EnchantmentHelper::getEnchantOptions(
                 owner.getLevelFor(player), manager.getContainerPosition(), current, manager.getEnchantSeed());
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ENCHANTING_OPTIONS)) {
-        ItemStack proposedInput = current;
+    EventSignal<EnchantingOptionsBeforeEvent> &options = owner.getEventBus().before().mEnchantingOptions;
+    if (options.hasSubscribers()) {
         const ItemStack *material = player.getInventory().resolveSlot(ContainerSlotType::EnchantingMaterial, 0);
-        ItemStack lapis = material == nullptr ? empty : *material;
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_ENCHANTING_OPTIONS;
-        event.mCancellable = true;
-        event.mPlayer = &player;
-        event.mLevel = &owner.getLevelFor(player);
-        event.mBlockPosition = manager.getContainerPosition();
-        event.mItem = &proposedInput;
-        event.mResult = &lapis;
-        const std::string original = encodeEnchantOptions(packet.mOptions);
-        event.mCustomData = original;
-        plugins->dispatch(event);
+        EnchantingOptionsBeforeEvent event(player, owner.getLevelFor(player), manager.getContainerPosition(), current,
+                                           material == nullptr ? empty : *material, packet.mOptions);
+        options.emit(event);
 
-        std::vector<EnchantOptionData> modified;
-        if (event.mCancelled
-            || (event.mCustomData != original && decodeEnchantOptions(event.mCustomData, modified))) {
+        if (event.isCancelled() || event.mReplaced) {
             std::vector<int32_t> obsolete;
             for (const auto &option: packet.mOptions)
                 obsolete.push_back(option.mEnchantNetId);
             EnchantmentHelper::discardOptions(obsolete);
-            packet.mOptions = event.mCancelled ? std::vector<EnchantOptionData>() : std::move(modified);
+            packet.mOptions = event.isCancelled() ? std::vector<EnchantOptionData>() : std::move(event.mReplacement);
             EnchantmentHelper::registerOptions(packet.mOptions);
         }
     }
@@ -965,14 +743,13 @@ bool InventoryHandler::interactWithEntity(ServerNetworkHandler &owner, ServerPla
     if (target == nullptr)
         return false;
 
-    PluginEvent event;
-    event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
-    event.mCancellable = true;
-    event.mPlayer = &player;
-    event.mEntity = target;
-    PluginManager::getInstance().dispatch(event);
-    if (event.mCancelled)
-        return false;
+    EventSignal<PlayerInteractEntityBeforeEvent> &interact = owner.getEventBus().before().mPlayerInteractEntity;
+    if (interact.hasSubscribers()) {
+        PlayerInteractEntityBeforeEvent event(player, *target);
+        interact.emit(event);
+        if (event.isCancelled())
+            return false;
+    }
 
     target = owner.getActorByRuntimeId(runtimeId);
     // a sneaking click opens a tamed mount's inventory instead of riding it
@@ -1111,16 +888,14 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     thrown.mUsingNetId = false;
     thrown.mNetId = 0;
 
-    ItemStack eventItem = thrown;
-    PluginEvent dropEvent;
-    dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
-    dropEvent.mCancellable = true;
-    dropEvent.mPlayer = &player;
-    dropEvent.mItem = &eventItem;
-    PluginManager::getInstance().dispatch(dropEvent);
-    if (dropEvent.mCancelled) {
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
-        return;
+    EventSignal<PlayerDropItemBeforeEvent> &drop = owner.getEventBus().before().mPlayerDropItem;
+    if (drop.hasSubscribers()) {
+        PlayerDropItemBeforeEvent dropEvent(player, thrown);
+        drop.emit(dropEvent);
+        if (dropEvent.isCancelled()) {
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
+            return;
+        }
     }
 
     item->mCount -= droppedCount;

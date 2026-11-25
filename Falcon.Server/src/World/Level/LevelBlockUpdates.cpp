@@ -1,8 +1,6 @@
 #include "World/Level/BlockUpdates.h"
 #include "World/Level/Level.h"
 
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
 #include "World/Level/Block/BlockNames.h"
@@ -100,10 +98,9 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
     if (mOwner == nullptr || !isChunkReady(*this, position))
         return;
 
-    PluginManager *plugins = type == BlockUpdateType::Normal && changed != nullptr
-                                     ? PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_UPDATE)
-                                     : nullptr;
-    if (plugins == nullptr && type != BlockUpdateType::Scheduled) {
+    EventSignal<BlockUpdateBeforeEvent> &blockUpdate = mOwner->getEventBus().before().mBlockUpdate;
+    const bool notify = type == BlockUpdateType::Normal && changed != nullptr && blockUpdate.hasSubscribers();
+    if (!notify && type != BlockUpdateType::Scheduled) {
         const BlockState *inPlace = peekBlockPtr(position.x, position.y, position.z);
         if (inPlace != nullptr && BlockUpdates::ignores(*inPlace))
             return;
@@ -116,15 +113,11 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
     }
 
     ++mUpdateDepth;
-    if (plugins != nullptr) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_BLOCK_UPDATE;
-        event.mCancellable = true;
-        event.mLevel = this;
-        event.mBlockPosition = position;
-        plugins->dispatch(event);
+    if (notify) {
+        BlockUpdateBeforeEvent event(*this, position);
+        blockUpdate.emit(event);
         const BlockState *inPlace = peekBlockPtr(position.x, position.y, position.z);
-        if (event.mCancelled || (inPlace != nullptr && BlockUpdates::ignores(*inPlace))) {
+        if (event.isCancelled() || (inPlace != nullptr && BlockUpdates::ignores(*inPlace))) {
             --mUpdateDepth;
             return;
         }

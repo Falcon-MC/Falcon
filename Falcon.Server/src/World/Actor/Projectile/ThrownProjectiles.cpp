@@ -11,7 +11,6 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Core/Math/VectorMath.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -127,8 +126,13 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
             continue;
 
         Vector3f destination = hitPosition;
-        if (!PluginEvents::teleport(shooter, destination, "ender_pearl"))
-            break;
+        EventSignal<ActorTeleportBeforeEvent> &teleport = owner.getEventBus().before().mActorTeleport;
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(shooter, destination, TeleportCause::EnderPearl);
+            teleport.emit(event);
+            if (event.isCancelled())
+                break;
+        }
         shooter.teleport(owner, destination, MovePlayerTeleportationCause::Behavior);
         owner.hurt(shooter, ENDER_PEARL_DAMAGE,
                    ActorDamageSource::environment(ENDER_PEARL_DEATH_MESSAGE, shooter.getName())

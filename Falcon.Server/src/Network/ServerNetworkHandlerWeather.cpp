@@ -4,8 +4,6 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/ScriptEngine.h"
@@ -35,18 +33,13 @@ namespace {
         return distribution(weatherRandom()) + minimum;
     }
 
-    bool allowsWeatherChange(Level &level, FalconEventType type, bool state) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(type);
-        if (plugins == nullptr)
+    bool allowsWeatherChange(EventSignal<WeatherChangeBeforeEvent> &signal, Level &level, bool state) {
+        if (!signal.hasSubscribers())
             return true;
 
-        PluginEvent event;
-        event.mType = type;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mState = state;
-        plugins->dispatch(event);
-        return !event.mCancelled;
+        WeatherChangeBeforeEvent event(level, state);
+        signal.emit(event);
+        return !event.isCancelled();
     }
 
     const char *weatherName(bool raining, bool thundering) {
@@ -102,7 +95,7 @@ void ServerNetworkHandler::broadcastWeather(World &world) {
 
 void ServerNetworkHandler::setRaining(World &world, bool raining) {
     Level &level = world.getOverworld();
-    if (raining != level.isRaining() && !allowsWeatherChange(level, FALCON_EVENT_WEATHER_CHANGE, raining))
+    if (raining != level.isRaining() && !allowsWeatherChange(mEventBus.before().mRainChange, level, raining))
         raining = level.isRaining();
 
     const std::string previous = weatherName(level.isRaining(), level.isThundering());
@@ -129,7 +122,8 @@ void ServerNetworkHandler::setRaining(World &world, bool raining) {
 
 void ServerNetworkHandler::setThundering(World &world, bool thundering) {
     Level &level = world.getOverworld();
-    if (thundering != level.isThundering() && !allowsWeatherChange(level, FALCON_EVENT_THUNDER_CHANGE, thundering))
+    if (thundering != level.isThundering()
+        && !allowsWeatherChange(mEventBus.before().mThunderChange, level, thundering))
         thundering = level.isThundering();
 
     if (thundering && !level.isRaining())

@@ -33,7 +33,6 @@
 #include "Network/LoginChainVerifier.h"
 #include "World/Level/Storage/PlayerDataProvider.h"
 #include "Network/Handler/NetworkHandler.h"
-#include "Network/Crypto/Base64.h"
 #include "Core/Text/StringUtil.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
@@ -64,7 +63,6 @@
 #include "Protocol/Packets/UpdateAbilitiesPacket.h"
 #include "Protocol/Packets/UpdateAttributesPacket.h"
 #include "World/Level/BonusChest.h"
-#include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
@@ -325,30 +323,16 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     }
 
     bool requireAuthentication = owner.getProperties().getOnlineMode();
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_LOGIN_ATTEMPT)) {
-        std::string reason = "disconnectionScreen.noReason";
-        std::string clientData = request.getClientData();
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_LOGIN_ATTEMPT;
-        event.mCancellable = true;
-        event.mMessage = &reason;
-        event.mState = requireAuthentication;
-        event.mPreviousAmount = clientPort(id);
-        event.mAmount = requireAuthentication ? 1.0 : 0.0;
-        event.mPacketData = &clientData;
-        const SerializedSkin &skin = request.getSkin();
-        event.mCustomData = "[\"" + Base64::encode(request.getDisplayName()) + "\",\""
-                            + Base64::encode(request.getIdentity()) + "\",\"" + Base64::encode(request.getXuid())
-                            + "\",\"" + Base64::encode(request.getLanguageCode()) + "\",\""
-                            + Base64::encode(id.getAddress()) + "\",\"" + Base64::encode(skin.mSkinId) + "\",\""
-                            + Base64::encode(skin.mSkinData.mData) + "\"]";
-        plugins->dispatch(event);
-        if (event.mCancelled) {
-            owner._disconnect(id, DisconnectReason::NotAllowed, reason);
+    EventSignal<PlayerLoginAttemptBeforeEvent> &loginAttempt = owner.getEventBus().before().mPlayerLoginAttempt;
+    if (loginAttempt.hasSubscribers()) {
+        PlayerLoginAttemptBeforeEvent event(id, request, clientPort(id), requireAuthentication);
+        loginAttempt.emit(event);
+        if (event.isCancelled()) {
+            owner._disconnect(id, DisconnectReason::NotAllowed, event.mKickReason);
             owner.erasePlayer(id);
             return;
         }
-        requireAuthentication = requireAuthentication || event.mAmount != 0.0;
+        requireAuthentication = event.mRequireAuthentication;
     }
 
     LoginChainVerifier verifier;
@@ -410,7 +394,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     player.readSyncedClientOptions(request.getClientData());
 
     player.setPlayFabId(request.getPlayFabId());
-    if (PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN))
+    if (owner.getEventBus().before().mPlayerPreLogin.hasSubscribers())
         pending->mClientData = request.getClientData();
     player.mPendingLogin = std::move(pending);
     if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
@@ -460,19 +444,13 @@ void LoginHandler::admitLogin(ServerNetworkHandler &owner, const NetworkIdentifi
         return;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN)) {
-        std::string kickMessage = "disconnectionScreen.noReason";
-        PluginEvent preLogin;
-        preLogin.mType = FALCON_EVENT_PLAYER_PRE_LOGIN;
-        preLogin.mCancellable = true;
-        preLogin.mPlayer = &player;
-        preLogin.mMessage = &kickMessage;
-        preLogin.mAmount = clientPort(id);
-        preLogin.mClientData = &pending->mClientData;
-        plugins->dispatch(preLogin);
-        if (preLogin.mCancelled) {
+    EventSignal<PlayerPreLoginBeforeEvent> &preLogin = owner.getEventBus().before().mPlayerPreLogin;
+    if (preLogin.hasSubscribers()) {
+        PlayerPreLoginBeforeEvent event(player, clientPort(id), pending->mClientData);
+        preLogin.emit(event);
+        if (event.isCancelled()) {
             LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
-            owner._disconnect(id, DisconnectReason::NotAllowed, kickMessage);
+            owner._disconnect(id, DisconnectReason::NotAllowed, event.mKickReason);
             owner.erasePlayer(id);
             return;
         }
@@ -481,7 +459,8 @@ void LoginHandler::admitLogin(ServerNetworkHandler &owner, const NetworkIdentifi
     // Only a verified account can take over its session. Close and save it before the new session reads the save.
     bool alreadyOnline = false;
     std::vector<NetworkIdentifier> takeovers;
-    PluginManager *duplicates = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_DUPLICATE_LOGIN);
+    EventSignal<PlayerDuplicateLoginBeforeEvent> &duplicateLogin = owner.getEventBus().before().mPlayerDuplicateLogin;
+    const bool duplicates = duplicateLogin.hasSubscribers();
     std::string duplicateMessage = "disconnectionScreen.loggedinOtherLocation";
     const std::string loweredName = StringUtil::toLowerCase(player.getName());
     for (auto &entry: owner.getPlayers()) {
@@ -494,19 +473,12 @@ void LoginHandler::admitLogin(ServerNetworkHandler &owner, const NetworkIdentifi
             continue;
 
         bool replaceExisting = sameAccount && accountKeyProven;
-        if (duplicates != nullptr) {
-            PluginEvent event;
-            event.mType = FALCON_EVENT_PLAYER_DUPLICATE_LOGIN;
-            event.mCancellable = true;
-            event.mPlayer = &player;
-            event.mTarget = const_cast<ServerPlayer *>(&other);
-            event.mMessage = &duplicateMessage;
-            event.mState = sameAccount;
-            event.mAmount = clientPort(id);
-            duplicates->dispatch(event);
-            replaceExisting = replaceExisting && !event.mCancelled;
+        if (duplicates) {
+            PlayerDuplicateLoginBeforeEvent event(player, entry.second, sameAccount, clientPort(id), duplicateMessage);
+            duplicateLogin.emit(event);
+            replaceExisting = replaceExisting && !event.isCancelled();
         }
-        if (replaceExisting && duplicates != nullptr) {
+        if (replaceExisting && duplicates) {
             takeovers.push_back(entry.first);
         } else {
             alreadyOnline = true;
@@ -609,13 +581,10 @@ void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdenti
     owner.getNetworkHandler().send(id, status, owner.getCodecContext());
 
     auto proposedOffer = owner.getResourcePacks().getOffer(owner.getProperties().getTexturePackRequired());
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_RESOURCE_PACK_OFFER)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_RESOURCE_PACK_OFFER;
-        event.mPlayer = &player;
-        event.mState = proposedOffer->mRequired;
-        event.mResourcePackOffer = &proposedOffer;
-        plugins->dispatch(event);
+    EventSignal<PlayerResourcePackOfferBeforeEvent> &packOffer = owner.getEventBus().before().mPlayerResourcePackOffer;
+    if (packOffer.hasSubscribers()) {
+        PlayerResourcePackOfferBeforeEvent event(player, proposedOffer);
+        packOffer.emit(event);
     }
     player.setResourcePackOffer(std::move(proposedOffer));
     const auto &offer = *player.getResourcePackOffer();
@@ -750,12 +719,10 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.setHungerEnabled(player.isSurvival()
                             || player.isAdventure());
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_CREATION)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_CREATION;
-        event.mPlayer = &player;
-        event.mAmount = clientPort(id);
-        plugins->dispatch(event);
+    EventSignal<PlayerCreationAfterEvent> &creation = owner.getEventBus().after().mPlayerCreation;
+    if (creation.hasSubscribers()) {
+        PlayerCreationAfterEvent event(player, clientPort(id));
+        creation.emit(event);
     }
 
     Level &world = owner.getWorldFor(player).getOverworld();

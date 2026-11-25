@@ -2,7 +2,6 @@
 #include "Falcon/Plugin/PluginActor.h"
 #include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginEvents.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
 #include "Falcon/Plugin/WasmHost.h"
@@ -87,6 +86,8 @@ namespace {
 
         Fixture() {
             level = &owner.getWorlds().getDefault().getOverworld();
+            // the world is never opened here: give the level the server open() would, so its actors reach the bus
+            level->setOwner(&owner);
             level->insertChunk(LevelChunk(0, 0));
             NetworkIdentifier id;
             player = &owner.getPlayers().try_emplace(id, id, 7001).first->second;
@@ -918,12 +919,17 @@ namespace {
         teleport.moveTo = true;
         teleport.to = FalconVec3{3.5, 101.0, 3.5};
         Vector3f destination(1.5f, 100.0f, 1.5f);
-        require(PluginEvents::teleport(*fixture.player, destination, "command"), "an allowed teleport was refused");
+        EventSignal<ActorTeleportBeforeEvent> &teleportSignal = fixture.owner.getEventBus().before().mActorTeleport;
+        ActorTeleportBeforeEvent allowed(*fixture.player, destination, TeleportCause::Command);
+        teleportSignal.emit(allowed);
+        require(!allowed.isCancelled(), "an allowed teleport was refused");
         require(teleport.calls == 1 && teleport.cause == "command", "the teleport event did not fire");
         require(std::fabs(destination.x - 3.5f) < 1e-4f, "the new destination was ignored");
         teleport.moveTo = false;
         teleport.cancel = true;
-        require(!PluginEvents::teleport(*fixture.player, destination, "command"), "a cancelled teleport went through");
+        ActorTeleportBeforeEvent cancelled(*fixture.player, destination, TeleportCause::Command);
+        teleportSignal.emit(cancelled);
+        require(cancelled.isCancelled(), "a cancelled teleport went through");
         api.unsubscribe(teleportId);
 
         Probe effect;
@@ -953,7 +959,8 @@ namespace {
         const ItemStack before[PlayerInventory::ARMOR_SIZE] = {inventory.getArmor(0), inventory.getArmor(1),
                                                                inventory.getArmor(2), inventory.getArmor(3)};
         inventory.setArmor(PlayerInventory::ARMOR_HEAD, fixture.owner.createItemStack("minecraft:iron_helmet", 1));
-        PluginEvents::armorChanged(*fixture.player, before);
+        PlayerArmorChangeAfterEvent armorChange(*fixture.player, before);
+        fixture.owner.getEventBus().after().mPlayerArmorChange.emit(armorChange);
         require(armor.calls == 1, "one changed slot gave " + std::to_string(armor.calls) + " events");
         api.unsubscribe(armorId);
 
@@ -961,12 +968,15 @@ namespace {
         bucket.cancel = true;
         const uint64_t bucketId = api.subscribe(handle, FALCON_EVENT_PLAYER_BUCKET_FILL, FALCON_PRIORITY_NORMAL, 0,
                                                 &probeHandler, &bucket);
-        require(!PluginEvents::bucket(*fixture.player, *fixture.level, Vector3i(2, 100, 2), true,
-                                      fixture.owner.createItemStack("minecraft:bucket", 1)),
-                "a cancelled bucket fill went through");
-        require(PluginEvents::bucket(*fixture.player, *fixture.level, Vector3i(2, 100, 2), false,
-                                     fixture.owner.createItemStack("minecraft:water_bucket", 1)),
-                "emptying fired the fill listener");
+        EventSignal<PlayerBucketUseBeforeEvent> &bucketSignal = fixture.owner.getEventBus().before().mPlayerBucketUse;
+        const ItemStack emptyBucket = fixture.owner.createItemStack("minecraft:bucket", 1);
+        PlayerBucketUseBeforeEvent fill(*fixture.player, *fixture.level, Vector3i(2, 100, 2), true, emptyBucket);
+        bucketSignal.emit(fill);
+        require(fill.isCancelled(), "a cancelled bucket fill went through");
+        const ItemStack waterBucket = fixture.owner.createItemStack("minecraft:water_bucket", 1);
+        PlayerBucketUseBeforeEvent empty(*fixture.player, *fixture.level, Vector3i(2, 100, 2), false, waterBucket);
+        bucketSignal.emit(empty);
+        require(!empty.isCancelled(), "emptying fired the fill listener");
         api.unsubscribe(bucketId);
     }
 

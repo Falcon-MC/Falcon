@@ -7,7 +7,6 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -85,8 +84,13 @@ void TeleportToOwnerGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
             continue;
 
         Vector3f destination((float) x + 0.5f, (float) y, (float) z + 0.5f);
-        if (!PluginEvents::teleport(mob, destination, "follow_owner"))
-            return;
+        EventSignal<ActorTeleportBeforeEvent> &teleport = owner.getEventBus().before().mActorTeleport;
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(mob, destination, TeleportCause::FollowOwner);
+            teleport.emit(event);
+            if (event.isCancelled())
+                return;
+        }
         mob.getNavigation().stop(mob);
         mob.teleport(destination);
         return;

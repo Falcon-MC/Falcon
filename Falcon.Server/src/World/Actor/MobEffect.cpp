@@ -10,7 +10,7 @@
 #include "World/Actor/Mob/Hostile/EnderDragon.h"
 #include "World/Item/ItemData.h"
 #include "Protocol/Types/StartGameTypes.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "Core/Event/EventBus.h"
 
 #include <algorithm>
 #include <cctype>
@@ -308,25 +308,15 @@ void MobEffectManager::emit(const MobEffectInstance &instance, MobEffectEvent ev
 }
 
 namespace {
-    // FALCON_EVENT_ENTITY_EFFECT_ADD once the effect would apply; false when a plugin refuses it
-    bool allowedByPlugins(Actor &actor, const MobEffectInstance &instance) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_EFFECT_ADD);
-        if (plugins == nullptr)
+    // false when a listener refuses the effect
+    bool allowedByListeners(Actor &actor, const MobEffectInstance &instance) {
+        EventBus *bus = actor.getEventBus();
+        if (bus == nullptr || !bus->before().mActorEffectAdd.hasSubscribers())
             return true;
 
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_EFFECT_ADD;
-        event.mCancellable = true;
-        event.mEntity = &actor;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(&actor);
-        event.mHasEffect = true;
-        event.mEffect.type = (FalconEffectType) instance.mId;
-        event.mEffect.duration = instance.mInfinite ? FALCON_EFFECT_INFINITE : instance.mDuration;
-        event.mEffect.amplifier = instance.mAmplifier;
-        event.mEffect.showParticles = instance.mParticles ? 1 : 0;
-        event.mEffect.ambient = instance.mAmbient ? 1 : 0;
-        plugins->dispatch(event);
-        return !event.mCancelled;
+        ActorEffectAddBeforeEvent event(actor, instance);
+        bus->before().mActorEffectAdd.emit(event);
+        return !event.isCancelled();
     }
 }
 
@@ -352,7 +342,7 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
             || (instance.mAmplifier == existing->second.mAmplifier && !instance.mInfinite
                 && instance.mDuration <= existing->second.mDuration))
             return false;
-        if (!allowedByPlugins(mActor, instance))
+        if (!allowedByListeners(mActor, instance))
             return false;
         const MobEffectInstance previous = existing->second;
         existing->second = instance;
@@ -364,7 +354,7 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
         return true;
     }
 
-    if (!allowedByPlugins(mActor, instance))
+    if (!allowedByListeners(mActor, instance))
         return false;
     mEffects.emplace(key, instance);
     effect(instance.mId).onAdd(mActor, instance);

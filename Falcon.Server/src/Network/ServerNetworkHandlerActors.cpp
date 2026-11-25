@@ -23,7 +23,6 @@
 #include "World/Actor/FreezingSystem.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Math/MathConstants.h"
-#include "Core/Json/Json.h"
 #include "Protocol/Packets/AddActorPacket.h"
 #include "Protocol/Packets/AnimateEntityPacket.h"
 #include "Protocol/Packets/MoveActorAbsolutePacket.h"
@@ -61,8 +60,6 @@
 #include <random>
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
-#include "Falcon/Plugin/PluginPackets.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
@@ -72,7 +69,6 @@
 #include <cmath>
 #include <stdexcept>
 #include <limits>
-#include <charconv>
 #include <utility>
 
 namespace {
@@ -103,29 +99,14 @@ namespace {
 
     bool allowProjectileHit(ServerNetworkHandler &owner, ServerActor &projectile, Level &level,
                             const Vector3f &position, Actor *target, const Vector3i *block) {
-        PluginManager &plugins = owner.getPluginManager();
-        if (!plugins.hasSubscribers(FALCON_EVENT_PROJECTILE_HIT))
+        EventSignal<ProjectileHitBeforeEvent> &hit = owner.getEventBus().before().mProjectileHit;
+        if (!hit.hasSubscribers())
             return true;
 
-        PluginEvent hitEvent;
-        hitEvent.mType = FALCON_EVENT_PROJECTILE_HIT;
-        hitEvent.mCancellable = true;
-        hitEvent.mEntity = &projectile;
-        hitEvent.mTarget = target;
-        hitEvent.mLevel = &level;
-        hitEvent.mPosition = position;
-        if (block != nullptr) {
-            hitEvent.mBlockPosition = *block;
-            hitEvent.mBlockName = level.getBlockState(block->x, block->y, block->z).mName;
-        }
-
-        for (auto &entry: owner.getPlayers()) {
-            if (entry.second.getUniqueId() == projectile.getOwnerUniqueId())
-                hitEvent.mAttacker = &entry.second;
-        }
-
-        plugins.dispatch(hitEvent);
-        return !hitEvent.mCancelled;
+        ProjectileHitBeforeEvent event(projectile, level, position, target,
+                                       block != nullptr ? std::optional<Vector3i>(*block) : std::nullopt);
+        hit.emit(event);
+        return !event.isCancelled();
     }
 
     const int32_t ACTOR_DATA_SCALE = 38;
@@ -232,15 +213,11 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
 
     actor->initializeProperties();
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_SPAWN)) {
-        PluginEvent spawnEvent;
-        spawnEvent.mType = FALCON_EVENT_ENTITY_SPAWN;
-        spawnEvent.mCancellable = true;
-        spawnEvent.mEntity = actor.get();
-        spawnEvent.mLevel = &level;
-        spawnEvent.mPosition = actor->getPosition();
-        plugins->dispatch(spawnEvent);
-        if (spawnEvent.mCancelled)
+    EventSignal<ActorSpawnBeforeEvent> &spawn = mEventBus.before().mActorSpawn;
+    if (spawn.hasSubscribers()) {
+        ActorSpawnBeforeEvent event(level, *actor);
+        spawn.emit(event);
+        if (event.isCancelled())
             return nullptr;
     }
 
@@ -508,30 +485,20 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
                                                                                EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
     if (weapon != nullptr) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_SHOOT_BOW)) {
+        EventSignal<PlayerShootBowBeforeEvent> &shootBow = mEventBus.before().mPlayerShootBow;
+        if (shootBow.hasSubscribers()) {
             const int64_t arrowId = projectile->getUniqueId();
             const uint64_t arrowRuntimeId = projectile->getRuntimeId();
-            ItemStack bow = *weapon;
-            PluginEvent event;
-            event.mType = FALCON_EVENT_ENTITY_SHOOT_BOW;
-            event.mCancellable = true;
-            event.mPlayer = &player;
-            event.mEntity = &player;
-            event.mTarget = projectile;
-            event.mItem = &bow;
-            event.mAmount = speed;
-            plugins->dispatch(event);
-            if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount < 0) {
+            PlayerShootBowBeforeEvent event(player, *projectile, *weapon, speed);
+            shootBow.emit(event);
+            if (event.isCancelled()) {
                 removeActor(arrowId);
                 return nullptr;
             }
             projectile = getActorByRuntimeId(arrowRuntimeId);
-            if (!event.mCustomData.empty()) {
-                uint64_t replacementId = 0;
-                const char *end = event.mCustomData.data() + event.mCustomData.size();
-                const auto parsed = std::from_chars(event.mCustomData.data(), end, replacementId);
-                auto *replacement = parsed.ec == std::errc() && parsed.ptr == end
-                                    ? getActorByRuntimeId(replacementId) : nullptr;
+            if (event.mReplacementRuntimeId) {
+                const uint64_t replacementId = *event.mReplacementRuntimeId;
+                auto *replacement = getActorByRuntimeId(replacementId);
                 if (replacement != nullptr && replacement->sharesLevelWith(player)) {
                     if (replacementId != arrowRuntimeId)
                         removeActor(arrowId);
@@ -541,7 +508,7 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
             if (projectile == nullptr)
                 return nullptr;
             projectile->setOwnerUniqueId(player.getUniqueId());
-            const float force = (float) std::min(event.mAmount, 128.0);
+            const float force = event.mForce;
             const Vector3f motion = projectile->getMotion();
             const float scale = speed > 0 ? force / speed : 0;
             projectile->setMotion(Vector3f(motion.x * scale, motion.y * scale, motion.z * scale));
@@ -584,17 +551,13 @@ ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const 
 }
 
 bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor *shooter) {
-    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PROJECTILE_LAUNCH);
-    if (plugins == nullptr)
+    EventSignal<ProjectileLaunchBeforeEvent> &launch = mEventBus.before().mProjectileLaunch;
+    if (!launch.hasSubscribers())
         return true;
 
-    PluginEvent launchEvent;
-    launchEvent.mType = FALCON_EVENT_PROJECTILE_LAUNCH;
-    launchEvent.mCancellable = true;
-    launchEvent.mEntity = &projectile;
-    launchEvent.mAttacker = shooter;
-    plugins->dispatch(launchEvent);
-    if (!launchEvent.mCancelled)
+    ProjectileLaunchBeforeEvent event(projectile, shooter);
+    launch.emit(event);
+    if (!event.isCancelled())
         return true;
 
     removeActor(projectile.getUniqueId());
@@ -1055,38 +1018,6 @@ void ServerNetworkHandler::_applyCloudEffects(ServerActor &actor, const std::vec
                             ActorDamageSource::environment("death.attack.magic", actor.getName()).withoutArmor());
             }
         }
-    }
-}
-
-namespace {
-    std::optional<std::vector<MobEffectInstance>> decodeCloudEffects(const std::string &payload) {
-        const auto data = json::parse(payload);
-        const auto *list = data != nullptr ? data->get("effects") : nullptr;
-        if (list == nullptr || !list->isArray() || list->mArray.size() > MAX_MOB_EFFECT_ID)
-            return std::nullopt;
-
-        std::vector<MobEffectInstance> effects;
-        for (const auto &entry: list->mArray) {
-            if (!entry->isArray() || entry->mArray.size() != 5)
-                return std::nullopt;
-            const auto &fields = entry->mArray;
-            const double id = fields[0]->number(-1);
-            const double duration = fields[1]->number(-2);
-            const double amplifier = fields[2]->number(-1);
-            if (!std::isfinite(id) || id < 1 || id > MAX_MOB_EFFECT_ID || !isKnownMobEffect((int32_t) id)
-                || !std::isfinite(duration) || duration < -1 || duration > INT32_MAX
-                || !std::isfinite(amplifier) || amplifier < 0 || amplifier > 255)
-                return std::nullopt;
-            MobEffectInstance effect;
-            effect.mId = (MobEffectId) (int32_t) id;
-            effect.mInfinite = duration == -1;
-            effect.mDuration = effect.mInfinite ? -1 : (int32_t) duration;
-            effect.mAmplifier = (int32_t) amplifier;
-            effect.mParticles = fields[3]->boolean(true);
-            effect.mAmbient = fields[4]->boolean(false);
-            effects.push_back(effect);
-        }
-        return effects;
     }
 }
 
@@ -1560,25 +1491,14 @@ bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, const A
 
 int32_t ServerNetworkHandler::allowCombustion(Actor &victim, int32_t duration, Actor *source,
                                                std::optional<Vector3i> block) {
-    const FalconEventType type = block ? FALCON_EVENT_ENTITY_COMBUST_BY_BLOCK : FALCON_EVENT_ENTITY_COMBUST_BY_ENTITY;
-    PluginManager *plugins = PluginManager::findWithSubscribers(type);
-    if (plugins == nullptr)
+    EventSignal<ActorCombustBeforeEvent> &combust = block ? mEventBus.before().mActorCombustByBlock
+                                                          : mEventBus.before().mActorCombustByActor;
+    if (!combust.hasSubscribers())
         return duration;
 
-    PluginEvent event;
-    event.mType = type;
-    event.mCancellable = true;
-    event.mEntity = &victim;
-    event.mAttacker = source;
-    event.mAmount = duration / 20.0;
-    if (block) {
-        event.mLevel = &getLevelFor(victim);
-        event.mBlockPosition = *block;
-    }
-    plugins->dispatch(event);
-    if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount <= 0)
-        return 0;
-    return (int32_t) std::min(event.mAmount * 20, (double) std::numeric_limits<int32_t>::max());
+    ActorCombustBeforeEvent event(victim, source, block, duration);
+    combust.emit(event);
+    return event.isCancelled() ? 0 : event.mDuration;
 }
 
 void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey,
@@ -1689,13 +1609,17 @@ void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &
     if (molangJson != nullptr)
         packet.mMolangVariablesJson = *molangJson;
 
-    if (PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_PARTICLE) != nullptr) {
+    EventSignal<WorldEffectBeforeEvent> &particle = mEventBus.before().mWorldParticle;
+    if (particle.hasSubscribers()) {
         std::vector<NetworkIdentifier> viewers;
         for (auto &entry: mPlayers) {
             if (entry.second.isSpawned() && entry.second.isIn(level) && (viewer == nullptr || &entry.second == viewer))
                 viewers.push_back(entry.first);
         }
-        PluginPackets::broadcastWorldEffect(*this, level, position, packet, FALCON_EVENT_WORLD_PARTICLE, std::move(viewers));
+        WorldEffectBeforeEvent event(level, position, packet, viewers);
+        particle.emit(event);
+        if (!event.isCancelled())
+            mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
         return;
     }
 
@@ -1749,13 +1673,17 @@ void ServerNetworkHandler::playNamedSound(Level &level, const std::string &sound
     packet.mVolume = volume;
     packet.mPitch = pitch;
 
-    if (PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_SOUND) != nullptr) {
+    EventSignal<WorldEffectBeforeEvent> &worldSound = mEventBus.before().mWorldSound;
+    if (worldSound.hasSubscribers()) {
         std::vector<NetworkIdentifier> viewers;
         for (auto &entry: mPlayers) {
             if (entry.second.isSpawned() && entry.second.isIn(level))
                 viewers.push_back(entry.first);
         }
-        PluginPackets::broadcastWorldEffect(*this, level, position, packet, FALCON_EVENT_WORLD_SOUND, std::move(viewers));
+        WorldEffectBeforeEvent event(level, position, packet, viewers);
+        worldSound.emit(event);
+        if (!event.isCancelled())
+            mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
         return;
     }
 
@@ -1817,9 +1745,13 @@ void ServerNetworkHandler::playSoundFor(ServerPlayer &player, const std::string 
     packet.mPosition = position;
     packet.mVolume = volume;
     packet.mPitch = pitch;
-    if (PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_SOUND) != nullptr) {
-        PluginPackets::broadcastWorldEffect(*this, getLevelFor(player), position, packet, FALCON_EVENT_WORLD_SOUND,
-                                            {player.getNetworkIdentifier()});
+    EventSignal<WorldEffectBeforeEvent> &worldSound = mEventBus.before().mWorldSound;
+    if (worldSound.hasSubscribers()) {
+        std::vector<NetworkIdentifier> viewers{player.getNetworkIdentifier()};
+        WorldEffectBeforeEvent event(getLevelFor(player), position, packet, viewers);
+        worldSound.emit(event);
+        if (!event.isCancelled())
+            mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
         return;
     }
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
@@ -1899,31 +1831,15 @@ void ServerNetworkHandler::explodeAfterActors(Level &level, const Vector3f &cent
                                               const ServerActor &source, bool fromTnt) {
     bool breakBlocks = true;
     double fireChance = 0;
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_PRE_EXPLODE)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_PRE_EXPLODE;
-        event.mCancellable = true;
-        event.mEntity = const_cast<ServerActor *>(&source);
-        event.mLevel = &level;
-        event.mPosition = center;
-        event.mAmount = size;
-        event.mState = true;
-        plugins->dispatch(event);
-        if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount <= 0)
+    EventSignal<ActorExplodeBeforeEvent> &explode = mEventBus.before().mActorExplode;
+    if (explode.hasSubscribers()) {
+        ActorExplodeBeforeEvent event(level, source, center, size);
+        explode.emit(event);
+        if (event.isCancelled())
             return;
-        size = std::min(event.mAmount, 128.0);
-        breakBlocks = event.mState;
-        fireChance = event.mPreviousAmount;
-        if (!event.mCustomData.empty()) {
-            const auto data = json::parse(event.mCustomData);
-            if (data != nullptr) {
-                if (const auto *value = data->get("breakBlocks"))
-                    breakBlocks = value->boolean(breakBlocks);
-                if (const auto *value = data->get("fireChance"))
-                    fireChance = value->number(fireChance);
-            }
-        }
-        fireChance = std::isfinite(fireChance) ? std::clamp(fireChance, 0.0, 1.0) : 0;
+        size = event.mSize;
+        breakBlocks = event.mBreakBlocks;
+        fireChance = event.mFireChance;
     }
 
     if (mTickingActors) {
@@ -2067,7 +1983,7 @@ void ServerNetworkHandler::_flushExplosions() {
     // apart are worked out together on every core while this thread ends them one by one
     size_t apartEnd = quietCount;
     if (mPendingExplosions.size() - quietCount >= APART_EXPLOSIONS
-        && !getPluginManager().hasSubscribers(FALCON_EVENT_EXPLOSION)
+        && !mEventBus.before().mExplosion.hasSubscribers()
         && !mScriptEngine.hasSubscribers("before.explosion")) {
         batch.setCrowded(false);
         Level *apartLevel = mPendingExplosions[quietCount].mLevel;
@@ -2614,62 +2530,29 @@ void ServerNetworkHandler::tickActors() {
                 inside.push_back(actorEntry.first);
             }
             if (!insidePlayers.empty() || !inside.empty()) {
-                if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_AREA_EFFECT_CLOUD_APPLY)) {
+                EventSignal<AreaEffectCloudApplyBeforeEvent> &apply = mEventBus.before().mAreaEffectCloudApply;
+                if (apply.hasSubscribers()) {
                     ServerActor *cloudActor = getActor(cloudId);
                     if (cloudActor == nullptr)
                         continue;
-                    std::string ids = "[";
-                    const auto append = [&ids](uint64_t id) {
-                        if (ids.size() > 1)
-                            ids += ',';
-                        ids += std::to_string(id);
-                    };
-                    for (const uint64_t id: insidePlayers)
-                        append(id);
-                    for (const int64_t id: inside) {
-                        if (ServerActor *actor = getActor(id))
-                            append(actor->getRuntimeId());
-                    }
-                    ids += ']';
-                    std::string effects = "[";
-                    const auto encode = [&effects](const MobEffectInstance &instance) {
-                        if (effects.size() > 1)
-                            effects += ',';
-                        effects += '[' + std::to_string((int) instance.mId) + ',' + std::to_string(instance.mDuration)
-                                   + ',' + std::to_string(instance.mAmplifier)
-                                   + (instance.mParticles ? ",true" : ",false")
-                                   + (instance.mAmbient ? ",true]" : ",false]");
-                    };
+                    std::vector<MobEffectInstance> effects;
                     if (cloud.mEffects) {
-                        for (const auto &instance: *cloud.mEffects)
-                            encode(instance);
+                        effects = *cloud.mEffects;
                     } else {
                         for (const auto &effect: getPotionEffects(cloud.mPotionId))
-                            encode(potionEffectInstance(effect, 0.25f));
+                            effects.push_back(potionEffectInstance(effect, 0.25f));
                     }
-                    effects += ']';
 
-                    PluginEvent event;
-                    event.mType = FALCON_EVENT_AREA_EFFECT_CLOUD_APPLY;
-                    event.mCancellable = true;
-                    event.mEntity = cloudActor;
-                    event.mLevel = &getLevelFor(*cloudActor);
-                    event.mCustomData = "{\"entities\":" + ids + ",\"effects\":" + effects
-                                        + ",\"age\":" + std::to_string(cloud.mAge)
-                                        + ",\"maxAge\":" + std::to_string(cloud.mWaitTime + cloud.mDuration)
-                                        + ",\"radius\":" + std::to_string(cloud.mRadius)
-                                        + ",\"radiusChangeOnUse\":" + std::to_string(cloud.mRadiusOnUse)
-                                        + ",\"radiusChangePerTick\":" + std::to_string(cloud.mRadiusPerTick)
-                                        + ",\"reapplicationDelay\":" + std::to_string(cloud.mReapplicationDelay) + '}';
-                    const std::string original = event.mCustomData;
-                    plugins->dispatch(event);
+                    AreaEffectCloudApplyBeforeEvent event(
+                            *cloudActor, getLevelFor(*cloudActor), insidePlayers, inside, std::move(effects),
+                            cloud.mAge, cloud.mWaitTime + cloud.mDuration, cloud.mRadius, cloud.mRadiusOnUse,
+                            cloud.mRadiusPerTick, cloud.mReapplicationDelay);
+                    apply.emit(event);
                     if (getActor(cloudId) == nullptr)
                         continue;
-                    if (event.mCustomData != original) {
-                        if (auto changed = decodeCloudEffects(event.mCustomData))
-                            cloud.mEffects = std::move(changed);
-                    }
-                    if (event.mCancelled) {
+                    if (event.mEffectsChanged)
+                        cloud.mEffects = std::move(event.mEffects);
+                    if (event.isCancelled()) {
                         insidePlayers.clear();
                         inside.clear();
                     }

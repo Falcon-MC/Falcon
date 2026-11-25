@@ -10,7 +10,6 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/MapHandler.h"
 #include "Network/Handler/MovementHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
@@ -45,16 +44,12 @@ namespace {
 }
 
 void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
-    if (player.hasPendingMove() && player.getPendingMovePosition() != player.getPosition()) {
-        PluginEvent moveEvent;
-        moveEvent.mType = FALCON_EVENT_PLAYER_MOVE;
-        moveEvent.mCancellable = true;
-        moveEvent.mPlayer = &player;
-        moveEvent.mFrom = player.getPosition();
-        moveEvent.mTo = player.getPendingMovePosition();
-        PluginManager::getInstance().dispatch(moveEvent);
+    EventSignal<PlayerMoveBeforeEvent> &move = mEventBus.before().mPlayerMove;
+    if (player.hasPendingMove() && player.getPendingMovePosition() != player.getPosition() && move.hasSubscribers()) {
+        PlayerMoveBeforeEvent moveEvent(player, player.getPosition(), player.getPendingMovePosition());
+        move.emit(moveEvent);
 
-        if (moveEvent.mCancelled)
+        if (moveEvent.isCancelled())
             player.teleport(*this, moveEvent.mFrom);
         else if (moveEvent.mToChanged)
             player.teleport(*this, moveEvent.mTo);

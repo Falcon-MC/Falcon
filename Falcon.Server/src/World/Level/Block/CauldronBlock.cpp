@@ -1,7 +1,6 @@
 #include "World/Level/Block/CauldronBlock.h"
 
 #include "Core/Math/VectorMath.h"
-#include "Falcon/Plugin/PluginEvents.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -223,8 +222,15 @@ namespace {
     }
 
     // a bucket into or out of the cauldron; false when a plugin cancels it
-    bool allowBucket(ServerPlayer &player, Level &level, const Vector3i &position, bool fill, const ItemStack &held) {
-        return PluginEvents::bucket(player, level, position, fill, held);
+    bool allowBucket(ServerNetworkHandler &owner, ServerPlayer &player, Level &level, const Vector3i &position,
+                     bool fill, const ItemStack &held) {
+        EventSignal<PlayerBucketUseBeforeEvent> &bucketUse = owner.getEventBus().before().mPlayerBucketUse;
+        if (!bucketUse.hasSubscribers())
+            return true;
+
+        PlayerBucketUseBeforeEvent event(player, level, position, fill, held);
+        bucketUse.emit(event);
+        return !event.isCancelled();
     }
 }
 
@@ -349,7 +355,7 @@ bool CauldronBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
     }
 
     if (identifier == WATER_BUCKET) {
-        if (!allowBucket(player, level, position, false, held))
+        if (!allowBucket(owner, player, level, position, false, held))
             return true;
         replaceHeld(owner, player, 1, makeItem(owner, BUCKET, 1, 0));
         postEvent(level, GameEvents::FLUID_PLACE, position, &player);
@@ -363,7 +369,7 @@ bool CauldronBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
     }
 
     if (identifier == LAVA_BUCKET) {
-        if (!allowBucket(player, level, position, false, held))
+        if (!allowBucket(owner, player, level, position, false, held))
             return true;
         replaceHeld(owner, player, 1, makeItem(owner, BUCKET, 1, 0));
         postEvent(level, GameEvents::FLUID_PLACE, position, &player);
@@ -378,7 +384,7 @@ bool CauldronBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
     }
 
     if (identifier == POWDER_SNOW_BUCKET) {
-        if (!allowBucket(player, level, position, false, held))
+        if (!allowBucket(owner, player, level, position, false, held))
             return true;
         replaceHeld(owner, player, 1, makeItem(owner, BUCKET, 1, 0));
         postEvent(level, GameEvents::FLUID_PLACE, position, &player);
@@ -395,7 +401,7 @@ bool CauldronBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
     if (identifier == BUCKET) {
         if (fill < 6 || hasPotion)
             return true;
-        if (!allowBucket(player, level, position, true, held))
+        if (!allowBucket(owner, player, level, position, true, held))
             return true;
         const char *filled = lava ? LAVA_BUCKET : powderSnow ? POWDER_SNOW_BUCKET : WATER_BUCKET;
         replaceHeld(owner, player, 1, makeItem(owner, filled, 1, 0));

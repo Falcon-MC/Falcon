@@ -5,8 +5,6 @@
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <vector>
@@ -36,21 +34,17 @@ World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed, b
 
 void ServerNetworkHandler::_dispatchWorldOpen(World &world, bool created) {
     if (created) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_INIT)) {
-            PluginEvent event;
-            event.mType = FALCON_EVENT_WORLD_INIT;
-            event.mWorldName = world.getName();
-            event.mLevel = &world.getOverworld();
-            plugins->dispatch(event);
+        EventSignal<WorldOpenAfterEvent> &init = mEventBus.after().mWorldInit;
+        if (init.hasSubscribers()) {
+            WorldOpenAfterEvent event(world);
+            init.emit(event);
         }
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_LOAD)) {
-        PluginEvent loadEvent;
-        loadEvent.mType = FALCON_EVENT_WORLD_LOAD;
-        loadEvent.mWorldName = world.getName();
-        loadEvent.mLevel = &world.getOverworld();
-        plugins->dispatch(loadEvent);
+    EventSignal<WorldOpenAfterEvent> &load = mEventBus.after().mWorldLoad;
+    if (load.hasSubscribers()) {
+        WorldOpenAfterEvent event(world);
+        load.emit(event);
     }
 }
 
@@ -91,14 +85,11 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
         }
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_UNLOAD)) {
-        PluginEvent unloadEvent;
-        unloadEvent.mType = FALCON_EVENT_WORLD_UNLOAD;
-        unloadEvent.mCancellable = true;
-        unloadEvent.mWorldName = name;
-        unloadEvent.mLevel = &world->getOverworld();
-        plugins->dispatch(unloadEvent);
-        if (unloadEvent.mCancelled) {
+    EventSignal<WorldUnloadBeforeEvent> &unload = mEventBus.before().mWorldUnload;
+    if (unload.hasSubscribers()) {
+        WorldUnloadBeforeEvent event(*world, name);
+        unload.emit(event);
+        if (event.isCancelled()) {
             error = "falcon.commands.world.unload.cancelled";
             return false;
         }

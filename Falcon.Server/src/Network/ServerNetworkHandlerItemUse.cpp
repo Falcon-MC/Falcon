@@ -14,11 +14,9 @@
 #include "World/Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/InventoryHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/Content/CustomContentRegistry.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -295,7 +293,11 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
     InventoryHandler::sendHeldItem(*this, player);
 
     playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(), "minecraft:player");
-    PluginEvents::armorChanged(player, before);
+    EventSignal<PlayerArmorChangeAfterEvent> &armorChange = mEventBus.after().mPlayerArmorChange;
+    if (armorChange.hasSubscribers()) {
+        PlayerArmorChangeAfterEvent armorEvent(player, before);
+        armorChange.emit(armorEvent);
+    }
     return true;
 }
 
@@ -307,15 +309,11 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
     }
 
     const ItemStack &heldItem = player.getInventory().getItemInHand();
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_USE)) {
-        ItemStack used = heldItem;
-        PluginEvent useEvent;
-        useEvent.mType = FALCON_EVENT_PLAYER_ITEM_USE;
-        useEvent.mCancellable = true;
-        useEvent.mPlayer = &player;
-        useEvent.mItem = &used;
-        plugins->dispatch(useEvent);
-        if (useEvent.mCancelled) {
+    EventSignal<PlayerItemUseBeforeEvent> &use = mEventBus.before().mPlayerItemUse;
+    if (use.hasSubscribers()) {
+        PlayerItemUseBeforeEvent useEvent(player, heldItem);
+        use.emit(useEvent);
+        if (useEvent.isCancelled()) {
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
                                                   player.getInventory().getSelectedSlot());
             return;
@@ -456,15 +454,11 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         return;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_CONSUME)) {
-        ItemStack consumed = usedItem;
-        PluginEvent consumeEvent;
-        consumeEvent.mType = FALCON_EVENT_PLAYER_ITEM_CONSUME;
-        consumeEvent.mCancellable = true;
-        consumeEvent.mPlayer = &player;
-        consumeEvent.mItem = &consumed;
-        plugins->dispatch(consumeEvent);
-        if (consumeEvent.mCancelled) {
+    EventSignal<PlayerItemConsumeBeforeEvent> &consume = mEventBus.before().mPlayerItemConsume;
+    if (consume.hasSubscribers()) {
+        PlayerItemConsumeBeforeEvent consumeEvent(player, usedItem);
+        consume.emit(consumeEvent);
+        if (consumeEvent.isCancelled()) {
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
             _sendAttributes(player);
             return;

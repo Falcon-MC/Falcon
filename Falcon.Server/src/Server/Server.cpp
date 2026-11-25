@@ -1,8 +1,6 @@
 #include "Server/Server.h"
 
 #include "Server/VersionChecker.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Core/Debug/FileLogEndPoint.h"
@@ -474,13 +472,12 @@ void startServer(const ServerSettings &settings) {
     bool failed = false;
     while (gRunning.load() && !host.isStopRequested()) {
         try {
-            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_UPDATE_NOTIFY)) {
-                std::string release = VersionChecker::takeAvailableUpdate();
+            EventSignal<UpdateNotifyAfterEvent> &updateNotify = networkHandler.getEventBus().after().mUpdateNotify;
+            if (updateNotify.hasSubscribers()) {
+                const std::string release = VersionChecker::takeAvailableUpdate();
                 if (!release.empty()) {
-                    PluginEvent event;
-                    event.mType = FALCON_EVENT_UPDATE_NOTIFY;
-                    event.mCustomData = std::move(release);
-                    plugins->dispatch(event);
+                    UpdateNotifyAfterEvent event(release);
+                    updateNotify.emit(event);
                 }
             }
             host.tick();

@@ -1,6 +1,5 @@
 #include "Server/Commands/SpreadPlayersCommand.h"
 
-#include "Falcon/Plugin/PluginEvents.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
@@ -253,10 +252,16 @@ bool SpreadPlayersCommand::execute(CommandOrigin &sender, const std::vector<std:
                         std::clamp((float) z + 0.5f, -WORLD_LIMIT, WORLD_LIMIT));
     };
     size_t next = 0;
+    EventSignal<ActorTeleportBeforeEvent> &teleport = mHandler.getEventBus().before().mActorTeleport;
     for (ServerPlayer *player: players) {
         Vector3f destination = landing(points[next++]);
-        if (PluginEvents::teleport(*player, destination, "command"))
-            player->teleport(mHandler, destination);
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(*player, destination, TeleportCause::Command);
+            teleport.emit(event);
+            if (event.isCancelled())
+                continue;
+        }
+        player->teleport(mHandler, destination);
     }
     for (ServerActor *actor: actors) {
         actor->teleport(landing(points[next++]));

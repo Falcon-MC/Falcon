@@ -22,13 +22,24 @@
 #include "Protocol/Types/ItemUseTransaction.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Level/Block/BlockNames.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <string>
 #include <vector>
 
 namespace {
     const int BLOCK_FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+
+    // false when a plugin cancels it
+    bool allowBucket(ServerNetworkHandler &owner, ServerPlayer &player, Level &level, const Vector3i &position,
+                     bool fill, const ItemStack &bucket) {
+        EventSignal<PlayerBucketUseBeforeEvent> &bucketUse = owner.getEventBus().before().mPlayerBucketUse;
+        if (!bucketUse.hasSubscribers())
+            return true;
+
+        PlayerBucketUseBeforeEvent event(player, level, position, fill, bucket);
+        bucketUse.emit(event);
+        return !event.isCancelled();
+    }
 }
 
 BucketItem::Content BucketItem::getContent(const ItemStack &item) {
@@ -186,7 +197,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
 
     if (content == Content::Empty) {
         if (clickedState.mName == "minecraft:powder_snow") {
-            if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+            if (!allowBucket(owner, player, level, clickedPosition, content == Content::Empty, heldItem)) {
                 sendBlockState(owner, level, clickedPosition);
                 return false;
             }
@@ -202,7 +213,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                                                                      clickedPosition.z, 1);
         const LiquidBlock overlayLiquid(clickedOverlay);
         if (!clickedLiquid.isLiquid() && overlayLiquid.isWater() && overlayLiquid.isSource()) {
-            if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+            if (!allowBucket(owner, player, level, clickedPosition, content == Content::Empty, heldItem)) {
                 sendBlockState(owner, level, clickedPosition);
                 return false;
             }
@@ -224,7 +235,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         if (filledIdentifier == nullptr)
             return false;
 
-        if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+        if (!allowBucket(owner, player, level, clickedPosition, content == Content::Empty, heldItem)) {
             sendBlockState(owner, level, clickedPosition);
             return false;
         }
@@ -253,7 +264,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                 return false;
             }
 
-            if (!PluginEvents::bucket(player, level, waterlogged, content == Content::Empty, heldItem)) {
+            if (!allowBucket(owner, player, level, waterlogged, content == Content::Empty, heldItem)) {
                 sendBlockState(owner, level, waterlogged);
                 return false;
             }
@@ -290,7 +301,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         return false;
     }
 
-    if (!PluginEvents::bucket(player, level, target, content == Content::Empty, heldItem)) {
+    if (!allowBucket(owner, player, level, target, content == Content::Empty, heldItem)) {
         sendBlockState(owner, level, target);
         return false;
     }

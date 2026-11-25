@@ -1,6 +1,5 @@
 #include "World/Actor/AI/Goal/MakeLoveGoal.h"
 
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Actor/AI/Navigation/Path.h"
 #include "World/Actor/AI/Navigation/PathFinder.h"
 #include "World/Actor/Mob/Passive/VillagerV2Actor.h"
@@ -189,15 +188,11 @@ VillagerV2Actor *MakeLoveGoal::_choosePartner(ServerNetworkHandler &owner, Villa
 }
 
 void MakeLoveGoal::_spawnBaby(ServerNetworkHandler &owner, VillagerV2Actor &villager, VillagerV2Actor &partner) {
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_BREED)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_BREED;
-        event.mCancellable = true;
-        event.mEntity = &villager;
-        event.mTarget = &partner;
-        event.mCause = villager.getIdentifier();
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    EventSignal<ActorBreedBeforeEvent> &breed = owner.getEventBus().before().mActorBreed;
+    if (breed.hasSubscribers()) {
+        ActorBreedBeforeEvent event(villager, partner, villager.getIdentifier());
+        breed.emit(event);
+        if (event.isCancelled())
             return;
     }
 

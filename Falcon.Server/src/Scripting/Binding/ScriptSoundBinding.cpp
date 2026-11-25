@@ -1,7 +1,5 @@
 #include "Scripting/Binding/ScriptApi.h"
 
-#include "Falcon/Plugin/PluginPackets.h"
-
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ClientboundUpdateSoundDataPacket.h"
@@ -11,8 +9,6 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 #include "World/Level/MusicEvents.h"
-
-#include <falcon/falcon_api.h>
 
 #include <cmath>
 
@@ -458,9 +454,18 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
         }
     }
 
-    for (const auto &id: PluginPackets::broadcastWorldEffect(mHost, level, position, packet,
-                                                             FALCON_EVENT_WORLD_SOUND, std::move(viewers)))
-        state->mListeners.push_back(mPlayers.acquire(id));
+    EventSignal<WorldEffectBeforeEvent> &worldSound = mHost.getEventBus().before().mWorldSound;
+    bool cancelled = false;
+    if (worldSound.hasSubscribers()) {
+        WorldEffectBeforeEvent event(level, position, packet, viewers);
+        worldSound.emit(event);
+        cancelled = event.isCancelled();
+    }
+    if (!cancelled) {
+        mHost.getNetworkHandler().sendToMany(viewers, packet, mHost.getCodecContext());
+        for (const auto &id: viewers)
+            state->mListeners.push_back(mPlayers.acquire(id));
+    }
 
     if ((state->mHasDuration && state->mLoopCount >= 0) || state->mLoopCount < 0) {
         state->mLastRealTime = std::chrono::steady_clock::now();

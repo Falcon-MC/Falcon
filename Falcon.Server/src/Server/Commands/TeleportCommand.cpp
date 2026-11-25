@@ -2,7 +2,6 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cerrno>
 #include <cmath>
@@ -79,11 +78,17 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
     }
 
     ServerPlayer &target = *targets.front();
+    EventSignal<ActorTeleportBeforeEvent> &teleport = mHandler.getEventBus().before().mActorTeleport;
     for (ServerPlayer *victim: victims) {
         Vector3f destination = target.getPosition();
         Level *level = &mHandler.getLevelFor(target);
-        if (!PluginEvents::teleport(*victim, destination, "command", &level))
-            continue;
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(*victim, destination, TeleportCause::Command, level);
+            teleport.emit(event);
+            if (event.isCancelled())
+                continue;
+            level = event.mDestination;
+        }
         if (!victim->isIn(*level))
             mHandler.changePlayerLevel(*victim, *level, destination);
         else
@@ -97,6 +102,7 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
 
 bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vector<ServerPlayer *> &victims,
                                          const std::vector<std::string> &arguments, size_t first) {
+    EventSignal<ActorTeleportBeforeEvent> &teleport = mHandler.getEventBus().before().mActorTeleport;
     for (ServerPlayer *victim: victims) {
         Vector3f destination;
         if (!parsePosition(arguments, first, victim->getPosition(), destination)) {
@@ -105,8 +111,13 @@ bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vecto
         }
 
         Level *level = &mHandler.getLevelFor(*victim);
-        if (!PluginEvents::teleport(*victim, destination, "command", &level))
-            continue;
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(*victim, destination, TeleportCause::Command, level);
+            teleport.emit(event);
+            if (event.isCancelled())
+                continue;
+            level = event.mDestination;
+        }
         if (!victim->isIn(*level))
             mHandler.changePlayerLevel(*victim, *level, destination);
         else

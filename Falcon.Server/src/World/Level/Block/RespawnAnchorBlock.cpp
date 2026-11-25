@@ -1,7 +1,4 @@
 #include "World/Level/Block/RespawnAnchorBlock.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
-#include "Core/Json/Json.h"
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockClassRegistry.h"
@@ -135,24 +132,15 @@ void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, cons
     double radius = EXPLOSION_RADIUS;
     bool breaksBlocks = true;
     double fireChance = 1.0 / 3.0;
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_PRE_EXPLODE)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_BLOCK_PRE_EXPLODE;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mPlayer = player;
-        event.mBlockPosition = position;
-        event.mAmount = radius;
-        plugins->dispatch(event);
-        if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount < 0.0)
+    EventSignal<BlockExplodeBeforeEvent> &blockExplode = owner.getEventBus().before().mBlockExplode;
+    if (blockExplode.hasSubscribers()) {
+        BlockExplodeBeforeEvent event(level, position, player, radius, breaksBlocks, fireChance);
+        blockExplode.emit(event);
+        if (event.isCancelled())
             return;
-        radius = event.mAmount;
-        if (const auto data = json::parse(event.mCustomData); data != nullptr && data->isObject()) {
-            if (const auto *blocks = data->get("breaks"); blocks != nullptr && blocks->mType == json::Value::Type::Boolean)
-                breaksBlocks = blocks->mBoolean;
-            if (const auto *fire = data->get("fire"); fire != nullptr && fire->isNumber())
-                fireChance = std::clamp(fire->number(), 0.0, 1.0);
-        }
+        radius = event.mRadius;
+        breaksBlocks = event.mBreaksBlocks;
+        fireChance = event.mFireChance;
     }
     level.setBlock(position, BlockState(BlockNames::AIR), true);
 
@@ -183,21 +171,13 @@ bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &p
 
     enum class Action { Explode, SetSpawn };
     Action action = player.getDimension() == DimensionType::Nether ? Action::SetSpawn : Action::Explode;
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_RESPAWN_ANCHOR_USE)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_RESPAWN_ANCHOR_USE;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mPlayer = &player;
-        event.mBlockPosition = position;
-        event.mAmount = (double) action;
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    EventSignal<RespawnAnchorUseBeforeEvent> &anchorUse = owner.getEventBus().before().mRespawnAnchorUse;
+    if (anchorUse.hasSubscribers()) {
+        RespawnAnchorUseBeforeEvent event(level, player, position, action == Action::SetSpawn);
+        anchorUse.emit(event);
+        if (event.isCancelled())
             return true;
-        if (event.mAmount == (double) Action::SetSpawn)
-            action = Action::SetSpawn;
-        else if (event.mAmount == (double) Action::Explode)
-            action = Action::Explode;
+        action = event.mSetsSpawn ? Action::SetSpawn : Action::Explode;
     }
     if (action == Action::Explode) {
         if (level.getGameRules().getBool("respawnblocksexplode"))

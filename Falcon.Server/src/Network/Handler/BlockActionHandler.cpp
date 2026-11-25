@@ -1,4 +1,3 @@
-#include "Falcon/Plugin/PluginPackets.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
@@ -37,7 +36,6 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginBlock.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelEventPacket.h"
@@ -64,6 +62,30 @@
 
 namespace {
     const float MOVEMENT_BLOCK_RANGE = 3.0f;
+
+    // the sound and particle packets plugins may filter; null for any other packet
+    EventSignal<WorldEffectBeforeEvent> *worldEffectSignal(ServerNetworkHandler &owner, const Packet &packet) {
+        BeforeEvents &before = owner.getEventBus().before();
+        switch (packet.getId()) {
+            case MinecraftPacketIds::PlaySound:
+            case MinecraftPacketIds::LevelSoundEvent:
+                return &before.mWorldSound;
+            case MinecraftPacketIds::SpawnParticleEffect:
+            case MinecraftPacketIds::LevelEventGeneric:
+                return &before.mWorldParticle;
+            case MinecraftPacketIds::LevelEvent: {
+                const int32_t id = static_cast<const LevelEventPacket &>(packet).mEventId;
+                if ((1000 <= id && id <= 1066) || (3512 <= id && id <= 3515))
+                    return &before.mWorldSound;
+                if ((id & 0x4000) != 0 || (2000 <= id && id <= 2040) || id == 3510 || id == 3511
+                    || (3603 <= id && id <= 3614) || id == LevelEventPacket::ParticleSmashAttackGroundDust)
+                    return &before.mWorldParticle;
+                return nullptr;
+            }
+            default:
+                return nullptr;
+        }
+    }
 
     bool isNearPlayer(const ServerPlayer &player, const Vector3f &position) {
         const Vector3f &feet = player.getPosition();
@@ -416,8 +438,8 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t key = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 
-    const auto type = PluginPackets::worldEffectType(packet);
-    if (type != 0 && PluginManager::findWithSubscribers(type) != nullptr) {
+    EventSignal<WorldEffectBeforeEvent> *worldEffect = worldEffectSignal(owner, packet);
+    if (worldEffect != nullptr && worldEffect->hasSubscribers()) {
         std::vector<NetworkIdentifier> viewers;
         for (auto &entry: owner.getPlayers()) {
             if (&entry.second != except && entry.second.getWorldId() == level.getWorldId()
@@ -425,7 +447,10 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
                 && entry.second.getSentChunks().count(key) != 0)
                 viewers.push_back(entry.first);
         }
-        PluginPackets::broadcastWorldEffect(owner, level, position, packet, type, std::move(viewers));
+        WorldEffectBeforeEvent event(level, position, packet, viewers);
+        worldEffect->emit(event);
+        if (!event.isCancelled())
+            owner.getNetworkHandler().sendToMany(viewers, packet, owner.getCodecContext());
         return;
     }
 
@@ -567,25 +592,19 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
 
     // plugins listening see the drops and the experience, worked out once, and may change them
-    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_BREAK);
+    EventSignal<PlayerDestroyBlockBeforeEvent> &destroy = owner.getEventBus().before().mPlayerDestroyBlock;
+    const bool listening = destroy.hasSubscribers();
     std::vector<ItemStack> drops;
     int32_t experience = 0;
-    if (plugins != nullptr) {
+    if (listening) {
         if (!creative && harvested && level.getGameRules().getBool("dotiledrops"))
             drops = blockDrops(owner, &level, position, brokenState, heldItem);
         if (!creative && !silkTouch && harvested)
             experience = ExperienceValues::getOreDropExperience(brokenState.mName);
 
-        PluginEvent pluginEvent;
-        pluginEvent.mType = FALCON_EVENT_BLOCK_BREAK;
-        pluginEvent.mCancellable = true;
-        pluginEvent.mPlayer = &player;
-        pluginEvent.mBlockPosition = position;
-        pluginEvent.mBlockName = brokenState.mName;
-        pluginEvent.mDrops = &drops;
-        pluginEvent.mExperience = &experience;
-        plugins->dispatch(pluginEvent);
-        if (pluginEvent.mCancelled) {
+        PlayerDestroyBlockBeforeEvent destroyEvent(player, position, brokenState, drops, experience);
+        destroy.emit(destroyEvent);
+        if (destroyEvent.isCancelled()) {
             sendCurrentBlockState(owner, player, position);
             return;
         }
@@ -593,8 +612,8 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     if (const Block *broken = VanillaBlocks::fromState(brokenState))
         broken->onPlayerWillDestroy(owner, player, level, position, brokenState);
-    destroyBlock(owner, level, position, brokenState, plugins == nullptr && !creative && harvested, heldItem, &player);
-    if (plugins != nullptr) {
+    destroyBlock(owner, level, position, brokenState, !listening && !creative && harvested, heldItem, &player);
+    if (listening) {
         const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
         for (const ItemStack &drop: drops)
             owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
@@ -612,7 +631,7 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     brokenEvent.mItemAfterBreak = player.getInventory().getItemInHand();
     owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
 
-    if (plugins == nullptr && !creative && !silkTouch && harvested)
+    if (!listening && !creative && !silkTouch && harvested)
         experience = ExperienceValues::getOreDropExperience(brokenState.mName);
     if (experience > 0) {
         const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
@@ -1252,15 +1271,13 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (scripts.beforePlayerInteractWithBlock(player, transaction.mBlockPosition, face))
         return false;
 
-    PluginEvent interactPluginEvent;
-    interactPluginEvent.mType = FALCON_EVENT_PLAYER_INTERACT_BLOCK;
-    interactPluginEvent.mCancellable = true;
-    interactPluginEvent.mPlayer = &player;
-    interactPluginEvent.mBlockPosition = transaction.mBlockPosition;
-    interactPluginEvent.mBlockFace = (uint32_t) face;
-    PluginManager::getInstance().dispatch(interactPluginEvent);
-    if (interactPluginEvent.mCancelled)
-        return false;
+    EventSignal<PlayerInteractBlockBeforeEvent> &interact = owner.getEventBus().before().mPlayerInteractBlock;
+    if (interact.hasSubscribers()) {
+        PlayerInteractBlockBeforeEvent interactEvent(player, transaction.mBlockPosition, face);
+        interact.emit(interactEvent);
+        if (interactEvent.isCancelled())
+            return false;
+    }
 
     scripts.onPlayerInteractWithBlock(player, clickedState.mName, transaction.mBlockPosition, face,
                                       transaction.mClickPosition);
@@ -1443,15 +1460,13 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (scripts.beforePlayerPlaceBlock(player, level, target, face, transaction.mClickPosition, placedState))
         return false;
 
-    PluginEvent placePluginEvent;
-    placePluginEvent.mType = FALCON_EVENT_BLOCK_PLACE;
-    placePluginEvent.mCancellable = true;
-    placePluginEvent.mPlayer = &player;
-    placePluginEvent.mBlockPosition = target;
-    placePluginEvent.mBlockName = placedState.mName;
-    PluginManager::getInstance().dispatch(placePluginEvent);
-    if (placePluginEvent.mCancelled)
-        return false;
+    EventSignal<PlayerPlaceBlockBeforeEvent> &place = owner.getEventBus().before().mPlayerPlaceBlock;
+    if (place.hasSubscribers()) {
+        PlayerPlaceBlockBeforeEvent placeEvent(player, target, placedState);
+        place.emit(placeEvent);
+        if (placeEvent.isCancelled())
+            return false;
+    }
 
     std::vector<BlockPlacementEntry> placementBlocks;
 
