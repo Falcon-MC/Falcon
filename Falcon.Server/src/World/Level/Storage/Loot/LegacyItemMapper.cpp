@@ -58,6 +58,23 @@ std::string LegacyItemMapper::resolveWithData(const std::string &identifierAndDa
     return resolve(identifier, data);
 }
 
+std::vector<std::string> LegacyItemMapper::resolveVariants(const std::string &identifierAndData) const {
+    std::string identifier;
+    int32_t data = 0;
+    splitData(identifierAndData, identifier, data);
+    if (identifier != identifierAndData)
+        return {resolve(identifier, data)};
+    const std::string name = identifier.find(':') == std::string::npos ? "minecraft:" + identifier : identifier;
+    const auto family = mComplex.find(name);
+    if (family == mComplex.end())
+        return {resolve(identifier, data)};
+    std::vector<std::string> variants;
+    variants.reserve(family->second.size());
+    for (const auto &entry: family->second)
+        variants.push_back(entry.second);
+    return variants;
+}
+
 std::string LegacyItemMapper::resolve(const std::string &identifier, int32_t data) const {
     std::string name = identifier;
     upgrade(name, data);

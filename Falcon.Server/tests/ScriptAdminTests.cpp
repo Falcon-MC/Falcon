@@ -201,11 +201,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("blocked", 
         writeFile(directory / "config" / ADMIN_UUID / "variables.json", R"({"level": 22, "nested": {"a": [1, "b"]}})");
         writeFile(directory / "config" / ADMIN_UUID / "secrets.json", R"({"token": "hunter2"})");
 
+        writePack(packs, "first-copy", "0000000a-0000-4000-9000-000000000004", SERVER_BETA, "");
+        writePack(packs, "second-copy", "0000000A-0000-4000-9000-000000000004", SERVER_BETA, "");
         ServerNetworkHandler owner("Script admin", "", 2);
         ScriptEngine &engine = owner.getScriptEngine();
         engine.bindHost(owner);
         BehaviorPackManager manager;
         manager.discover(packs.string());
+        require(manager.getPackCount() == 3, "both conflicting module owners must be excluded");
         require(engine.loadPacks(manager.getPacks()) == 2,
                 "the pack depending on a module the default permissions leave out started");
 
@@ -308,7 +311,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("blocked", 
         // a config folder without default/permissions.json gets the dedicated server's default list
         const std::filesystem::path fresh = directory / "fresh-config";
         ScriptPackConfigurationManager configs;
+        writeFile(fresh / "sample" / "variables.json", R"({"level": 1})");
         configs.load(fresh.string());
+        require(configs.get("sample").allowsModule("@minecraft/server")
+                        && !configs.get("sample").allowsModule("@minecraft/server-net"),
+                "adding variables changed the default module permissions");
         std::ifstream created(fresh / "default" / "permissions.json");
         std::stringstream text;
         text << created.rdbuf();

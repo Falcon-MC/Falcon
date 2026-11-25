@@ -15,9 +15,12 @@
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/VanillaActorTable.h"
+#include "World/Actor/Player/FogStack.h"
 #include "World/Actor/Player/PlayerAbility.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Inventory/BannerRecipes.h"
+#include "World/Inventory/GridRecipes.h"
 #include "World/Inventory/CartographyRecipes.h"
 #include "World/Item/ItemNetworkIdTable.h"
 #include "World/Level/Level.h"
@@ -60,7 +63,6 @@
 #include "Protocol/Packets/UpdateAbilitiesPacket.h"
 #include "Protocol/Packets/UpdateAttributesPacket.h"
 #include "World/Level/BonusChest.h"
-#include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Server/Localization.h"
 #include "Server/PropertiesSettings.h"
@@ -74,6 +76,15 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+struct PendingPlayerLogin {
+    bool mHandshakeReady = false;
+    bool mUsesAccountKey = false;
+    std::string mClientData;
+    std::string mName;
+    std::string mUuid;
+    std::string mXuid;
+};
 
 namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
@@ -115,6 +126,24 @@ namespace {
             most = 1;
 
         return Uuid(most, least);
+    }
+
+    // what the client's recipe book needs to show the recipe; registered for the unlocking too
+    void addUnlocking(ServerNetworkHandler &owner, CraftingRecipeEntry &entry, const std::string &recipeId,
+                      const RecipeUnlockRequirement *requirement) {
+        owner.getRecipeUnlockIndexMutable().add(recipeId, entry.mRecipeId, entry.mRecipeNetId, requirement);
+        entry.mHasUnlockingRequirement = requirement != nullptr;
+        if (requirement == nullptr)
+            return;
+
+        entry.mUnlockingContext = (int32_t) requirement->mContext;
+        entry.mHasUnlockingIngredients = !requirement->mItems.empty();
+        entry.mUnlockingIngredients.clear();
+        for (RecipeIngredientEntry item: requirement->mItems) {
+            if (item.mType == RecipeIngredientType::Name && item.mAuxValue < 0)
+                item.mAuxValue = 0x7fff;
+            entry.mUnlockingIngredients.push_back(std::move(item));
+        }
     }
 
     std::string packRecipeId(uint32_t value) {
@@ -269,6 +298,12 @@ namespace {
     }
 }
 
+namespace {
+    int32_t clientPort(const NetworkIdentifier &id) {
+        return id.getType() == NetworkIdentifier::Type::RakNet ? id.getSystemAddress().GetPort() : 0;
+    }
+}
+
 void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                const LoginPacket &packet) {
     if (player.getCodec() == nullptr || packet.mProtocolVersion != player.getCodec()->getProtocolVersion()) {
@@ -287,6 +322,19 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
+    bool requireAuthentication = owner.getProperties().getOnlineMode();
+    EventSignal<PlayerLoginAttemptBeforeEvent> &loginAttempt = owner.getEventBus().before().mPlayerLoginAttempt;
+    if (loginAttempt.hasSubscribers()) {
+        PlayerLoginAttemptBeforeEvent event(id, request, clientPort(id), requireAuthentication);
+        loginAttempt.emit(event);
+        if (event.isCancelled()) {
+            owner._disconnect(id, DisconnectReason::NotAllowed, event.mKickReason);
+            owner.erasePlayer(id);
+            return;
+        }
+        requireAuthentication = event.mRequireAuthentication;
+    }
+
     LoginChainVerifier verifier;
     const bool verified = verifier.verify(packet.mAuthJwt, packet.mClientJwt);
 
@@ -298,44 +346,73 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
-    if (owner.getProperties().getOnlineMode() && !verifier.isSigned()) {
+    if (requireAuthentication && !verifier.isSigned()) {
         LOG_WARN(LogAreaID::Network, "%s failed Xbox Live authentication", id.getAddress().c_str());
         owner._disconnect(id, DisconnectReason::NotAuthenticated, "disconnectionScreen.notAuthenticated");
         owner.erasePlayer(id);
         return;
     }
 
+    auto pending = std::make_shared<PendingPlayerLogin>();
+    pending->mName = verifier.getDisplayName();
+    pending->mUuid = verifier.getIdentity();
     if (verifier.isSigned()) {
-        player.setName(verifier.getDisplayName());
-        player.setUuid(verifier.getIdentity());
-        player.setXuid(verifier.getXuid());
+        pending->mXuid = verifier.getXuid();
     } else {
-        const std::string &name = verifier.getDisplayName().empty() ? request.getDisplayName()
-                                                                    : verifier.getDisplayName();
-        const std::string &uuid = verifier.getIdentity().empty() ? request.getIdentity() : verifier.getIdentity();
-
-        player.setName(name);
-        player.setUuid(uuid);
-        player.setXuid("");
+        if (pending->mName.empty())
+            pending->mName = request.getDisplayName();
+        if (pending->mUuid.empty())
+            pending->mUuid = request.getIdentity();
     }
 
-    player.setPlayFabId(request.getPlayFabId());
-
-    // the name becomes a file name and a log line: an unverified one is whatever the client typed
-    if (!PlayerDataProvider::isSafeName(player.getName())) {
-        LOG_WARN(LogAreaID::Network, "%s logged in with an unusable name", id.getAddress().c_str());
+    if (!PlayerDataProvider::isSafeName(pending->mName)) {
         owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.invalidName");
         owner.erasePlayer(id);
         return;
     }
-
-    // an unsigned login picks its own uuid, and it ends up in the log and the player list
-    if (!isUuidShaped(player.getUuid())) {
-        LOG_WARN(LogAreaID::Network, "%s logged in with a malformed uuid", id.getAddress().c_str());
+    if (!isUuidShaped(pending->mUuid)) {
         owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.notAuthenticated");
         owner.erasePlayer(id);
         return;
     }
+
+    SerializedSkin skin = request.getSkin();
+    ServerNetworkHandler::boundSkin(skin);
+    player.setSkin(skin);
+    player.setLocale(request.getLanguageCode());
+    player.setBuildPlatform(request.getBuildPlatform());
+
+    // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
+    player.setClientSideGenerationCompatible(
+            ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
+    ServerPlayer::ClientDevice &device = player.getClientDevice();
+    const std::string &clientData = request.getClientData();
+    device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
+    device.mMaxViewDistance = ConnectionRequest::findJsonInt(clientData, "MaxViewDistance", 0);
+    device.mGraphicsMode = ConnectionRequest::findJsonInt(clientData, "GraphicsMode", 1);
+    device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
+    player.readSyncedClientOptions(request.getClientData());
+
+    player.setPlayFabId(request.getPlayFabId());
+    if (owner.getEventBus().before().mPlayerPreLogin.hasSubscribers())
+        pending->mClientData = request.getClientData();
+    player.mPendingLogin = std::move(pending);
+    if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
+        startEncryption(owner, id, player, verifier.getIdentityPublicKey());
+        return;
+    }
+    admitLogin(owner, id, player, false);
+}
+
+void LoginHandler::admitLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
+                             bool accountKeyProven) {
+    auto pending = std::move(player.mPendingLogin);
+    if (!pending)
+        return;
+
+    player.setName(pending->mName);
+    player.setUuid(pending->mUuid);
+    player.setXuid(pending->mXuid);
 
     owner.getBanList().bindXuid(player.getName(), player.getXuid());
     const BanEntry *ban = owner.getBanList().find(player.getName(), player.getXuid());
@@ -346,8 +423,8 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         const Localization &localization = Localization::getInstance();
         owner._disconnect(id, DisconnectReason::NotAllowed,
                           ban->mReason.empty()
-                                  ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
-                                  : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
+                                  ? localization.translate(player.getLocale(), "falcon.disconnect.banned")
+                                  : localization.translate(player.getLocale(), "falcon.disconnect.bannedReason",
                                                            {ban->mReason}));
         owner.erasePlayer(id);
         return;
@@ -367,27 +444,24 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN)) {
-        std::string kickMessage = "disconnectionScreen.noReason";
-        PluginEvent preLogin;
-        preLogin.mType = FALCON_EVENT_PLAYER_PRE_LOGIN;
-        preLogin.mCancellable = true;
-        preLogin.mPlayer = &player;
-        preLogin.mMessage = &kickMessage;
-        preLogin.mClientData = &request.getClientData();
-        plugins->dispatch(preLogin);
-        if (preLogin.mCancelled) {
+    EventSignal<PlayerPreLoginBeforeEvent> &preLogin = owner.getEventBus().before().mPlayerPreLogin;
+    if (preLogin.hasSubscribers()) {
+        PlayerPreLoginBeforeEvent event(player, clientPort(id), pending->mClientData);
+        preLogin.emit(event);
+        if (event.isCancelled()) {
             LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
-            owner._disconnect(id, DisconnectReason::NotAllowed, kickMessage);
+            owner._disconnect(id, DisconnectReason::NotAllowed, event.mKickReason);
             owner.erasePlayer(id);
             return;
         }
     }
 
-    // one session per account: two would load the same save, and the last to leave would write over the other.
-    // this login is refused; a signed login of the same account also closes the older one, its save landing
-    // before the next attempt reads it. a name alone proves nothing: the session holding it stays
+    // Only a verified account can take over its session. Close and save it before the new session reads the save.
     bool alreadyOnline = false;
+    std::vector<NetworkIdentifier> takeovers;
+    EventSignal<PlayerDuplicateLoginBeforeEvent> &duplicateLogin = owner.getEventBus().before().mPlayerDuplicateLogin;
+    const bool duplicates = duplicateLogin.hasSubscribers();
+    std::string duplicateMessage = "disconnectionScreen.loggedinOtherLocation";
     const std::string loweredName = StringUtil::toLowerCase(player.getName());
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &other = entry.second;
@@ -398,45 +472,43 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         if (!sameAccount && StringUtil::toLowerCase(other.getName()) != loweredName)
             continue;
 
-        alreadyOnline = true;
-        if (sameAccount)
-            owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation,
-                              "disconnectionScreen.loggedinOtherLocation");
+        bool replaceExisting = sameAccount && accountKeyProven;
+        if (duplicates) {
+            PlayerDuplicateLoginBeforeEvent event(player, entry.second, sameAccount, clientPort(id), duplicateMessage);
+            duplicateLogin.emit(event);
+            replaceExisting = replaceExisting && !event.isCancelled();
+        }
+        if (replaceExisting && duplicates) {
+            takeovers.push_back(entry.first);
+        } else {
+            alreadyOnline = true;
+            if (replaceExisting)
+                owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation, duplicateMessage);
+        }
     }
     if (alreadyOnline) {
         LOG_INFO(LogAreaID::Server, "Player %s logged in from another location", player.getName().c_str());
-        owner._disconnect(id, DisconnectReason::LoggedInOtherLocation, "disconnectionScreen.loggedinOtherLocation");
+        owner._disconnect(id, DisconnectReason::LoggedInOtherLocation, duplicateMessage);
         owner.erasePlayer(id);
         return;
+    }
+
+    for (const NetworkIdentifier &prior: takeovers) {
+        owner._disconnect(prior, DisconnectReason::LoggedInOtherLocation, duplicateMessage);
+        static_cast<NetworkHandler::Listener &>(owner).onConnectionClosed(
+                prior, DisconnectFailReason::Disconnected, duplicateMessage);
     }
 
     // a gamertag can change hands: the save under it must be this account's before it is read or written
     if (!owner.getPlayerDataProvider().claimData(player.getName(), player.getXuid())) {
-        LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
-                  player.getName().c_str());
+        if (player.getXuid().empty())
+            LOG_WARN(LogAreaID::Server, "Refused an unsigned login onto the save of the account named %s",
+                     player.getName().c_str());
+        else
+            LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
+                      player.getName().c_str());
         owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.internalError.cantConnect");
         owner.erasePlayer(id);
-        return;
-    }
-
-    SerializedSkin skin = request.getSkin();
-    ServerNetworkHandler::boundSkin(skin);
-    player.setSkin(skin);
-    player.setBuildPlatform(request.getBuildPlatform());
-    // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
-    player.setClientSideGenerationCompatible(
-            ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
-    player.setLocale(request.getLanguageCode());
-    ServerPlayer::ClientDevice &device = player.getClientDevice();
-    const std::string &clientData = request.getClientData();
-    device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
-    device.mMaxViewDistance = ConnectionRequest::findJsonInt(clientData, "MaxViewDistance", 0);
-    device.mGraphicsMode = ConnectionRequest::findJsonInt(clientData, "GraphicsMode", 1);
-    device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
-    player.readSyncedClientOptions(request.getClientData());
-
-    if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
-        startEncryption(owner, id, player, verifier.getIdentityPublicKey());
         return;
     }
 
@@ -458,18 +530,27 @@ void LoginHandler::startEncryption(ServerNetworkHandler &owner, const NetworkIde
 
     owner.getNetworkHandler().send(id, handshake, owner.getCodecContext());
     owner.getNetworkHandler().flush(id);
-    owner.getNetworkHandler().enableEncryption(id, key);
+    owner.getNetworkHandler().enableEncryption(id, key, clientPublicKey);
     player.setLoginState(ServerPlayer::LoginState::EncryptionHandshake);
+}
+
+void LoginHandler::encryptionEnabled(ServerPlayer &player, bool usesAccountKey) {
+    if (player.mPendingLogin && player.getLoginState() == ServerPlayer::LoginState::EncryptionHandshake) {
+        player.mPendingLogin->mHandshakeReady = true;
+        player.mPendingLogin->mUsesAccountKey = usesAccountKey;
+    }
 }
 
 void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                  ServerPlayer &player) {
-    if (player.getLoginState() != ServerPlayer::LoginState::EncryptionHandshake) {
+    if (player.getLoginState() != ServerPlayer::LoginState::EncryptionHandshake || !player.mPendingLogin
+        || !player.mPendingLogin->mHandshakeReady) {
         owner._disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
+        owner.erasePlayer(id);
         return;
     }
 
-    completeLogin(owner, id, player);
+    admitLogin(owner, id, player, player.mPendingLogin->mUsesAccountKey);
 }
 
 void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
@@ -477,9 +558,11 @@ void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdent
     if (scripts.isHoldingJoin(id))
         return;
     // asyncPlayerJoin: the login goes on once every subscriber's promise settled
-    const bool held = scripts.holdPlayerJoin(player, [&owner, id]() {
+    const bool held = scripts.holdPlayerJoin(player, [&owner, id, session = &player]() {
+        // the same session, still waiting for this join: not a reconnect from the same address and port
         const auto it = owner.getPlayers().find(id);
-        if (it != owner.getPlayers().end())
+        if (it != owner.getPlayers().end() && &it->second == session
+            && it->second.getLoginState() < ServerPlayer::LoginState::LoggedIn)
             _finishLogin(owner, id, it->second);
     });
     if (!held)
@@ -497,14 +580,22 @@ void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdenti
     status.mStatus = PlayStatusPacket::Status::LoginSuccess;
     owner.getNetworkHandler().send(id, status, owner.getCodecContext());
 
+    auto proposedOffer = owner.getResourcePacks().getOffer(owner.getProperties().getTexturePackRequired());
+    EventSignal<PlayerResourcePackOfferBeforeEvent> &packOffer = owner.getEventBus().before().mPlayerResourcePackOffer;
+    if (packOffer.hasSubscribers()) {
+        PlayerResourcePackOfferBeforeEvent event(player, proposedOffer);
+        packOffer.emit(event);
+    }
+    player.setResourcePackOffer(std::move(proposedOffer));
+    const auto &offer = *player.getResourcePackOffer();
     ResourcePacksInfoPacket packs;
-    packs.mForcedToAccept = owner.getProperties().getTexturePackRequired();
+    packs.mForcedToAccept = offer.mRequired;
     packs.mWorldTemplateVersion = "";
     packs.mHasAddonPacks = false;
     packs.mScriptingEnabled = false;
     packs.mVibrantVisualsForceDisabled = owner.getProperties().getDisableClientVibrantVisuals();
 
-    for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
+    for (const ResourcePack &pack: offer.mPacks) {
         ResourcePacksInfoPacket::Entry entry;
         entry.mPackId = pack.mUuid;
         entry.mPackVersion = pack.mVersion;
@@ -523,11 +614,14 @@ void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdenti
 void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                     ServerPlayer &player,
                                                     const ResourcePackClientResponsePacket &packet) {
+    const auto *offer = player.getResourcePackOffer();
+    if (offer == nullptr)
+        return;
     switch (packet.mStatus) {
         case ResourcePackClientResponsePacket::Status::SendPacks: {
             for (const std::string &requested: packet.mPackIds) {
                 const std::string uuid = requested.substr(0, requested.find('_'));
-                const ResourcePack *pack = owner.getResourcePacks().findById(uuid);
+                const ResourcePack *pack = offer->findById(uuid);
                 if (pack == nullptr)
                     continue;
 
@@ -546,12 +640,12 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
 
         case ResourcePackClientResponsePacket::Status::HaveAllPacks: {
             ResourcePackStackPacket stack;
-            stack.mForcedToAccept = owner.getProperties().getTexturePackRequired();
+            stack.mForcedToAccept = offer->mRequired;
             stack.mGameVersion = owner.getAnnouncement().mGameVersion;
             stack.mExperiments = enabledExperiments(owner);
             stack.mExperimentsPreviouslyToggled = true;
 
-            for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
+            for (const ResourcePack &pack: offer->mPacks) {
                 ResourcePackStackPacket::Entry entry;
                 entry.mPackId = pack.mUuidString;
                 entry.mPackVersion = pack.mVersion;
@@ -564,6 +658,7 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
 
         case ResourcePackClientResponsePacket::Status::Completed:
             sendStartGame(owner, player);
+            player.setResourcePackOffer(nullptr);
             break;
 
         case ResourcePackClientResponsePacket::Status::Refused:
@@ -577,7 +672,10 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
 
 void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                   const ResourcePackChunkRequestPacket &packet) {
-    const ResourcePack *pack = owner.getResourcePacks().findById(packet.mPackId.toString());
+    const auto requester = owner.getPlayers().find(id);
+    if (requester == owner.getPlayers().end() || requester->second.getResourcePackOffer() == nullptr)
+        return;
+    const ResourcePack *pack = requester->second.getResourcePackOffer()->findById(packet.mPackId.toString());
     if (pack == nullptr) {
         LOG_WARN(LogAreaID::Network, "Client requested unknown resource pack %s", packet.mPackId.toString().c_str());
         return;
@@ -588,9 +686,7 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
         return;
 
     // each answer is a megabyte: a chunk goes out a few times per login at most
-    const auto requester = owner.getPlayers().find(id);
-    if (requester == owner.getPlayers().end()
-        || !requester->second.countPackChunkRequest(pack->mUuidString, packet.mChunkIndex))
+    if (!requester->second.countPackChunkRequest(pack->mUuidString, packet.mChunkIndex))
         return;
 
     const uint64_t remaining = pack->mSize - offset;
@@ -618,8 +714,16 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     owner._loadPlayerData(player);
     if (owner.getProperties().getForceGameType())
         player.setGameType((int32_t) owner.getProperties().getGameType());
+    if (player.isSpectator())
+        player.setFlying(true);
     player.setHungerEnabled(player.isSurvival()
                             || player.isAdventure());
+
+    EventSignal<PlayerCreationAfterEvent> &creation = owner.getEventBus().after().mPlayerCreation;
+    if (creation.hasSubscribers()) {
+        PlayerCreationAfterEvent event(player, clientPort(id));
+        creation.emit(event);
+    }
 
     Level &world = owner.getWorldFor(player).getOverworld();
     StartGamePacket startGame;
@@ -637,7 +741,10 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDifficulty = (int32_t) owner.getProperties().getDifficulty();
     startGame.mDefaultSpawn = world.getSpawnPosition();
     startGame.mCommandsEnabled = owner.getProperties().getAllowCheats();
-    startGame.mTexturePacksRequired = owner.getProperties().getTexturePackRequired();
+    // a world without commands keeps its achievements: the client then reports them to Xbox Live itself
+    startGame.mAchievementsDisabled = owner.getProperties().getAllowCheats();
+    const auto *offer = player.getResourcePackOffer();
+    startGame.mTexturePacksRequired = offer != nullptr ? offer->mRequired : owner.getProperties().getTexturePackRequired();
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
     startGame.mChatRestrictionLevel = owner.getProperties().getChatRestrictionLevel();
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();
@@ -749,8 +856,6 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
 
     if (isSpectator) {
         abilityValues |= 1u << (int) PlayerAbility::Invulnerable;
-        abilityValues |= 1u << (int) PlayerAbility::Flying;
-        abilityValues |= 1u << (int) PlayerAbility::MayFly;
         abilityValues |= 1u << (int) PlayerAbility::NoClip;
     } else {
         abilityValues |= 1u << (int) PlayerAbility::Build;
@@ -762,10 +867,8 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
         if (!isAdventure)
             abilityValues |= 1u << (int) PlayerAbility::AttackPlayers;
 
-        if (isCreative) {
-            abilityValues |= 1u << (int) PlayerAbility::MayFly;
+        if (isCreative)
             abilityValues |= 1u << (int) PlayerAbility::Instabuild;
-        }
     }
 
     if (player.isOp()) {
@@ -782,6 +885,8 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
         }
     }
 
+    if (player.canToggleFlight())
+        abilityValues |= 1u << (int) PlayerAbility::MayFly;
     if (player.isFlying())
         abilityValues |= 1u << (int) PlayerAbility::Flying;
 
@@ -996,6 +1101,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         if (entry.mOutputs.empty())
             continue;
 
+        addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                     CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
         if (source.mWidth > 0)
             cached.mShapedRecipes.push_back(entry);
         else
@@ -1046,6 +1153,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         parsedOutput.mBlockRuntimeId = outputBlock == nullptr ? 0 : outputBlock->getRuntimeId();
         entry.mOutputs.push_back(parsedOutput);
 
+        static const RecipeUnlockRequirement ALWAYS{RecipeUnlockRequirement::Context::AlwaysUnlocked, {}};
+        addUnlocking(owner, entry, recipe.mIdentifier, &ALWAYS);
         if (recipe.mShaped)
             cached.mShapedRecipes.push_back(entry);
         else
@@ -1099,6 +1208,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             output.mIsShield = std::string(source.mOutputItemId) == "minecraft:shield";
             entry.mOutputs.push_back(output);
             owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+            addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                         CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
             cached.mShapelessRecipes.push_back(std::move(entry));
         }
     }
@@ -1110,6 +1221,27 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         MultiRecipeEntry multi;
         multi.mUuid = Uuid::fromString(uuid);
         multi.mRecipeNetId = furnaceRecipeNetId++;
+        cached.mMultiRecipes.push_back(multi);
+    }
+
+    // the grid's banner copy and shield decoration, also multi recipes the client finds by uuid
+    int32_t bannerRecipeIds[2] = {0, 0};
+    const char *const bannerRecipes[] = {BannerRecipes::DUPLICATE_UUID, BannerRecipes::SHIELD_UUID};
+    for (size_t index = 0; index < 2; ++index) {
+        MultiRecipeEntry multi;
+        multi.mUuid = Uuid::fromString(bannerRecipes[index]);
+        multi.mRecipeNetId = furnaceRecipeNetId++;
+        bannerRecipeIds[index] = (int32_t) multi.mRecipeNetId;
+        cached.mMultiRecipes.push_back(multi);
+    }
+    BannerRecipes::setNetworkIds(bannerRecipeIds[0], bannerRecipeIds[1]);
+
+    // the grid's fireworks, book and map copies, repairs and decorated pots, the same way
+    for (const auto &recipe: GridRecipes::uuids()) {
+        MultiRecipeEntry multi;
+        multi.mUuid = Uuid::fromString(recipe.second);
+        multi.mRecipeNetId = furnaceRecipeNetId++;
+        GridRecipes::setNetworkId(recipe.first, (int32_t) multi.mRecipeNetId);
         cached.mMultiRecipes.push_back(multi);
     }
 
@@ -1144,6 +1276,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         entry.mOutputs.push_back(output);
 
         owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+        addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                     CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
         stonecutterIndices[entry.mRecipeNetId] = (uint32_t) index;
         cached.mShapelessRecipes.push_back(std::move(entry));
     }
@@ -1395,13 +1529,14 @@ void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlay
     AvailableCommandsPacket availableCommands;
 
     for (Command *command: owner.getCommands().getCommands()) {
-        if ((int) player.getCommandPermission() < (int) command->getRequiredPermission())
+        const auto group = owner.getPluginManager().getPermissions().commandPermission(player, *command);
+        if (!group.value_or(player.getCommandPermission() >= command->getRequiredPermission()))
             continue;
 
         CommandData data;
         data.mName = command->getName();
         data.mDescription = command->getDescription();
-        data.mPermission = command->getRequiredPermission();
+        data.mPermission = group == true ? CommandPermission::Any : command->getRequiredPermission();
         // <name>CommandAliases, the name then its aliases
         if (!command->getAliases().empty()) {
             data.mHasAliases = true;
@@ -1495,8 +1630,16 @@ void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner
     ItemActorHandler::sendItemActorsTo(owner, player);
     owner.sendActorsTo(player);
     owner.sendWeatherTo(player);
+    // the fog the player kept from /fog before it left
+    if (!player.getFogStack().empty())
+        FogStack::send(owner, player);
 
-    owner.broadcastTranslation("multiplayer.player.joined", {player.getName()});
+    PlayerJoinMessageBeforeEvent message(player, "§e" + player.getName() + " joined the game");
+    owner.getEventBus().before().mPlayerJoinMessage.emit(message);
+    if (message.mDefault)
+        owner.broadcastTranslation("multiplayer.player.joined", {player.getName()});
+    else if (!message.mMessage.empty())
+        owner.broadcastSystemMessage(message.mMessage);
 }
 
 void LoginHandler::checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &player) {

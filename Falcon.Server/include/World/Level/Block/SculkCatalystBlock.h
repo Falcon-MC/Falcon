@@ -14,4 +14,8 @@ public:
 
     void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                          const BlockState &state) const override;
+
+    // the bloom is over
+    void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                           const BlockState &state) const override;
 };

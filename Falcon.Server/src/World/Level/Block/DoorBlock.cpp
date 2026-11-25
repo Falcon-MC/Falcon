@@ -88,13 +88,15 @@ bool DoorBlock::setOpen(ServerNetworkHandler &owner, Level &level, const Vector3
     return true;
 }
 
-bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
+bool DoorBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                       Actor *source) {
     const Vector3i lower = lowerPosition(level, position, state);
     const BlockState lowerState = stateAt(level, lower);
     const bool open = !OpenableBlock::isOpen(lowerState);
 
     if (!setOpen(owner, level, position, state, open))
         return false;
+    OpenableBlock::postToggled(level, position, open, source);
 
     const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);
     const bool manual = open || isGettingPower(owner, level, lower, lowerState);
@@ -112,6 +114,7 @@ void DoorBlock::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, cons
 
     if (open != gettingPower && !manualOverride) {
         OpenableBlock::setOpen(owner, level, position, state, gettingPower);
+        OpenableBlock::postToggled(level, position, gettingPower, nullptr);
 
         const Vector3i lower = lowerPosition(level, position, state);
         const Vector3i upper = RedstoneFace::relative(lower, RedstoneFace::UP);

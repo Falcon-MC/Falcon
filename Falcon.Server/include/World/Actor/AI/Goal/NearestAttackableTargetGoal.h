@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 
 #include <cstdint>
@@ -12,7 +13,7 @@ class Actor;
 class NearestAttackableTargetGoal : public Goal {
 public:
     struct Entry {
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
         float mMaxDistance = 0.0f;
         // -1 inherits the goal's must_see, otherwise 0 or 1
         int8_t mMustSee = -1;

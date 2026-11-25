@@ -44,6 +44,8 @@ private:
 
     ClientAttestation() = default;
 
+    void _ask(const NetworkIdentifier &id, std::string evidence);
+
     void _run();
 
     std::mutex mMutex;

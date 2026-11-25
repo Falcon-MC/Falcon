@@ -23,6 +23,25 @@ public:
         return false;
     }
 
+    // the motion of this tick in place of gravity and inertia; false to fly as any projectile
+    virtual bool steer(ServerNetworkHandler &owner, Vector3f &motion) {
+        (void) owner;
+        (void) motion;
+        return false;
+    }
+
+    // the tick's move is done
+    virtual void afterMove(ServerNetworkHandler &owner) {
+        (void) owner;
+    }
+
+    // a melee hit: destroy_on_hurt removes it, reflect_on_hurt sends it back where the attacker looks;
+    // false when the hit does nothing to it
+    bool onMeleeHit(ServerNetworkHandler &owner, Actor &attacker);
+
+    // the projectile flies back along that direction and now belongs to the attacker
+    virtual void reflect(Actor &attacker, const Vector3f &direction);
+
 protected:
     // the class physics stand in for a missing definition
     ProjectileComponent _undefinedProjectileComponent() const override {
@@ -58,6 +77,69 @@ public:
         (void) hitActor;
         return false;
     }
+
+    // a hit that fires a definition event leaves the projectile in place a tick, for the event to run
+    bool isHeldAfterHit() const {
+        return mHeldAfterHit;
+    }
+
+    // the tick after a held hit; the projectile is removed after it
+    virtual void tickAfterHit(ServerNetworkHandler &owner) {
+        (void) owner;
+    }
+
+protected:
+    void holdAfterHit(const Vector3f &hitPosition) {
+        mHeldAfterHit = true;
+        setPosition(hitPosition);
+        setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+    }
+
+private:
+    bool mHeldAfterHit = false;
+};
+
+// minecraft:projectile on_hit, read from the entity's definition: impact_damage, catch_fire, mob_effect,
+// particle_on_hit and the minecraft:explode its definition_event adds, as the game applies them
+class DefinitionProjectileActor : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+    // the explosion the hit added goes off now, its fuse being 0
+    void tickAfterHit(ServerNetworkHandler &owner) override;
+
+    // a homing projectile takes the shooter's motion and the target to steer to
+    void launchAt(ServerNetworkHandler &owner, const Actor &shooter, const Actor &target);
+
+    bool steer(ServerNetworkHandler &owner, Vector3f &motion) override;
+
+    void afterMove(ServerNetworkHandler &owner) override;
+
+    void reflect(Actor &attacker, const Vector3f &direction) override;
+
+protected:
+    // what the hit does to the actor or player struck, before anything that removes the projectile
+    void _hitTarget(ServerNetworkHandler &owner, const Vector3f &hitPosition, Actor &target);
+
+    // what the hit does wherever it lands: the block set alight, the particle, the sound, the explosion held
+    void _hitAnywhere(ServerNetworkHandler &owner, const Vector3f &hitPosition, bool struckActor);
+
+private:
+    // null when the target is gone or dead
+    Actor *_homingTarget(ServerNetworkHandler &owner) const;
+
+    // the next leg of the flight: one block along an open axis toward the target, never along `axis`
+    void _chooseDirection(ServerNetworkHandler &owner, int32_t axis);
+
+    int64_t mHomingTarget = -1;
+    Vector3f mTargetDelta;
+    int32_t mFlightSteps = 0;
+    // the axis of the current leg: 0 x, 1 y, 2 z, -1 none
+    int32_t mAxis = -1;
 };
 
 class SnowballActor final : public ThrownProjectileActor {
@@ -76,6 +158,14 @@ public:
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
 
     bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+protected:
+    // the game data carries no ice ball definition: thrown at a power of 1
+    ProjectileComponent _undefinedProjectileComponent() const override {
+        ProjectileComponent component = ThrownProjectileActor::_undefinedProjectileComponent();
+        component.mPower = 1.0f;
+        return component;
+    }
 };
 
 class EggActor final : public ThrownProjectileActor {
@@ -97,11 +187,17 @@ public:
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
 };
 
-class WindChargeActor final : public ThrownProjectileActor {
+// the impact damage of its definition, then the wind burst
+class WindChargeActor final : public DefinitionProjectileActor {
 public:
-    using ThrownProjectileActor::ThrownProjectileActor;
+    using DefinitionProjectileActor::DefinitionProjectileActor;
 
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+private:
+    void _burst(ServerNetworkHandler &owner, const Vector3f &center);
 };
 
 class ExperienceBottleActor final : public ThrownProjectileActor {
@@ -166,6 +262,33 @@ private:
     void _burst(ServerNetworkHandler &owner, const Vector3f &hitPosition);
 };
 
+// wither_skull.json, wither_skull_dangerous.json: on_hit gives the actor hit its mob_effect, then the
+// definition_event explodes the skull with the minecraft:explode of the group it adds
+class WitherSkullActor final : public DefinitionProjectileActor {
+public:
+    WitherSkullActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size);
+
+    float getGravity() const override {
+        return 0.0f;
+    }
+
+    float getInertia() const override {
+        return 1.0f;
+    }
+
+    bool passesThroughOwner() const override {
+        return true;
+    }
+
+    // minecraft:projectile is_dangerous: the blue skull
+    bool isDangerous() const {
+        return mDangerous;
+    }
+
+private:
+    bool mDangerous = false;
+};
+
 class ArrowActor : public ProjectileActor {
 public:
     using ProjectileActor::ProjectileActor;
@@ -184,15 +307,15 @@ class FireworksRocketActor : public ProjectileActor {
 public:
     using ProjectileActor::ProjectileActor;
 
-    // ActorType 0x48 has no projectile bit: the default snow shape
+    // not a projectile to the game: the default snow shape
     bool collidesAtSnowLayerLook() const override {
         return false;
     }
 };
 
-class ShulkerBulletActor : public ProjectileActor {
+class ShulkerBulletActor final : public DefinitionProjectileActor {
 public:
-    using ProjectileActor::ProjectileActor;
+    using DefinitionProjectileActor::DefinitionProjectileActor;
 
     bool hasGravity() const override {
         return false;

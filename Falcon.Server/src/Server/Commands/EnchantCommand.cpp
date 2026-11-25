@@ -27,7 +27,7 @@ bool EnchantCommand::_parseLevel(const std::string &value, int32_t &out) {
 
 bool EnchantCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -45,12 +45,12 @@ bool EnchantCommand::execute(CommandOrigin &sender, const std::vector<std::strin
 
     int32_t level = 1;
     if (arguments.size() > 2 && !_parseLevel(arguments[2], level)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
     if (level < 1 || level > enchantment->mMaxLevel) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -88,7 +88,7 @@ bool EnchantCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         }
 
         if (result != EnchantmentApplyResult::Success) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             continue;
         }
 

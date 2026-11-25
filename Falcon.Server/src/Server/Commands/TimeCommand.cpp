@@ -94,7 +94,7 @@ std::vector<CommandOverloadData> TimeCommand::getOverloads() const {
 
 bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -113,7 +113,7 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     }
 
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -156,6 +156,6 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         return true;
     }
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }

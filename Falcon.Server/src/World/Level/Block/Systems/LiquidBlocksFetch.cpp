@@ -2,33 +2,35 @@
 
 #include "World/Level/Level.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
     const float PLAYER_HALF_WIDTH = 0.3f;
 }
 
-LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool horizontalPose, float bodyHeight) {
+LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool horizontalPose, float bodyHeight, float scale) {
     LiquidContact contact;
     Vector3f waterFlow;
     Vector3f lavaFlow;
+    const float halfWidth = PLAYER_HALF_WIDTH * scale;
     // horizontal pose uses width as height; eyes at 0.4
-    const float height = horizontalPose ? PLAYER_HALF_WIDTH * 2.0f : bodyHeight;
+    const float height = (horizontalPose ? PLAYER_HALF_WIDTH * 2.0f : bodyHeight) * scale;
     // own eye offset for modern crouching, not the body height
-    const float eyeHeight = horizontalPose ? 0.4f : bodyHeight < 1.8f ? 1.62001f - 0.35f : 1.62001f;
+    const float eyeHeight = (horizontalPose ? 0.4f : bodyHeight < 1.8f ? 1.62001f - 0.35f : 1.62001f) * scale;
     // the game shrinks the liquid sensing box, except for ItemActorFlagComponent: water
     // (0.001, 0.401, 0.001), lava (0.1, 0.4, 0.1); inverted axes collapse to the center
     const auto scan = [&](bool lava) {
-        const float horizontalInset = lava ? 0.1f : 0.001f;
+        const float horizontalInset = std::min(halfWidth, lava ? 0.1f : 0.001f);
         const float verticalInset = lava ? 0.4f : 0.401f;
         const float bottom = height < verticalInset * 2.0f ? feet.y + height * 0.5f : feet.y + verticalInset;
         const float top = height < verticalInset * 2.0f ? feet.y + height * 0.5f : feet.y + height - verticalInset;
-        const int32_t minX = (int32_t) std::floor(feet.x - PLAYER_HALF_WIDTH + horizontalInset);
-        const int32_t maxX = (int32_t) std::floor(feet.x + PLAYER_HALF_WIDTH - horizontalInset);
+        const int32_t minX = (int32_t) std::floor(feet.x - halfWidth + horizontalInset);
+        const int32_t maxX = (int32_t) std::floor(feet.x + halfWidth - horizontalInset);
         const int32_t minY = (int32_t) std::floor(bottom);
         const int32_t maxY = (int32_t) std::floor(top);
-        const int32_t minZ = (int32_t) std::floor(feet.z - PLAYER_HALF_WIDTH + horizontalInset);
-        const int32_t maxZ = (int32_t) std::floor(feet.z + PLAYER_HALF_WIDTH - horizontalInset);
+        const int32_t minZ = (int32_t) std::floor(feet.z - halfWidth + horizontalInset);
+        const int32_t maxZ = (int32_t) std::floor(feet.z + halfWidth - horizontalInset);
         for (int32_t x = minX; x <= maxX; ++x) {
             for (int32_t y = minY; y <= maxY; ++y) {
                 for (int32_t z = minZ; z <= maxZ; ++z) {
@@ -36,6 +38,8 @@ LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool hor
                     if (lava ? !info.lava : !info.water && !info.bubble)
                         continue;
                     if (lava) {
+                        if (!contact.lava)
+                            contact.lavaBlock = Vector3i(x, y, z);
                         contact.lava = true;
                     } else {
                         contact.water = true;

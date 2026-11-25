@@ -23,18 +23,20 @@ public:
         mCondition.notify_one();
     }
 
-    void pushAll(std::vector<T> values) {
+    void pushAll(std::vector<T> &&values) {
         if (values.empty())
             return;
 
         {
             std::lock_guard<std::mutex> guard(mMutex);
-            if (mClosed)
+            if (mClosed) {
+                values.clear();
                 return;
+            }
 
             mItems.insert(mItems.end(), std::make_move_iterator(values.begin()), std::make_move_iterator(values.end()));
         }
-
+        values.clear();
         mCondition.notify_one();
     }
 
@@ -51,11 +53,12 @@ public:
     }
 
     std::vector<T> drain() {
-        std::lock_guard<std::mutex> guard(mMutex);
-
-        std::vector<T> result(std::make_move_iterator(mItems.begin()), std::make_move_iterator(mItems.end()));
-        mItems.clear();
-        return result;
+        std::deque<T> items;
+        {
+            std::lock_guard<std::mutex> guard(mMutex);
+            items.swap(mItems);
+        }
+        return std::vector<T>(std::make_move_iterator(items.begin()), std::make_move_iterator(items.end()));
     }
 
     size_t size() const {

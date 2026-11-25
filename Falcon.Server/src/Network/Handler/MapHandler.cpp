@@ -176,7 +176,9 @@ void MapHandler::onFrameItemChanged(ServerNetworkHandler &owner, Level &level, c
 void MapHandler::handleInfoRequest(ServerNetworkHandler &owner, ServerPlayer &player,
                                    const MapInfoRequestPacket &packet) {
     // a client running client side generation resamples the chunks it built and sends what the map lacks
-    if (!packet.mPixels.empty() && MapItem::isHoldingMap(player, packet.mUniqueMapId)) {
+    const bool clientSideGeneration = owner.getProperties().getClientSideChunkGenerationEnabled()
+                                      && player.isClientSideGenerationCompatible();
+    if (!packet.mPixels.empty() && clientSideGeneration && MapItem::isHoldingMap(player, packet.mUniqueMapId)) {
         Level &mapLevel = MapItem::getMapLevel(owner, player);
         if (MapItemSavedData *data = mapLevel.getMapData(packet.mUniqueMapId))
             data->applyClientPixels(packet.mPixels);

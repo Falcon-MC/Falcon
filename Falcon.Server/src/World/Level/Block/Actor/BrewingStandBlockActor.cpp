@@ -12,7 +12,6 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Core/Math/VectorMath.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <memory>
@@ -110,16 +109,11 @@ bool BrewingStandBlockActor::tick(ServerNetworkHandler &owner) {
         return true;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREW)) {
-        ItemStack ingredient = mInventory.getContainerItem(SLOT_INGREDIENT);
-        PluginEvent event;
-        event.mType = FALCON_EVENT_BREW;
-        event.mCancellable = true;
-        event.mLevel = mLevel;
-        event.mBlockPosition = mPosition;
-        event.mItem = &ingredient;
-        plugins->dispatch(event);
-        if (event.mCancelled) {
+    EventSignal<BrewBeforeEvent> &brew = owner.getEventBus().before().mBrew;
+    if (brew.hasSubscribers()) {
+        BrewBeforeEvent event(*mLevel, mPosition, mInventory.getContainerItem(SLOT_INGREDIENT));
+        brew.emit(event);
+        if (event.isCancelled()) {
             _stopBrewing(owner);
             return true;
         }
@@ -151,16 +145,27 @@ void BrewingStandBlockActor::_restockFuel(ServerNetworkHandler &owner) {
         return;
 
     ItemStack fuel = mInventory.getContainerItem(SLOT_FUEL);
-    if (identifierOf(fuel) != BLAZE_POWDER || fuel.mCount <= 0)
+    const bool validFuel = identifierOf(fuel) == BLAZE_POWDER && fuel.mCount > 0;
+    int fuelTime = FUEL_PER_BLAZE_POWDER;
+    EventSignal<BrewingFuelUseBeforeEvent> &fuelUse = owner.getEventBus().before().mBrewingFuelUse;
+    if (fuelUse.hasSubscribers() && _hasMix()) {
+        BrewingFuelUseBeforeEvent event(*mLevel, mPosition, fuel, fuelTime);
+        event.setCancelled(!validFuel);
+        fuelUse.emit(event);
+        if (event.isCancelled())
+            return;
+        fuelTime = event.mFuelTime;
+    } else if (!validFuel) {
         return;
+    }
 
     --fuel.mCount;
     if (fuel.mCount <= 0)
         fuel = ItemStack::air();
     mInventory.setContainerItem(SLOT_FUEL, std::move(fuel));
 
-    mFuelAmount = FUEL_PER_BLAZE_POWDER;
-    mFuelTotal = FUEL_PER_BLAZE_POWDER;
+    mFuelAmount = fuelTime;
+    mFuelTotal = fuelTime;
     _sendProperty(owner, PROPERTY_FUEL_AMOUNT, mFuelAmount);
     _sendProperty(owner, PROPERTY_FUEL_TOTAL, mFuelTotal);
     owner.refreshContainerViewers(mPosition, nullptr);
@@ -172,7 +177,9 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
     if (reagentId.empty())
         return;
 
+    EventSignal<BrewItemBeforeEvent> &brewItem = owner.getEventBus().before().mBrewItem;
     bool mixed = false;
+    bool tried = false;
     for (int slot = FIRST_POTION_SLOT; slot < FIRST_POTION_SLOT + POTION_SLOTS; ++slot) {
         const ItemStack &potion = mInventory.getContainerItem(slot);
         const std::string potionId = identifierOf(potion);
@@ -192,11 +199,18 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
         result.mDefinition = std::move(output);
         if (mix->mOutputMeta >= 0)
             result.mDamage = mix->mOutputMeta;
+        tried = true;
+        if (brewItem.hasSubscribers()) {
+            BrewItemBeforeEvent event(*mLevel, mPosition, slot, potion, result);
+            brewItem.emit(event);
+            if (event.isCancelled())
+                continue;
+        }
         mInventory.setContainerItem(slot, std::move(result));
         mixed = true;
     }
 
-    if (!mixed)
+    if (!tried)
         return;
 
     --ingredient.mCount;
@@ -208,7 +222,8 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
     _sendProperty(owner, PROPERTY_FUEL_AMOUNT, mFuelAmount);
     _sendProperty(owner, PROPERTY_FUEL_TOTAL, mFuelTotal);
     owner.refreshContainerViewers(mPosition, nullptr);
-    owner.playLevelSound(*mLevel, LevelSoundEvent::POTION_BREWED, centerOf(mPosition));
+    if (mixed)
+        owner.playLevelSound(*mLevel, LevelSoundEvent::POTION_BREWED, centerOf(mPosition));
 }
 
 void BrewingStandBlockActor::_stopBrewing(ServerNetworkHandler &owner) {

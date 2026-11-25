@@ -1,3 +1,6 @@
+#include "Falcon/Plugin/LoadedPlugin.h"
+#include "Falcon/Plugin/PluginManager.h"
+#include "Falcon/Plugin/PluginServerApi.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorClassRegistry.h"
@@ -47,6 +50,34 @@ namespace {
         owner.tickActors();
         require(cow->hasEffect(MobEffectId::Slowness), "the cow in the cloud got no effect");
         require(!cloud->hasEffect(MobEffectId::Slowness), "the cloud applied its potion to itself");
+
+        const FalconServerApi &api = PluginServerApi::get();
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Cloud fixture";
+        listener.mEnabled = true;
+        const auto change = api.subscribe(
+                PluginManager::toHandle(listener), FALCON_EVENT_AREA_EFFECT_CLOUD_APPLY, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *) {
+                    PluginServerApi::get().eventSetData(event, "{\"effects\":[[1,200,1,false,true]]}");
+                }, nullptr);
+        ServerActor *second = owner.spawnActor(level, "minecraft:cow", Vector3f(3.5f, 100.0f, 3.5f));
+        require(second != nullptr, "no second fixture cow");
+        settings.mReapplicationDelay = 1;
+        require(owner.spawnAreaEffectCloud(level, second->getPosition(), settings) != nullptr, "no second fixture cloud");
+        owner.tickActors();
+        api.unsubscribe(change);
+        const auto *speed = second->getEffect(MobEffectId::Speed);
+        require(speed != nullptr && speed->mAmplifier == 1 && speed->mDuration == 200
+                        && !speed->mParticles && speed->mAmbient,
+                "plugin replacement effect was ignored or lost its attributes");
+        require(!second->hasEffect(MobEffectId::Slowness), "replaced effect still reached the target");
+
+        auto *later = owner.spawnActor(level, "minecraft:cow", second->getPosition());
+        require(later != nullptr, "no fixture cow for a later application");
+        for (int tick = 0; tick < 15 && !later->hasEffect(MobEffectId::Speed); ++tick)
+            owner.tickActors();
+        require(later->hasEffect(MobEffectId::Speed) && !later->hasEffect(MobEffectId::Slowness),
+                "plugin replacement did not persist to the next application");
 
         const std::unique_ptr<ServerActor> reloaded = ActorClassRegistry::create(1, "minecraft:area_effect_cloud");
         require(reloaded != nullptr && !reloaded->shouldSave(), "a cloud is saved without the state that drives it");

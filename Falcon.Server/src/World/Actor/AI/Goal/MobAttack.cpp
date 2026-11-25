@@ -18,15 +18,17 @@ bool MobAttack::hit(ServerNetworkHandler &owner, MobActor &mob, Actor &target, f
     if (damage <= 0.0f)
         return false;
 
-    const float healthBefore = target.getHealth();
+    bool landed = false;
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
-        owner.hurt(*player, damage,
-                   ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(), mob.getPosition()));
+        landed = owner.hurt(*player, damage,
+                            ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
+                                                      mob.getPosition()))
+                 == DamageResult::Dealt;
     } else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target)) {
-        owner.damageActor(*actor, damage, &mob);
+        landed = owner.damageActor(*actor, damage, &mob);
     }
 
-    if (target.getHealth() >= healthBefore)
+    if (!landed)
         return false;
 
     mob.getAnger().onAttack(owner, mob, target);

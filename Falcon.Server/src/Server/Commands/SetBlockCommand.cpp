@@ -89,7 +89,7 @@ bool SetBlockCommand::placeBlock(ServerNetworkHandler &handler, Level &level, co
 
 bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 4 || arguments.size() > 5) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -100,12 +100,11 @@ bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::stri
     }
 
     const Vector3f origin = sender.getPosition();
-    const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                               (int32_t) std::floor(origin.z));
+    const Vector3f rotation = sender.getRotation();
 
     Vector3i position;
-    if (!parseBlockPosition(arguments, 0, originBlock, position)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+    if (!parseBlockPosition(arguments, 0, origin, rotation, position)) {
+        sendUsageError(sender);
         return false;
     }
 
@@ -117,7 +116,7 @@ bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::stri
 
     const std::string mode = arguments.size() == 5 ? arguments[4] : "replace";
     if (std::find(MODES.begin(), MODES.end(), mode) == MODES.end()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

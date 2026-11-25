@@ -25,9 +25,8 @@ using namespace RangedWeaponHelpers;
 namespace {
     const char *TRIDENT_ACTOR = "minecraft:thrown_trident";
 
-    const float TRIDENT_MAX_FORCE = 2.5f;
     const float TRIDENT_BASE_DAMAGE = 8.0f;
-    const int32_t TRIDENT_MINIMUM_TICKS = 5;
+    const int32_t TRIDENT_MINIMUM_TICKS = 10;
     const float RIPTIDE_GROUND_LIFT = 1.2f;
     const int32_t SPIN_ATTACK_TICKS = 20;
 }
@@ -96,11 +95,11 @@ bool TridentItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player,
         return applyRiptide(owner, player, riptide);
     }
 
-    const float force = chargeForce(elapsedTicks, TRIDENT_MAX_FORCE);
-    if (force < 0.1f || elapsedTicks < TRIDENT_MINIMUM_TICKS)
+    // the game throws it at its full power once drawn long enough, the draw time does not scale it
+    if (elapsedTicks < TRIDENT_MINIMUM_TICKS)
         return false;
 
-    ServerActor *trident = owner.spawnProjectile(player, TRIDENT_ACTOR, force);
+    ServerActor *trident = owner.spawnProjectile(player, TRIDENT_ACTOR);
     if (trident == nullptr)
         return false;
 

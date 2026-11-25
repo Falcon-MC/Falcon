@@ -78,8 +78,7 @@ bool EndCrystalActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPl
 
     Level &level = owner.getLevelFor(*this);
 
-    Explosion explosion(owner, level, getPosition(), EXPLOSION_SIZE, this, false);
-    explosion.explode();
+    owner.explodeAfterActors(level, getPosition(), EXPLOSION_SIZE, *this, false);
 
     if (level.getDimensionType() == DimensionType::TheEnd)
         owner.getWorldFor(*this).getDragonFight().onCrystalDestroyed(owner, level, *this, (Actor *) source);

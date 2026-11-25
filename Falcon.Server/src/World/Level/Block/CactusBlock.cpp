@@ -42,10 +42,9 @@ bool CactusBlock::getCollisionShape(const BlockState &state, const Actor *actor,
 
 void CactusBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                                 const BlockState &state) const {
-    (void) position;
     (void) state;
 
-    owner.hurtActor(actor, CACTUS_DAMAGE, "death.attack.cactus");
+    owner.hurtActor(actor, CACTUS_DAMAGE, "death.attack.cactus", position);
 }
 
 void CactusBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

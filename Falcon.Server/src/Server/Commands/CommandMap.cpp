@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <utility>
 
 namespace {
     std::string toLowerCase(const std::string &value) {
@@ -9,6 +11,46 @@ namespace {
         std::transform(lowered.begin(), lowered.end(), lowered.begin(),
                        [](unsigned char character) { return (char) std::tolower(character); });
         return lowered;
+    }
+
+    // the parts of a token made only of ~ coordinates, or nothing
+    std::vector<std::string> relativeParts(const std::string &token) {
+        if (token.empty() || token[0] != '~')
+            return {};
+
+        std::vector<std::string> parts;
+        for (size_t begin = 0; begin < token.size();) {
+            const size_t end = token.find('~', begin + 1);
+            parts.push_back(token.substr(begin, end == std::string::npos ? std::string::npos : end - begin));
+            begin = end;
+        }
+
+        float ignored = 0.0f;
+        for (const std::string &part: parts) {
+            if (!Command::parseCoordinate(part, 0.0f, ignored))
+                return {};
+        }
+        return parts;
+    }
+
+    // a message keeps its text as typed
+    bool takesMessage(const Command &command) {
+        for (const CommandOverloadData &overload: command.getOverloads()) {
+            for (const CommandParamData &parameter: overload.mParameters) {
+                if (parameter.mHasType && parameter.mType == CommandParamType::Message)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    // the ~ tokens from first on, up to a chained command's run: what follows it splits when dispatched
+    void splitBeforeChain(const Command &command, std::vector<std::string> &tokens, size_t first,
+                          std::vector<size_t> *starts = nullptr, std::vector<size_t> *ends = nullptr) {
+        size_t last = tokens.size();
+        if (command.chainsCommands() && first < tokens.size())
+            last = (size_t) (std::find(tokens.begin() + (std::ptrdiff_t) first, tokens.end(), "run") - tokens.begin());
+        CommandMap::splitRelativeCoordinates(tokens, starts, ends, first, last);
     }
 }
 
@@ -40,12 +82,33 @@ void CommandMap::unregisterCommand(const std::string &name) {
                     mCommands.end());
 }
 
+void CommandMap::setAliases(Command &command, const std::vector<std::string> &aliases) {
+    const std::string name = toLowerCase(command.getName());
+    for (auto it = mByName.begin(); it != mByName.end();) {
+        if (it->second == &command && it->first != name)
+            it = mByName.erase(it);
+        else
+            ++it;
+    }
+
+    std::vector<std::string> kept;
+    for (const std::string &alias: aliases) {
+        const std::string key = toLowerCase(alias);
+        if (key.empty() || key.find(' ') != std::string::npos || mByName.count(key) != 0)
+            continue;
+        mByName[key] = &command;
+        kept.push_back(key);
+    }
+    command.setAliases(std::move(kept));
+}
+
 Command *CommandMap::getCommand(const std::string &name) const {
     auto it = mByName.find(toLowerCase(name));
     return it == mByName.end() ? nullptr : it->second;
 }
 
-std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, std::vector<size_t> *starts) {
+std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, std::vector<size_t> *starts,
+                                              bool *endsInToken, std::vector<size_t> *ends) {
     std::vector<std::string> tokens;
     std::string token;
     bool quoted = false;
@@ -95,6 +158,8 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
                 tokens.push_back(token);
                 if (starts != nullptr)
                     starts->push_back(start);
+                if (ends != nullptr)
+                    ends->push_back(index);
                 token.clear();
                 started = false;
             }
@@ -105,13 +170,44 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
         started = true;
     }
 
+    if (endsInToken != nullptr)
+        *endsInToken = started;
     if (started) {
         tokens.push_back(token);
         if (starts != nullptr)
             starts->push_back(start);
+        if (ends != nullptr)
+            ends->push_back(commandLine.size());
     }
 
     return tokens;
+}
+
+void CommandMap::splitRelativeCoordinates(std::vector<std::string> &tokens, std::vector<size_t> *starts,
+                                          std::vector<size_t> *ends, size_t first, size_t last) {
+    for (size_t index = first; index < std::min(last, tokens.size()); ++index) {
+        const std::vector<std::string> parts = relativeParts(tokens[index]);
+        if (parts.size() < 2)
+            continue;
+
+        tokens.erase(tokens.begin() + (std::ptrdiff_t) index);
+        tokens.insert(tokens.begin() + (std::ptrdiff_t) index, parts.begin(), parts.end());
+        if (starts != nullptr && index < starts->size()) {
+            size_t start = (*starts)[index];
+            starts->erase(starts->begin() + (std::ptrdiff_t) index);
+            if (ends != nullptr && index < ends->size())
+                ends->erase(ends->begin() + (std::ptrdiff_t) index);
+            for (size_t part = 0; part < parts.size(); ++part) {
+                starts->insert(starts->begin() + (std::ptrdiff_t) (index + part), start);
+                start += parts[part].size();
+                if (ends != nullptr)
+                    ends->insert(ends->begin() + (std::ptrdiff_t) (index + part), start);
+            }
+        }
+        index += parts.size() - 1;
+        if (last != (size_t) -1)
+            last += parts.size() - 1;
+    }
 }
 
 std::string CommandMap::_skipFields(const std::string &commandLine, size_t count) {
@@ -137,6 +233,33 @@ std::string CommandMap::_skipFields(const std::string &commandLine, size_t count
     return commandLine.substr(index);
 }
 
+namespace {
+    // commands run on the main thread
+    const CommandMap::DispatchContext *currentContext = nullptr;
+
+    // nested dispatches (execute run, functions) restore the outer line when they finish
+    class DispatchScope {
+    public:
+        explicit DispatchScope(const CommandMap::DispatchContext &context) : mPrevious(currentContext) {
+            currentContext = &context;
+        }
+
+        ~DispatchScope() {
+            currentContext = mPrevious;
+        }
+
+        DispatchScope(const DispatchScope &) = delete;
+        DispatchScope &operator=(const DispatchScope &) = delete;
+
+    private:
+        const CommandMap::DispatchContext *mPrevious;
+    };
+}
+
+const CommandMap::DispatchContext *CommandMap::currentDispatch() {
+    return currentContext;
+}
+
 bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine) {
     std::string line = commandLine;
     if (!line.empty() && line[0] == '/')
@@ -152,14 +275,29 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
         return false;
     }
 
-    if ((int) sender.getCommandPermission() < (int) command->getRequiredPermission()) {
+    if (!sender.canExecuteCommand(*command)) {
         sender.sendTranslation("commands.generic.error.permissions", {tokens[0]});
         return false;
     }
 
-    std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
-
     const size_t rawIndex = command->getRawArgumentIndex();
+    // the game reads ~ as a token of its own, spaces or not; a chained command splits under its own rules
+    const bool splits = rawIndex == (size_t) -1 && !takesMessage(*command);
+
+    // the syntax error quotes the line as it was typed, slash included, and reads its tokens as the command does
+    DispatchContext context;
+    context.mCommand = command;
+    context.mLine = commandLine;
+    context.mTokens = tokenize(commandLine, &context.mStarts, nullptr, &context.mEnds);
+    if (!context.mTokens.empty() && context.mTokens[0].starts_with('/'))
+        context.mTokens[0].erase(0, 1);
+    if (splits)
+        splitBeforeChain(*command, context.mTokens, 1, &context.mStarts, &context.mEnds);
+    const DispatchScope scope(context);
+
+    std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
+    if (splits)
+        splitBeforeChain(*command, arguments, 0);
     if (rawIndex != (size_t) -1 && arguments.size() > rawIndex) {
         const std::string raw = _skipFields(line, rawIndex + 1);
         if (!raw.empty()) {
@@ -179,4 +317,96 @@ std::vector<Command *> CommandMap::getCommands() const {
         commands.push_back(command.get());
 
     return commands;
+}
+
+std::vector<std::string> CommandMap::complete(const std::string &line, const std::vector<std::string> &playerNames,
+                                              size_t &replacementStart) const {
+    std::vector<size_t> starts;
+    bool endsInToken = false;
+    auto tokens = tokenize(line, &starts, &endsInToken);
+    const bool newArgument = !endsInToken;
+    replacementStart = newArgument || starts.empty() ? line.size() : starts.back();
+    std::string prefix;
+    if (!newArgument && !tokens.empty()) {
+        prefix = std::move(tokens.back());
+        tokens.pop_back();
+    }
+
+    if (tokens.empty() && prefix.starts_with('/')) {
+        prefix.erase(0, 1);
+        ++replacementStart;
+    }
+    const std::string lowered = toLowerCase(prefix);
+    const auto printable = [](const std::string &value) {
+        return std::none_of(value.begin(), value.end(), [](unsigned char byte) {
+            return byte < 32 || byte == 127;
+        });
+    };
+    std::vector<std::string> results;
+    auto collect = [&](const std::string &value) {
+        if (printable(value) && toLowerCase(value).starts_with(lowered))
+            results.push_back(value);
+    };
+
+    if (tokens.empty()) {
+        for (const auto &[name, command]: mByName)
+            collect(name);
+    } else {
+        const std::string &name = tokens.front();
+        const Command *command = getCommand(name.starts_with('/') ? name.substr(1) : name);
+        if (command == nullptr)
+            return {};
+        for (const auto &overload: command->getOverloads()) {
+            size_t token = 1;
+            for (const auto &parameter: overload.mParameters) {
+                const bool position = parameter.mHasType
+                                      && (parameter.mType == CommandParamType::Position
+                                          || parameter.mType == CommandParamType::BlockPosition);
+                const bool identifier = parameter.mHasEnumData
+                                        && (parameter.mEnumData.mName == "Item" || parameter.mEnumData.mName == "Block");
+                if (token >= tokens.size()) {
+                    if (parameter.mHasEnumData) {
+                        for (const auto &value: parameter.mEnumData.mValues) {
+                            collect(value);
+                            if (identifier && lowered.starts_with("minecraft:") && value.find(':') == std::string::npos)
+                                collect("minecraft:" + value);
+                        }
+                    }
+                    if (parameter.mHasType && (parameter.mType == CommandParamType::Target
+                                               || parameter.mType == CommandParamType::WildcardTarget)) {
+                        for (const auto &player: playerNames) {
+                            if (!printable(player) || !toLowerCase(player).starts_with(lowered))
+                                continue;
+                            if (player.find_first_of(" \t\"\\") == std::string::npos) {
+                                results.push_back(player);
+                                continue;
+                            }
+                            std::string quoted = "\"";
+                            for (const char byte: player) {
+                                if (byte == '"' || byte == '\\')
+                                    quoted += '\\';
+                                quoted += byte;
+                            }
+                            results.push_back(quoted + '"');
+                        }
+                        for (const char *selector: {"@a", "@e", "@p", "@r", "@s"})
+                            collect(selector);
+                    }
+                    break;
+                }
+                if (parameter.mHasEnumData && !identifier) {
+                    const auto &values = parameter.mEnumData.mValues;
+                    if (std::find(values.begin(), values.end(), tokens[token]) == values.end())
+                        break;
+                }
+                token += position ? 3 : 1;
+                if (token > tokens.size())
+                    break;
+            }
+        }
+    }
+
+    std::sort(results.begin(), results.end());
+    results.erase(std::unique(results.begin(), results.end()), results.end());
+    return results;
 }

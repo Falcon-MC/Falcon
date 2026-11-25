@@ -30,7 +30,7 @@ void OpenDoorGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     const BlockState state = *door;
-    mOpened = DoorBlock::toggle(owner, level, mDoorPosition, state);
+    mOpened = DoorBlock::toggle(owner, level, mDoorPosition, state, &mob);
 }
 
 void OpenDoorGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
@@ -45,7 +45,7 @@ void OpenDoorGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     const BlockState state = *door;
-    DoorBlock::toggle(owner, level, mDoorPosition, state);
+    DoorBlock::toggle(owner, level, mDoorPosition, state, &mob);
 }
 
 void OpenDoorGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {

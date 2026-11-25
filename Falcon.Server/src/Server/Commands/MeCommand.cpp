@@ -23,13 +23,13 @@ std::vector<CommandOverloadData> MeCommand::getOverloads() const {
 
 bool MeCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
     const std::string action = joinArguments(arguments, 0);
     if (action.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

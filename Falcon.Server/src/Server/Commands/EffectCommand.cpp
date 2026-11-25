@@ -2,6 +2,7 @@
 
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/ServerActor.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
@@ -82,13 +83,18 @@ std::vector<CommandOverloadData> EffectCommand::getOverloads() const {
 
 bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
-    const std::vector<ServerPlayer *> targets = mHandler.resolveTargets(sender, arguments[0]);
+    // any entity the selector names, as the game's target parameter takes: players first
+    std::vector<Actor *> targets;
+    for (ServerPlayer *player: mHandler.resolveTargets(sender, arguments[0]))
+        targets.push_back(player);
+    for (ServerActor *actor: mHandler.resolveActorTargets(sender, arguments[0]))
+        targets.push_back(actor);
     if (targets.empty()) {
-        sender.sendTranslation("commands.generic.player.notFound", {});
+        sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
     }
 
@@ -101,7 +107,7 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
         }
 
         int removed = 0;
-        for (ServerPlayer *target: targets) {
+        for (Actor *target: targets) {
             if (clearOne) {
                 removed += target->removeEffect(only) ? 1 : 0;
             } else {
@@ -137,16 +143,16 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
         if (arguments[2] == "infinite") {
             infinite = true;
         } else if (!parseInteger(arguments[2], seconds) || seconds < 1) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
     }
     if (arguments.size() > 3 && (!parseInteger(arguments[3], amplifier) || amplifier < 0 || amplifier > 255)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     if (arguments.size() > 4 && !parseBoolean(arguments[4], particles)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -159,7 +165,7 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
     instance.mParticles = particles;
 
     int applied = 0;
-    for (ServerPlayer *target: targets)
+    for (Actor *target: targets)
         applied += target->addEffect(instance) ? 1 : 0;
 
     if (applied == 0) {

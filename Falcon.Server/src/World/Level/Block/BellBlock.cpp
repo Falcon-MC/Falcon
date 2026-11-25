@@ -11,6 +11,11 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Vibration/GameEvent.h"
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
 
 #include <cmath>
 #include <memory>
@@ -19,6 +24,14 @@ FALCON_REGISTER_BLOCK(BellBlock, 200);
 
 namespace {
     const char *const SOUND_BELL_HIT = "block.bell.hit";
+    const char *const HIDE_COMPONENT = "minecraft:hide";
+    const char *const WIND_CHARGE = "minecraft:wind_charge_projectile";
+    const char *const BREEZE_WIND_CHARGE = "minecraft:breeze_wind_charge_projectile";
+    // how far around the bell's block the mobs hear it
+    const float ALERT_REACH_XZ = 32.0f;
+    const float ALERT_REACH_Y = 12.0f;
+    const float ITEM_BOUNCE_MIN_SPEED = 0.0005f;
+    const float ITEM_BOUNCE_MIN_DISTANCE = 0.0001f;
 
     // the ring direction the bell swings to for each axis the player faces
     const int32_t RING_DIRECTION[] = {2, 3, 0, 1};
@@ -78,6 +91,100 @@ BlockState BellBlock::applyPlacementOrientation(const BlockState &state, const B
     return BlockState(result.mName, states);
 }
 
+// a burst rings it the way it faces, but never while it still swings
+bool BellBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            const BlockState &state) const {
+    BellBlockActor &bell = bellAt(owner, level, position, state);
+    if (!bell.isRinging())
+        ring(owner, level, position, state, state.mStates.getInt("direction", 0), nullptr);
+    return true;
+}
+
+bool BellBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &state, ServerActor &projectile) const {
+    // a wind charge rings it through its burst instead
+    const std::string identifier = projectile.getIdentifier();
+    if (identifier == WIND_CHARGE || identifier == BREEZE_WIND_CHARGE)
+        return false;
+    ring(owner, level, position, state, state.mStates.getInt("direction", 0), nullptr);
+    return false;
+}
+
+bool BellBlock::onItemHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                          const BlockState &state, ItemActor &item) const {
+    // an item at rest or sliding along one axis only does not ring it
+    const Vector3f motion = item.getMotion();
+    if (std::fabs(motion.x) <= ITEM_BOUNCE_MIN_SPEED || std::fabs(motion.y) <= ITEM_BOUNCE_MIN_SPEED
+        || std::fabs(motion.z) <= ITEM_BOUNCE_MIN_SPEED)
+        return false;
+
+    const Vector3f &at = item.getPosition();
+    float normalX = at.x - ((float) position.x + 0.5f);
+    float normalY = at.y - ((float) position.y + 0.5f);
+    float normalZ = at.z - ((float) position.z + 0.5f);
+    const float length = std::sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+    if (length < ITEM_BOUNCE_MIN_DISTANCE) {
+        normalX = normalY = normalZ = 0.0f;
+    } else {
+        normalX /= length;
+        normalY /= length;
+        normalZ /= length;
+    }
+    const float along = motion.x * normalX + motion.y * normalY + motion.z * normalZ;
+    item.setMotion(Vector3f(motion.x - 2.0f * along * normalX, motion.y - 2.0f * along * normalY,
+                            motion.z - 2.0f * along * normalZ));
+    ring(owner, level, position, state, state.mStates.getInt("direction", 0), &item);
+    return true;
+}
+
+void BellBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &state) const {
+    const bool powered = RedstoneSystem::isGettingPower(owner, level, position);
+    BellBlockActor &bell = bellAt(owner, level, position, state);
+    if (powered == bell.isPowered())
+        return;
+    bell.setPowered(powered);
+    if (powered)
+        ring(owner, level, position, state, state.mStates.getInt("direction", 0), nullptr);
+}
+
+void BellBlock::ring(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                     int32_t direction, Actor *source) {
+    BellBlockActor &bell = bellAt(owner, level, position, state);
+    bell.ring(direction);
+    BlockActionHandler::broadcastBlockActorData(owner, level, bell);
+    owner.playLevelSound(level, SOUND_BELL_HIT, Vector3f((float) position.x, (float) position.y, (float) position.z));
+
+    Tag states = state.mStates;
+    if (states.contains("toggle_bit")) {
+        states.putByte("toggle_bit", states.getByte("toggle_bit", 0) != 0 ? 0 : 1);
+        const BlockState toggled(state.mName, states);
+        level.setBlock(position, toggled, true);
+        BlockActionHandler::broadcastBlockUpdate(owner, level, position, toggled);
+    }
+    const Vector3f centre((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+    level.postGameEvent(GameEvents::BLOCK_CHANGE, centre, source);
+
+    if (!bell.canAlert())
+        return;
+    const AxisAlignedBB heard =
+            AxisAlignedBB((float) position.x, (float) position.y, (float) position.z, (float) position.x + 1.0f,
+                          (float) position.y + 1.0f, (float) position.z + 1.0f)
+                    .expand(ALERT_REACH_XZ, ALERT_REACH_Y, ALERT_REACH_XZ);
+    owner.forEachActorNear(centre, ALERT_REACH_XZ * 1.5f, [&](ServerActor &actor) {
+        MobActor *mob = dynamic_cast<MobActor *>(&actor);
+        if (mob == nullptr || !mob->isIn(level) || mob->getComponent(HIDE_COMPONENT) == nullptr)
+            return;
+        const ActorSize size = mob->getSize();
+        const Vector3f &at = mob->getPosition();
+        const float half = size.mWidth * 0.5f;
+        if (AxisAlignedBB(at.x - half, at.y, at.z - half, at.x + half, at.y + size.mHeight, at.z + half)
+                    .intersectsWith(heard))
+            mob->setHeardBell(true);
+    });
+    bell.startAlertCooldown();
+}
+
 bool BellBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                            const BlockState &state) const {
     const std::string attachment = state.mStates.getString("attachment", "standing");
@@ -94,21 +201,7 @@ bool BellBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (!rings)
         return false;
 
-    Level &level = owner.getLevelFor(player);
-    BellBlockActor *bell = &bellAt(owner, level, position, state);
-
-    // then the hit and toggle_bit flipped, as the game does
-    bell->ring(RING_DIRECTION[facing]);
-    BlockActionHandler::broadcastBlockActorData(owner, level, *bell);
-    owner.playLevelSound(level, SOUND_BELL_HIT, Vector3f((float) position.x, (float) position.y, (float) position.z));
-
-    Tag states = state.mStates;
-    if (states.contains("toggle_bit")) {
-        states.putByte("toggle_bit", states.getByte("toggle_bit", 0) != 0 ? 0 : 1);
-        const BlockState toggled(state.mName, states);
-        level.setBlock(position, toggled, true);
-        BlockActionHandler::broadcastBlockUpdate(owner, level, position, toggled);
-    }
+    ring(owner, owner.getLevelFor(player), position, state, RING_DIRECTION[facing], &player);
     return true;
 }
 
@@ -116,7 +209,10 @@ void BellBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, cons
                          const BlockState &state, const ItemStack &usedItem, int blockFace) const {
     (void) usedItem;
     (void) blockFace;
-    bellAt(owner, owner.getLevelFor(player), position, state);
+    Level &level = owner.getLevelFor(player);
+    bellAt(owner, level, position, state);
+    // the game reads the power every tick, so a bell placed beside a live source rings at once
+    onRedstonePower(owner, level, position, state);
 }
 
 const char *BellBlock::getBlockActorId() const {

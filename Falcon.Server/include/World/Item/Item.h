@@ -14,6 +14,7 @@ class ServerNetworkHandler;
 class ServerPlayer;
 class ItemStack;
 class Actor;
+class Level;
 struct DispenseSource;
 struct Vector3f;
 struct Vector3i;
@@ -64,7 +65,29 @@ public:
         return false;
     }
 
-    // Item::dispense (vtable +0x2A8, 26.60): false drops the item as a dropper does
+    // a mob's use on a block, as fertilize_farm_block makes it: false when the block takes none
+    virtual bool fertilizeBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        return false;
+    }
+
+    // how many of this item in one stack let a villager breed; 0: not breeding food
+    virtual int32_t getVillagerBreedingCount() const {
+        return 0;
+    }
+
+    virtual bool isFertilizer() const {
+        return false;
+    }
+
+    // what a farmer puts in its composter, beyond what it keeps
+    virtual bool isFarmerCompost() const {
+        return false;
+    }
+
+    // the item's own dispense; false drops the item as a dropper does
     virtual bool dispense(const DispenseSource &source) const {
         (void) source;
         return false;
@@ -111,7 +134,8 @@ public:
     }
 
     // 0: the item's minecraft:use_duration
-    virtual int32_t getUseDuration() const {
+    virtual int32_t getUseDuration(const ItemStack &item) const {
+        (void) item;
         return 0;
     }
 

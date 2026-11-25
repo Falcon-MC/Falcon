@@ -14,7 +14,7 @@ std::vector<CommandOverloadData> ParticleCommand::getOverloads() const {
 
 bool ParticleCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -26,10 +26,8 @@ bool ParticleCommand::execute(CommandOrigin &sender, const std::vector<std::stri
 
     const Vector3f origin = sender.getPosition();
     Vector3f position = origin;
-    if (arguments.size() > 3
-        && (!parseCoordinate(arguments[1], origin.x, position.x) || !parseCoordinate(arguments[2], origin.y, position.y)
-            || !parseCoordinate(arguments[3], origin.z, position.z))) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+    if (arguments.size() > 3 && !parsePosition(arguments, 1, origin, sender.getRotation(), position)) {
+        sendUsageError(sender);
         return false;
     }
 

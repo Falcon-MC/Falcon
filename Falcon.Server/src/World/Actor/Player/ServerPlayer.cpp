@@ -1,10 +1,12 @@
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Player/FogStack.h"
 #include "Network/ConnectionRequest.h"
 #include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Projectile/ProjectileActor.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Math/MathConstants.h"
 #include "World/Inventory/ItemStackNbt.h"
@@ -31,6 +33,7 @@
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Types/CameraPresets.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Scripting/Binding/ScriptRaycast.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Localization.h"
 #include "World/Item/ItemProperties.h"
@@ -61,6 +64,7 @@ namespace {
     const char *TAG_FIRE = "Fire";
     const char *TAG_AIR = "Air";
     const char *TAG_GAME_MODE = "playerGameType";
+    const char *TAG_TIME_SINCE_REST = "TimeSinceRest";
     const char *TAG_FIRST_PLAYED = "firstPlayed";
     const char *TAG_LAST_PLAYED = "lastPlayed";
     const char *TAG_LAST_KNOWN_XUID = "LastKnownXUID";
@@ -110,12 +114,9 @@ namespace {
     }
 
     constexpr float MAX_REACH = 8.0f;
-    using MovementPhysics::PLAYER_EYE_HEIGHT;
     constexpr float FACING_MIN_DISTANCE = 1.0e-4f;
     constexpr float SPIN_ATTACK_DAMAGE = 8.0f;
     constexpr float SPIN_ATTACK_REACH = 1.0f;
-    constexpr float PLAYER_WIDTH = 0.6f;
-    constexpr float PLAYER_HEIGHT = 1.8f;
     constexpr int ATTACK_COOLDOWN_TICKS = 10;
 
     void broadcastEvent(ServerNetworkHandler &owner, const Actor &actor, EntityEventType eventType) {
@@ -125,10 +126,7 @@ namespace {
         packet.mEventData = 0;
         packet.mHasFirePosition = false;
 
-        for (const auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet, owner.getCodecContext());
-        }
+        owner.sendToActorViewers(actor, packet, true);
     }
 
     void broadcastAnimation(ServerNetworkHandler &owner, const Actor &actor, AnimatePacket::Action action) {
@@ -138,10 +136,7 @@ namespace {
         packet.mData = 0.0f;
         packet.mSwingSource.clear();
 
-        for (const auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet, owner.getCodecContext());
-        }
+        owner.sendToActorViewers(actor, packet, true);
     }
 
     void sendMotion(ServerNetworkHandler &owner, const ServerPlayer &player) {
@@ -150,10 +145,7 @@ namespace {
         packet.mMotion = player.getMotion();
         packet.mTick = (uint64_t) owner.getCurrentTick();
 
-        for (const auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet, owner.getCodecContext());
-        }
+        owner.sendToActorViewers(player, packet, true);
     }
 
     void damageArmor(ServerNetworkHandler &owner, ServerPlayer &victim, float baseDamage) {
@@ -194,6 +186,17 @@ bool ServerPlayer::canStandOnPowderSnow() const {
     return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
 }
 
+float ServerPlayer::getBodyHeight() const {
+    if (!hasScaleOverride())
+        return MovementPhysics::PLAYER_HEIGHT;
+    if (getFlags().get(ActorFlag::Swimming) || getFlags().get(ActorFlag::Gliding)
+        || getFlags().get(ActorFlag::Crawling))
+        return MovementPhysics::PLAYER_CRAWLING_HEIGHT * getScale();
+    if (getFlags().get(ActorFlag::Sneaking))
+        return MovementPhysics::PLAYER_SNEAKING_HEIGHT * getScale();
+    return MovementPhysics::PLAYER_HEIGHT * getScale();
+}
+
 float ServerPlayer::getArmorKnockbackResistance() const {
     float resistance = 0.0f;
     for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
@@ -203,6 +206,7 @@ float ServerPlayer::getArmorKnockbackResistance() const {
 
 ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, PacketSender *sender)
         : Actor(runtimeId), mId(id), mLoginState(LoginState::Connecting), mSender(sender) {
+    addTypeFlag(ActorTypeFlag::PlayerComponent);
     getEffects().setEventCallback([this](const MobEffectInstance &effect, MobEffectEvent event) {
         if (mSender == nullptr || !mEffectsNetworkReady)
             return;
@@ -254,8 +258,15 @@ Vector3f ServerPlayer::getLookDirection() const {
 
 bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const {
     const float threshold = std::clamp(owner.getProperties().getPlayerMovementActionDirectionThreshold(), 0.0f, 1.0f);
-    const Vector3f eye(getPosition().x, getPosition().y + PLAYER_EYE_HEIGHT, getPosition().z);
+    const Vector3f eye(getPosition().x, getPosition().y + getEyeHeight(), getPosition().z);
     const float half = width * 0.5f;
+    const Vector3f look = getLookDirection();
+    // the client only attacks what its look ray hits: from inside the box, the nearest point can be far off the look
+    if (ScriptRaycast::intersectBox(eye, look, Vector3f(targetFeet.x - half, targetFeet.y, targetFeet.z - half),
+                                    Vector3f(targetFeet.x + half, targetFeet.y + height, targetFeet.z + half))
+        >= 0.0f)
+        return true;
+
     const Vector3f closest(std::clamp(eye.x, targetFeet.x - half, targetFeet.x + half),
                            std::clamp(eye.y, targetFeet.y, targetFeet.y + height),
                            std::clamp(eye.z, targetFeet.z - half, targetFeet.z + half));
@@ -264,7 +275,6 @@ bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &target
     if (length < FACING_MIN_DISTANCE)
         return true;
 
-    const Vector3f look = getLookDirection();
     return (look.x * toTarget.x + look.y * toTarget.y + look.z * toTarget.z) / length >= threshold;
 }
 
@@ -274,7 +284,7 @@ bool ServerPlayer::_scriptsCancelAttack(ServerNetworkHandler &owner, Actor &targ
     bool aimed = false;
     if (hitPosition != nullptr && std::isfinite(hitPosition->x) && std::isfinite(hitPosition->y)
         && std::isfinite(hitPosition->z)) {
-        const Vector3f delta(hitPosition->x - getPosition().x, hitPosition->y - (getPosition().y + PLAYER_EYE_HEIGHT),
+        const Vector3f delta(hitPosition->x - getPosition().x, hitPosition->y - (getPosition().y + getEyeHeight()),
                              hitPosition->z - getPosition().z);
         const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
         if (length > 0.0f) {
@@ -285,6 +295,24 @@ bool ServerPlayer::_scriptsCancelAttack(ServerNetworkHandler &owner, Actor &targ
     return owner.getScriptEngine().beforePlayerItemAttackEntity(*this, target, aimed ? &aim : nullptr);
 }
 
+// a punched projectile: shulker bullets break, fireballs and wind charges fly back the way the player looks
+bool ServerPlayer::_attackProjectile(ServerNetworkHandler &owner, ServerActor &target, const Vector3f *hitPosition,
+                                     bool checkReach) {
+    auto *projectile = dynamic_cast<ProjectileActor *>(&target);
+    if (projectile == nullptr)
+        return false;
+    const Vector3f delta(target.getPosition().x - getPosition().x, target.getPosition().y - getPosition().y,
+                         target.getPosition().z - getPosition().z);
+    if (checkReach && delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
+        return false;
+    const ActorSize size = target.getSize();
+    if (checkReach && !_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
+        return false;
+    if (_scriptsCancelAttack(owner, target, hitPosition))
+        return false;
+    return projectile->onMeleeHit(owner, *this);
+}
+
 bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition,
                                bool checkReach) {
     ActorEventPacket swing;
@@ -292,10 +320,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
     swing.mEventData = 0;
     swing.mHasFirePosition = false;
-    for (const auto &entry: owner.getPlayers()) {
-        if (&entry.second != this && entry.second.isSpawned() && entry.second.sharesLevelWith(*this))
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), swing, owner.getCodecContext());
-    }
+    owner.sendToActorViewers(*this, swing, false);
 
     if (!isSpawned() || isDead() || isSpectator())
         return false;
@@ -314,9 +339,10 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (victim == nullptr) {
         for (auto &entry: owner.getActors()) {
             ServerActor &target = *entry.second;
-            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || target.isProjectile()
-                || !target.sharesLevelWith(*this))
+            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || !target.sharesLevelWith(*this))
                 continue;
+            if (target.isProjectile())
+                return _attackProjectile(owner, target, hitPosition, checkReach);
 
             const Vector3f actorDelta(target.getPosition().x - getPosition().x,
                                       target.getPosition().y - getPosition().y,
@@ -351,8 +377,6 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
             attackDamage = _applyAttackerModifiers(baseDamage,
                                                    attackDamage + target.getMeleeEnchantmentBonus(weapon));
-            if (attackDamage <= 0.0f)
-                return false;
 
             const bool critical = _isCriticalHit();
             const bool magic = target.getMeleeEnchantmentBonus(weapon) > 0.0f;
@@ -394,7 +418,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (checkReach && delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
         return false;
 
-    if (checkReach && !_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+    if (checkReach && !_isFacing(owner, victim->getPosition(), victim->getBodyWidth(), victim->getBodyHeight()))
         return false;
 
     owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
@@ -418,8 +442,6 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         damage = std::max(0.0f, damage + heldType->getAttackDamageBonus(held, *this));
 
     damage = _applyAttackerModifiers(baseDamage, damage + victim->getMeleeEnchantmentBonus(held));
-    if (damage <= 0.0f)
-        return false;
 
     const bool axe = data != nullptr && data->mToolType == ToolType::Axe;
     const bool coldTarget = victim->getAttackTime() <= 0;
@@ -660,11 +682,11 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
 
     const Vector3f position = getPosition();
 
-    const auto reaches = [&position](const Vector3f &target, float width, float height) {
-        const float halfWidth = width * 0.5f + PLAYER_WIDTH * 0.5f + SPIN_ATTACK_REACH;
+    const auto reaches = [this, &position](const Vector3f &target, float width, float height) {
+        const float halfWidth = (width + getBodyWidth()) * 0.5f + SPIN_ATTACK_REACH;
         if (std::fabs(target.x - position.x) > halfWidth || std::fabs(target.z - position.z) > halfWidth)
             return false;
-        return target.y + height >= position.y && target.y <= position.y + PLAYER_HEIGHT;
+        return target.y + height >= position.y && target.y <= position.y + getBodyHeight();
     };
 
     for (auto &entry: owner.getActors()) {
@@ -689,7 +711,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
             || target.isSpectator())
             continue;
 
-        if (reaches(target.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+        if (reaches(target.getPosition(), target.getBodyWidth(), target.getBodyHeight()))
             owner.hurt(target, SPIN_ATTACK_DAMAGE,
                        ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(), position)
                                .withoutArmor()
@@ -1005,9 +1027,11 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
 
     data.putFloat(TAG_HEALTH, mAttributes.get("minecraft:health"));
     data.putInt(TAG_AIR, mAirSupply);
+    mWardenSpawnTracker.save(data);
     data.putString(TAG_LEVEL, levelName);
     data.putInt("DimensionId", Dimension::toId(mDimension));
     data.putInt(TAG_GAME_MODE, mGameType);
+    data.putInt(TAG_TIME_SINCE_REST, mTimeSinceRest);
     data.putLong(TAG_FIRST_PLAYED, mFirstPlayed == 0 ? currentTimeMillis() : mFirstPlayed);
     data.putLong(TAG_LAST_PLAYED, currentTimeMillis());
     data.putString(TAG_LAST_KNOWN_XUID, mXuid);
@@ -1080,6 +1104,8 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
 
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
     saveTags(data);
+    mRecipeUnlocks.save(data);
+    FogStack::save(mFogStack, data);
 
     return data;
 }
@@ -1096,6 +1122,9 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
         setUniqueId(data.getLong("UniqueID"));
 
     loadTags(data);
+    mRecipeUnlocks.load(data);
+    mWardenSpawnTracker.load(data);
+    FogStack::load(mFogStack, data);
 
     mPosition = Vector3f(listValue(data, TAG_POS, 0, mPosition.x), listValue(data, TAG_POS, 1, mPosition.y),
                          listValue(data, TAG_POS, 2, mPosition.z));
@@ -1112,6 +1141,7 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mAttributes.set("minecraft:health", storedHealth);
     mAirSupply = std::clamp(data.getInt(TAG_AIR, MAX_AIR_SUPPLY), -20, MAX_AIR_SUPPLY);
     mGameType = data.getInt(TAG_GAME_MODE, mGameType);
+    mTimeSinceRest = data.getInt(TAG_TIME_SINCE_REST, mTimeSinceRest);
     mFirstPlayed = data.getLong(TAG_FIRST_PLAYED, 0);
 
     mHasSpawnPoint = data.contains(TAG_SPAWN_BLOCK_X) || data.contains(TAG_SPAWN_X);
@@ -1216,4 +1246,17 @@ void ServerPlayer::recordCamera(const CameraInstructionPacket &packet) {
         mCameraState.mPreset = presets[(size_t) preset].mIdentifier;
     if (packet.mHasClear && packet.mClear)
         mCameraState.mPreset = "minecraft:first_person";
+}
+
+int32_t ServerPlayer::takeDeathExperience(ServerNetworkHandler &owner) {
+    if (mDeathExperienceTaken || isCreative()
+        || owner.getWorldFor(*this).getOverworld().getGameRules().getBool("keepinventory"))
+        return 0;
+    mDeathExperienceTaken = true;
+    return getExperience().getXpDropAmount();
+}
+
+void ServerPlayer::clearSculkCatalystState() {
+    mDeathExperienceTaken = false;
+    mHandledBySculkCatalyst = false;
 }

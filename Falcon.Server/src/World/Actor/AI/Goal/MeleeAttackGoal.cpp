@@ -1,6 +1,7 @@
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 
 #include "World/Actor/AI/Goal/MobAttack.h"
+#include "World/Actor/Definition/KnockbackRules.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
@@ -67,24 +68,27 @@ void MeleeAttackGoal::_tryAttack(ServerNetworkHandler &owner, MobActor &mob, Act
 }
 
 void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
-    const float damage = mob.getAttackDamage(owner.getProperties().getDifficulty());
+    const float damage = mob.getAttackDamage();
     if (damage <= 0.0f)
         return;
 
-    const float healthBefore = target.getHealth();
+    // a hit that lands pushes even when armor or resistance took all of it
+    bool landed = false;
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
         const ActorDamageSource source = ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
                                                                    mob.getPosition());
-        if (owner.hurt(*player, damage, source) == DamageResult::Blocked) {
+        const DamageResult result = owner.hurt(*player, damage, source);
+        if (result == DamageResult::Blocked) {
             owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
             mTicksSinceAttack = 0;
             return;
         }
+        landed = result == DamageResult::Dealt;
     } else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target)) {
-        owner.damageActor(*actor, damage, &mob);
+        landed = owner.damageActor(*actor, damage, &mob);
     }
 
-    if (target.getHealth() >= healthBefore)
+    if (!landed)
         return;
 
     mob.getAnger().onAttack(owner, mob, target);
@@ -92,7 +96,11 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor 
 
     const Vector3f mobPosition = mob.getPosition();
     const Vector3f targetPosition = target.getPosition();
-    owner.knockBack(target, targetPosition.x - mobPosition.x, targetPosition.z - mobPosition.z, ATTACK_KNOCKBACK);
+    KnockbackPreset preset;
+    if (KnockbackRules::select(owner, mob, target, preset))
+        owner.knockBack(target, targetPosition.x - mobPosition.x, targetPosition.z - mobPosition.z, preset);
+    else
+        owner.knockBack(target, targetPosition.x - mobPosition.x, targetPosition.z - mobPosition.z, ATTACK_KNOCKBACK);
     owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
     mTicksSinceAttack = 0;
 }

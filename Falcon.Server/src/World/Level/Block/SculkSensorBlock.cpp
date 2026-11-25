@@ -1,6 +1,8 @@
 #include "World/Level/Block/SculkSensorBlock.h"
 
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Mob/Hostile/WardenActor.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/SculkSensorBlockActor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockMaterial.h"
@@ -19,6 +21,7 @@ FALCON_REGISTER_BLOCK(CalibratedSculkSensorBlock, 353);
 
 namespace {
     const char *STATE_PHASE = "sculk_sensor_phase";
+    const char *STATE_CARDINAL_DIRECTION = "minecraft:cardinal_direction";
     const char *SOUND_POWER_ON = "power.on.sculk_sensor";
     const char *SOUND_POWER_OFF = "power.off.sculk_sensor";
     const char *SOUND_RESONATE = "resonate.amethyst_block";
@@ -126,6 +129,18 @@ void SculkSensorBlock::activate(ServerNetworkHandler &owner, Level &level, const
     level.scheduleUpdate(position, block->getActiveTicks());
 }
 
+// anything stepping on it but a warden or a projectile touches the sculk
+void SculkSensorBlock::onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                                const BlockState &state) const {
+    (void) state;
+    if (!actor.isAlive() || dynamic_cast<const WardenActor *>(&actor) != nullptr)
+        return;
+    const ServerActor *server = dynamic_cast<const ServerActor *>(&actor);
+    if (server != nullptr && server->isProjectile())
+        return;
+    owner.getLevelFor(actor).postGameEvent(GameEvents::SCULK_TOUCH, centerOf(position), &actor);
+}
+
 // SculkSensorBlock tick: active turns to cooldown and its power drops, cooldown ends
 void SculkSensorBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &state) const {
@@ -153,6 +168,25 @@ int SculkSensorBlock::getEmittedSignal(Level &level, const Vector3i &position, c
     if (actor == nullptr)
         return 0;
     return !strong || face == RedstoneFace::DOWN ? actor->getPower() : 0;
+}
+
+int CalibratedSculkSensorBlock::inputFace(const BlockState &state) {
+    const int facing = RedstoneFace::fromName(state.mStates.getString(STATE_CARDINAL_DIRECTION, "south"));
+    return RedstoneFace::opposite(facing == RedstoneFace::NONE ? RedstoneFace::SOUTH : facing);
+}
+
+int CalibratedSculkSensorBlock::inputSignal(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                            const BlockState &state) {
+    const int face = inputFace(state);
+    return RedstoneSystem::getRedstonePower(owner, level, RedstoneFace::relative(position, face), face);
+}
+
+// the game leaves the input side out of the producer's faces
+int CalibratedSculkSensorBlock::getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state,
+                                                 int face, bool strong) const {
+    if (face == RedstoneFace::opposite(inputFace(state)))
+        return 0;
+    return SculkSensorBlock::getEmittedSignal(level, position, state, face, strong);
 }
 
 // the frequency of the last vibration, while active only

@@ -450,7 +450,6 @@ std::vector<EnchantOptionData> EnchantmentHelper::getEnchantOptions(Level &level
         option.mCost = requiredLevel;
         option.mPrimarySlot = 0;
         option.mEnchantName = randomName(random);
-        option.mEnchantNetId = nextNetId()++;
 
         for (const EnchantmentInstance &instance: rolled) {
             EnchantEntry wire;
@@ -459,16 +458,23 @@ std::vector<EnchantOptionData> EnchantmentHelper::getEnchantOptions(Level &level
             option.mEnchants0.push_back(wire);
         }
 
-        StoredOption stored;
-        stored.mEnchantments = rolled;
-        stored.mEntry = entry;
-        stored.mRequiredLevel = requiredLevel;
-        recipeMap()[option.mEnchantNetId] = std::move(stored);
-
         options.push_back(std::move(option));
     }
-
+    registerOptions(options);
     return options;
+}
+
+void EnchantmentHelper::registerOptions(std::vector<EnchantOptionData> &options) {
+    for (size_t index = 0; index < options.size(); ++index) {
+        EnchantOptionData &option = options[index];
+        StoredOption stored;
+        stored.mEntry = (int32_t) index;
+        stored.mRequiredLevel = option.mCost;
+        for (const auto &enchant: option.mEnchants0)
+            stored.mEnchantments.push_back({enchant.mType, enchant.mLevel});
+        option.mEnchantNetId = nextNetId()++;
+        recipeMap()[option.mEnchantNetId] = std::move(stored);
+    }
 }
 
 std::vector<EnchantmentInstance> EnchantmentHelper::enchantWithLevels(const std::string &identifier, int32_t levels,
@@ -506,7 +512,7 @@ bool EnchantmentHelper::peekOptionCost(int32_t enchantNetId, int32_t &outConsume
     return true;
 }
 
-bool EnchantmentHelper::takeOption(int32_t enchantNetId, std::vector<EnchantmentInstance> &outEnchantments,
+bool EnchantmentHelper::readOption(int32_t enchantNetId, std::vector<EnchantmentInstance> &outEnchantments,
                                    int32_t &outConsumeCost, int32_t &outRequiredLevel) {
     const std::unordered_map<int32_t, StoredOption>::iterator found = recipeMap().find(enchantNetId);
     if (found == recipeMap().end())
@@ -515,6 +521,10 @@ bool EnchantmentHelper::takeOption(int32_t enchantNetId, std::vector<Enchantment
     outEnchantments = found->second.mEnchantments;
     outConsumeCost = found->second.mEntry + 1;
     outRequiredLevel = found->second.mRequiredLevel;
-    recipeMap().erase(found);
     return true;
+}
+
+void EnchantmentHelper::discardOptions(const std::vector<int32_t> &enchantNetIds) {
+    for (const int32_t enchantNetId: enchantNetIds)
+        recipeMap().erase(enchantNetId);
 }

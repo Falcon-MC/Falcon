@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 
+#include "World/Actor/Mob/Neutral/BeeActor.h"
+#include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -67,6 +69,16 @@ void BlockManager::setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockS
     const BlockState *interned = SubChunk::intern(state);
     mPlaces[key] = interned;
     mCaches[key] = interned;
+}
+
+void BlockManager::populateBeeNest(int32_t x, int32_t y, int32_t z, int32_t beeCount) {
+    constexpr int32_t GENERATED_STAY_TICKS = 600;
+    BeehiveBlockActor &hive = getLevel().getBlockActors().getOrCreate<BeehiveBlockActor>(Vector3i(x, y, z));
+    for (int32_t bee = 0; bee < beeCount; bee++) {
+        Tag saveData = Tag::ofCompound();
+        saveData.putString("identifier", BeeActor::IDENTIFIER);
+        hive.addOccupant(BeeActor::IDENTIFIER, std::move(saveData), GENERATED_STAY_TICKS);
+    }
 }
 
 void BlockManager::setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state) {

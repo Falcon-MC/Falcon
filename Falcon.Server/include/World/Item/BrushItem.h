@@ -12,7 +12,8 @@ public:
                       const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const override;
 
     // BrushItem ctor
-    int32_t getUseDuration() const override {
+    int32_t getUseDuration(const ItemStack &item) const override {
+        (void) item;
         return 72000;
     }
 };

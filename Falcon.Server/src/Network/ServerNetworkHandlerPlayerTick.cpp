@@ -11,7 +11,6 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/MapHandler.h"
 #include "Network/Handler/MovementHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
@@ -46,16 +45,12 @@ namespace {
 }
 
 void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
-    if (player.hasPendingMove() && player.getPendingMovePosition() != player.getPosition()) {
-        PluginEvent moveEvent;
-        moveEvent.mType = FALCON_EVENT_PLAYER_MOVE;
-        moveEvent.mCancellable = true;
-        moveEvent.mPlayer = &player;
-        moveEvent.mFrom = player.getPosition();
-        moveEvent.mTo = player.getPendingMovePosition();
-        PluginManager::getInstance().dispatch(moveEvent);
+    EventSignal<PlayerMoveBeforeEvent> &move = mEventBus.before().mPlayerMove;
+    if (player.hasPendingMove() && player.getPendingMovePosition() != player.getPosition() && move.hasSubscribers()) {
+        PlayerMoveBeforeEvent moveEvent(player, player.getPosition(), player.getPendingMovePosition());
+        move.emit(moveEvent);
 
-        if (moveEvent.mCancelled)
+        if (moveEvent.isCancelled())
             player.teleport(*this, moveEvent.mFrom);
         else if (moveEvent.mToChanged)
             player.teleport(*this, moveEvent.mTo);
@@ -96,9 +91,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     // vehicles still travel in tickActors; several rider inputs here would overwrite their controls
     const size_t steps = player.isRiding() ? 1 : 1 + ServerPlayerMovementComponent::catchupSteps(previousTickMs);
     const auto applyFlightRequest = [&](bool flying) {
-        // a server-side game mode change can revoke an already validated queued request
-        if (flying && !player.isCreative()
-            && !player.isSpectator())
+        // flight permission can change while a validated request waits for its movement input
+        if (!player.canToggleFlight())
             return;
         MovementHandler::requestFlight(*this, player.getNetworkIdentifier(), player, flying);
     };
@@ -125,6 +119,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     player.tickCombat(1);
     player.tickItemCooldowns(mCurrentTick);
+    player.getWardenSpawnTracker().tick();
     player.tickShield(*this);
     player.tickSpinAttack(*this);
     InventoryHandler::tickHiddenArmor(*this, player);
@@ -154,6 +149,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     if (player.isSpawned())
         MapHandler::tickPlayer(*this, player);
+
+    RecipeUnlockSystem::tick(*this, player);
 
     if (player.isSpawned())
         FreezingSystem::tick(*this, player);

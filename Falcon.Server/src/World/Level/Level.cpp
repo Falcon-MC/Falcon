@@ -15,8 +15,6 @@
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
@@ -54,6 +52,21 @@ namespace {
         uint64_t mEpoch = 0;
     };
     thread_local ChunkMemo tChunkMemo;
+
+    // a level without a server (tools, tests) tells no one
+    void emitChunkEvent(Level &level, EventSignal<ChunkAfterEvent> LevelAfterSignals::*which, int32_t chunkX,
+                        int32_t chunkZ, bool generated) {
+        ServerNetworkHandler *owner = level.getOwner();
+        if (owner == nullptr)
+            return;
+
+        EventSignal<ChunkAfterEvent> &signal = owner->getEventBus().after().*which;
+        if (!signal.hasSubscribers())
+            return;
+
+        ChunkAfterEvent event(level, chunkX, chunkZ, generated);
+        signal.emit(event);
+    }
 }
 
 namespace {
@@ -606,7 +619,8 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     LevelChunk chunk(chunkX, chunkZ);
     chunk.setDimension(mDimension);
 
-    if (!mStorage.isOpen() || !mStorage.loadChunk(chunk))
+    const bool generated = !mStorage.isOpen() || !mStorage.loadChunk(chunk);
+    if (generated)
         _generate(chunk);
 
     if (mStorage.isOpen() && mPendingChunks.find(key) == mPendingChunks.end()) {
@@ -624,13 +638,15 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
 
     mPendingChunks.erase(key);
 
-    auto result = mChunks.emplace(key, std::move(chunk));
-    _loadPendingTicks(result.first->second);
+    LevelChunk &inserted = mChunks.emplace(key, std::move(chunk)).first->second;
+    _loadPendingTicks(inserted);
     _replayPendingChanges(key);
     _refreshChunkShapes(chunkX, chunkZ);
     if (mOwner != nullptr)
-        RedstoneSystem::onChunkLoaded(*mOwner, *this, result.first->second);
-    return result.first->second;
+        RedstoneSystem::onChunkLoaded(*mOwner, *this, inserted);
+    if (generated && inserted.isPopulated())
+        emitChunkEvent(*this, &LevelAfterSignals::mChunkPopulate, chunkX, chunkZ, true);
+    return inserted;
 }
 
 LevelChunk &Level::generateTerrainChunk(int32_t chunkX, int32_t chunkZ) {
@@ -644,7 +660,10 @@ LevelChunk &Level::generateTerrainChunk(int32_t chunkX, int32_t chunkZ) {
     chunk.setDimension(mDimension);
     _generate(chunk);
 
-    return mChunks.emplace(key, std::move(chunk)).first->second;
+    LevelChunk &inserted = mChunks.emplace(key, std::move(chunk)).first->second;
+    if (inserted.isPopulated())
+        emitChunkEvent(*this, &LevelAfterSignals::mChunkPopulate, chunkX, chunkZ, true);
+    return inserted;
 }
 
 LevelChunk &Level::insertChunk(LevelChunk chunk) {
@@ -1239,7 +1258,7 @@ size_t Level::processChunkUnloads() {
         mOrphanCandidates.erase(key);
         it = mUnloadQueue.erase(it);
         unloaded++;
-        _dispatchChunkEvent(FALCON_EVENT_CHUNK_UNLOAD, chunkX, chunkZ, false);
+        emitChunkEvent(*this, &LevelAfterSignals::mChunkUnload, chunkX, chunkZ, false);
     }
 
     mUnloadedSinceTrim += unloaded;
@@ -1441,6 +1460,16 @@ void Level::startWorkers(size_t threadCount) {
     mChunkWorker->start(threadCount);
 }
 
+bool Level::isChunkRequested(int32_t chunkX, int32_t chunkZ) const {
+    return mPendingChunks.count(_packChunk(chunkX, chunkZ)) != 0;
+}
+
+bool Level::canRequestChunk() const {
+    return mChunkWorker != nullptr && mChunkWorker->isRunning() && _generationBacklog() < MAX_GENERATION_BACKLOG
+           && mCompletedChunks.size() < MAX_COMPLETED_BACKLOG
+           && mChunkWorker->getOutstandingGenerationCount() < ChunkWorker::MAX_OUTSTANDING_GENERATION;
+}
+
 bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     const int64_t key = _packChunk(chunkX, chunkZ);
 
@@ -1507,20 +1536,6 @@ void Level::_storeGeneratedContent(ChunkLoadResult &result) {
         mOwner->spawnStoredActors(*this, result.mEntities);
 }
 
-void Level::_dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated) {
-    PluginManager *plugins = PluginManager::findWithSubscribers(type);
-    if (plugins == nullptr)
-        return;
-
-    PluginEvent event;
-    event.mType = type;
-    event.mLevel = this;
-    event.mChunkX = chunkX;
-    event.mChunkZ = chunkZ;
-    event.mState = generated;
-    plugins->dispatch(event);
-}
-
 size_t Level::drainCompletedChunks() {
     if (mChunkWorker == nullptr)
         return 0;
@@ -1544,10 +1559,11 @@ size_t Level::drainCompletedChunks() {
         const bool canReplace = !canInsert && result.mReplacesResident && !resident->second.isPopulated();
 
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
+            const bool populated = result.mChunk->isPopulated() && (canReplace || result.mGenerated);
             if (canInsert) {
                 LevelChunk &inserted = mChunks.emplace(key, std::move(*result.mChunk)).first->second;
                 _loadPendingTicks(inserted);
-                _dispatchChunkEvent(FALCON_EVENT_CHUNK_LOAD, result.mX, result.mZ, result.mGenerated);
+                emitChunkEvent(*this, &LevelAfterSignals::mChunkLoad, result.mX, result.mZ, result.mGenerated);
             } else {
                 resident->second = std::move(*result.mChunk);
                 _loadPendingTicks(resident->second);
@@ -1560,6 +1576,8 @@ size_t Level::drainCompletedChunks() {
             _refreshChunkShapes(result.mX, result.mZ);
             _queueCompletedSaves(result.mX, result.mZ);
             _storeGeneratedContent(result);
+            if (populated)
+                emitChunkEvent(*this, &LevelAfterSignals::mChunkPopulate, result.mX, result.mZ, true);
         } else {
             // overtaken by a synchronous getChunk(), or discarded at shutdown: keep the spilled blocks it carried
             _restoreSpilledChanges(key, std::move(result.mSpilledChanges));
@@ -1807,6 +1825,8 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
         mBlockWatcher(x, y, z);
 
     mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), 0, previous);
+    if (mOwner != nullptr)
+        RedstoneSystem::onBlockChanged(*this, Vector3i(x, y, z));
 }
 
 void Level::removeForeignBlockActor(const Vector3i &position, const BlockState &state) {

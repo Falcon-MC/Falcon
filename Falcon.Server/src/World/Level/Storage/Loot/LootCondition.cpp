@@ -34,6 +34,8 @@ std::unique_ptr<LootCondition> LootCondition::create(const json::Value &definiti
         return std::make_unique<KilledByPlayerCondition>(true);
     if (name == "killed_by_entity")
         return std::make_unique<KilledByEntityCondition>(definition);
+    if (name == "damaged_by_entity")
+        return std::make_unique<DamagedByEntityCondition>(definition);
     if (name == "has_mark_variant")
         return std::make_unique<HasMarkVariantCondition>(definition);
     if (name == "entity_properties")
@@ -116,6 +118,14 @@ KilledByEntityCondition::KilledByEntityCondition(const json::Value &definition)
 
 bool KilledByEntityCondition::test(const LootContext &context) const {
     return context.mKillerIdentifier == mEntityType;
+}
+
+DamagedByEntityCondition::DamagedByEntityCondition(const json::Value &definition)
+        : mEntityType(definition.get("entity_type") == nullptr ? std::string()
+                                                               : definition.get("entity_type")->string()) {}
+
+bool DamagedByEntityCondition::test(const LootContext &context) const {
+    return context.mDamagingIdentifier == mEntityType;
 }
 
 HasMarkVariantCondition::HasMarkVariantCondition(const json::Value &definition)

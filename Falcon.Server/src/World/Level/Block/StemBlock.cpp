@@ -5,6 +5,7 @@
 FALCON_REGISTER_BLOCK(StemBlock, 250);
 
 #include "World/Level/Block/GrowthHelpers.h"
+#include "World/Level/Block/BlockPickItem.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
@@ -86,4 +87,12 @@ void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     if (!BlockChangeSystem::change(level, target, fruit, BlockChangeCause::Grow, true))
         return;
     level.setBlock(position, withState(state, STEM_FACING, STEM_FACING_NORTH + chosen), false);
+}
+
+bool StemBlock::getDrops(const BlockState &state, const ItemStack &, int32_t, std::vector<BlockDrop> &drops) const {
+    const int growth = state.mStates.getInt(getGrowthState());
+    const int seeds = rollSeeds(growth, 3);
+    if (seeds > 0)
+        drops.push_back({BlockPickItem::identifierFor(state.mName), seeds});
+    return true;
 }

@@ -9,6 +9,7 @@
 #include "World/Level/Level.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -168,6 +169,22 @@ namespace {
         return 1;
     }
 
+    int entitySetMaxHealth(FalconEntity *target, float maximum) {
+        if (target == nullptr || !std::isfinite(maximum) || maximum < 1.0f)
+            return 0;
+
+        Actor *actor = entity(target);
+        if (findAttribute(*actor, "minecraft:health") == nullptr)
+            return 0;
+
+        actor->setMaxHealth(maximum);
+        if (ServerPlayer *playerValue = dynamic_cast<ServerPlayer *>(actor))
+            owner().syncPlayerAttributes(*playerValue);
+        else if (ServerActor *serverActor = dynamic_cast<ServerActor *>(actor))
+            owner().syncActorAttributes(*serverActor);
+        return 1;
+    }
+
     void playerPlaySound(FalconPlayer *target, const char *sound, FalconVec3 position, float volume, float pitch) {
         if (sound == nullptr || *sound == '\0')
             return;
@@ -220,6 +237,7 @@ void PluginServerApi::fillEffects(FalconServerApi &api) {
     api.entityAttributeName = &entityAttributeName;
     api.entityAttribute = &entityAttribute;
     api.entitySetAttribute = &entitySetAttribute;
+    api.entitySetMaxHealth = &entitySetMaxHealth;
     api.playerPlaySound = &playerPlaySound;
     api.levelPlaySound = &levelPlaySound;
     api.playerStopSound = &playerStopSound;

@@ -1,5 +1,7 @@
 #include "World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.h"
 #include "World/Actor/Movement/PlayerMovementContext.h"
+#include "World/Actor/Movement/PlayerMovementValidator.h"
+#include "World/Actor/Movement/Systems/PlayerPredictionSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemEnchantments.h"
@@ -36,10 +38,17 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
 
     // only server state decides to skip: a server teleport keeps a movement change pending until acked, riding is
     // server state; the client's HandleTeleport and vehicle flags aren't trusted: one bit would let it go anywhere
-    const bool skip = context.player.isRiding() || context.player.isSleeping()
-                      || context.player.skipsForPendingMovementChange();
+    const bool riding = context.player.isRiding();
+    const bool skip = riding || context.player.isSleeping() || context.player.skipsForPendingMovementChange();
     if (skip || !chunkLoaded(context.level, state.start)
         || !chunkLoaded(context.level, *context.prediction.feetPosition)) {
+        // not replayed is not unchecked: an input claiming a place too far to reach in one step, a column the
+        // server never loaded included, is put back; a seat moves its rider itself
+        if (!riding && !PlayerMovementValidator::isWithinStep(state.start, *context.prediction.feetPosition)) {
+            *context.prediction.feetPosition = state.start;
+            PlayerPredictionSystem::correct(context, state.start, Vector3f(0.0f, 0.0f, 0.0f),
+                                            context.player.isOnGround());
+        }
         context.player.clearMovementSimulation();
         return false;
     }

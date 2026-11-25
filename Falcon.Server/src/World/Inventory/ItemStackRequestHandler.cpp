@@ -1,10 +1,17 @@
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/ItemStackRequestHandler.h"
+
+#include "Core/Event/EventBus.h"
 
 #include "Core/Debug/BedrockLog.h"
 #include "Protocol/Packets/CraftingDataPacket.h"
 #include "World/Inventory/AnvilRepair.h"
+#include "World/Item/BannerPatterns.h"
 #include "World/Inventory/BundleInventory.h"
+#include "World/Inventory/BannerRecipes.h"
 #include "World/Inventory/CartographyRecipes.h"
+#include "World/Inventory/GridRecipes.h"
+#include "World/Inventory/GrindstoneRepair.h"
 #include "World/Inventory/StonecutterRecipes.h"
 #include "World/Actor/Trade/MerchantOffers.h"
 #include "World/Item/ArmorTrims.h"
@@ -14,9 +21,11 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemProperties.h"
+#include "World/Level/Block/Actor/BeaconBlockActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
+#include <functional>
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -77,6 +86,15 @@ namespace {
         int32_t mEnchantInputConsumed = 0;
         int32_t mEnchantMaterialConsumed = 0;
         const ItemStackRequest *mRequest = nullptr;
+        bool mGrindstoneOpen = false;
+        bool mGrindstoneActive = false;
+        int32_t mGrindstoneXpCost = 0;
+        std::array<bool, PlayerInventory::GRINDSTONE_SIZE> mGrindstoneOwed{};
+        bool mLoomOpen = false;
+        bool mLoomActive = false;
+        // banners and dyes the loom craft takes, one of each per banner made
+        int32_t mLoomRequired = 0;
+        std::array<int32_t, PlayerInventory::LOOM_SIZE> mLoomConsumed{};
         bool mAnvilOpen = false;
         bool mAnvilActive = false;
         int32_t mAnvilLevelsConsumed = 0;
@@ -85,12 +103,15 @@ namespace {
         int32_t mAnvilInputConsumed = 0;
         int32_t mAnvilMaterialConsumed = 0;
         const CartographyRecipes::Maps *mCartographyMaps = nullptr;
+        // the maps a crafting grid recipe reads, given away from the cartography table
+        const CartographyRecipes::Maps *mCraftingMaps = nullptr;
         bool mCartographyActive = false;
         int32_t mCartographyInputRequired = 0;
         int32_t mCartographyAdditionalRequired = 0;
         int32_t mCartographyInputConsumed = 0;
         int32_t mCartographyAdditionalConsumed = 0;
         CartographyLock mCartographyLock;
+        CartographyExpansion mCartographyExpansion;
         const std::unordered_map<int32_t, uint32_t> *mStonecutterRecipes = nullptr;
         const CraftingDataPacket *mSmithingRecipes = nullptr;
         int32_t mClientProtocol = 0;
@@ -102,7 +123,22 @@ namespace {
         // a grid recipe produced this output: the item the player crafted, for playerCraftRecipe
         ItemStack mCraftedRecipeOutput;
         bool mCraftedRecipe = false;
+        bool mObserveCraft = false;
+        bool mObserveEnchant = false;
+        int mCraftRepetitions = 1;
+        int mCraftRecipeId = 0;
+        std::vector<ItemStack> mCraftInputs;
+        std::vector<std::pair<int32_t, int32_t>> mCraftSlots;
+        ItemStack mEnchantInput;
+        ItemStack mEnchantOutput;
+        int32_t mEnchantRequiredLevel = 0;
+        int32_t mEnchantCost = 0;
+        int32_t mEnchantOptionId = 0;
         const MerchantOffers *mTradeOffers = nullptr;
+        int32_t mBeaconLevels = -1;
+        bool mBeaconActive = false;
+        int32_t mBeaconConsumed = 0;
+        BeaconChoice mBeaconChoice;
         bool mTradeActive = false;
         // an automatic trade may also pay from the inventory
         bool mTradeAuto = false;
@@ -121,7 +157,7 @@ namespace {
                     continue;
                 }
                 outContainer = ContainerSlotType::LevelEntity;
-                outSlot = (int) slot;
+                outSlot = (int) slot - context.mOpenContainer->getEquipmentSlotCount();
                 return &item;
             }
         }
@@ -217,6 +253,12 @@ namespace {
             }
             return &view->mContents[(size_t) slot];
         }
+        if (PlayerInventory::grindstoneIndex(container) >= 0 && !context.mGrindstoneOpen)
+            return nullptr;
+        if (PlayerInventory::loomIndex(container) >= 0 && !context.mLoomOpen)
+            return nullptr;
+        if (container == ContainerSlotType::GrindstoneResult)
+            return context.mGrindstoneActive && slot == 50 ? &context.mCreatedOutput : nullptr;
         if (PlayerInventory::smithingIndex(container) >= 0 && context.mSmithingRecipes == nullptr)
             return nullptr;
         if (container == ContainerSlotType::SmithingTableResult)
@@ -225,14 +267,13 @@ namespace {
         if (container == ContainerSlotType::CreatedOutput) {
             return (slot == 0 || slot == 50) ? &context.mCreatedOutput : nullptr;
         }
-        // the mount window names its saddle and armor slots horse_equip, numbered as the equippable slots
         if (container == ContainerSlotType::LevelEntity || container == ContainerSlotType::HorseEquip
             || container == ContainerSlotType::Barrel || container == ContainerSlotType::ShulkerBox
             || container == ContainerSlotType::CrafterBlockContainer) {
-            if (context.mOpenContainer == nullptr || slot < 0 || (size_t) slot >= context.mContainerSlots.size()) {
-                return nullptr;
-            }
-            return &context.mContainerSlots[(size_t) slot];
+            const int index = context.mOpenContainer == nullptr
+                                      ? -1 : context.mOpenContainer->getNetworkSlotIndex(container, slot);
+            return index >= 0 && (size_t) index < context.mContainerSlots.size()
+                           ? &context.mContainerSlots[(size_t) index] : nullptr;
         }
         if (container == ContainerSlotType::CraftingInput && slot >= PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST
             && slot < PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST + PlayerInventory::CRAFTING_TABLE_SIZE
@@ -251,6 +292,9 @@ namespace {
             return nullptr;
         }
         if (container == ContainerSlotType::StonecutterInput && context.mStonecutterRecipes == nullptr) {
+            return nullptr;
+        }
+        if (container == ContainerSlotType::BeaconPayment && context.mBeaconLevels < 0) {
             return nullptr;
         }
         if (container == ContainerSlotType::FurnaceIngredient || container == ContainerSlotType::BlastFurnaceIngredient
@@ -414,7 +458,23 @@ namespace {
         return false;
     }
 
-    bool acceptsInOpenContainer(const RequestContext &context, const ItemStack *slot, const ItemStack &item) {
+    // each loom slot takes only its own kind of item, as the game's screen does
+    bool acceptsInLoomSlot(ContainerSlotType container, const ItemStack &item) {
+        switch (PlayerInventory::loomIndex(container)) {
+            case 0: return item.isAir() || BannerPatterns::isBanner(item);
+            case 1: return item.isAir() || BannerPatterns::dyeColorOf(item) != 0xFF;
+            case 2: return item.isAir() || BannerPatterns::itemIndexOf(item) != BannerPatterns::NO_ITEM;
+            default: return true;
+        }
+    }
+
+    bool acceptsInBeaconSlot(ContainerSlotType container, const ItemStack &item) {
+        return container != ContainerSlotType::BeaconPayment || item.isAir()
+               || BeaconBlockActor::isPaymentItem(item.mDefinition->getIdentifier());
+    }
+
+    bool acceptsInOpenContainer(const RequestContext &context, const ItemStack *slot, const ItemStack &item,
+                                int count = -1) {
         if (context.mOpenContainer == nullptr || context.mContainerSlots.empty() || item.isAir())
             return true;
 
@@ -424,7 +484,13 @@ namespace {
             return true;
 
         const int index = (int) (slot - first);
-        return context.mOpenContainer->canHoldInSlot(index, item) && !context.mOpenContainer->isSlotDisabled(index);
+        if (context.mOpenContainer->isSlotDisabled(index))
+            return false;
+        if (count < 0 || count == item.mCount)
+            return context.mOpenContainer->canHoldInSlot(index, item);
+        ItemStack placed = item;
+        placed.mCount = count;
+        return context.mOpenContainer->canHoldInSlot(index, placed);
     }
 
     // armor slots take only the matching piece, the head slot also head-worn blocks, as vanilla does;
@@ -456,9 +522,19 @@ namespace {
         ItemStack *destination = resolveSlot(inventory, context, action.mDestination.mContainerName,
                                              action.mDestination.mSlot);
 
+        if (context.mGrindstoneActive
+            && (destination == &context.mCreatedOutput
+                || PlayerInventory::grindstoneIndex(action.mDestination.mContainerName.mContainer) >= 0))
+            return false;
+
         if (context.mSmithingActive
             && (destination == &context.mCreatedOutput
                 || PlayerInventory::smithingIndex(action.mDestination.mContainerName.mContainer) >= 0))
+            return false;
+
+        if (context.mLoomActive
+            && (destination == &context.mCreatedOutput
+                || PlayerInventory::loomIndex(action.mDestination.mContainerName.mContainer) >= 0))
             return false;
 
         if (source == nullptr || destination == nullptr || source == destination) {
@@ -484,11 +560,14 @@ namespace {
             return false;
         }
 
-        if (!acceptsInOpenContainer(context, destination, *source)) {
+        const int placedCount = action.mCount + (destination->isAir() ? 0 : destination->mCount);
+        if (!acceptsInOpenContainer(context, destination, *source, placedCount)) {
             return false;
         }
 
         if (!acceptsInSmithingSlot(context, action.mDestination.mContainerName.mContainer, *source)
+            || !acceptsInLoomSlot(action.mDestination.mContainerName.mContainer, *source)
+            || !acceptsInBeaconSlot(action.mDestination.mContainerName.mContainer, *source)
             || !acceptsInArmorSlot(action.mDestination.mContainerName, action.mDestination.mSlot, *source)) {
             return false;
         }
@@ -534,7 +613,8 @@ namespace {
         ItemStack *destination = resolveSlot(inventory, context, action.mDestination.mContainerName,
                                              action.mDestination.mSlot);
 
-        if (context.mSmithingActive && (source == &context.mCreatedOutput || destination == &context.mCreatedOutput))
+        if ((context.mSmithingActive || context.mGrindstoneActive || context.mLoomActive)
+            && (source == &context.mCreatedOutput || destination == &context.mCreatedOutput))
             return false;
 
         if (source == nullptr || destination == nullptr || source == destination) {
@@ -559,8 +639,18 @@ namespace {
 
         if (!acceptsInSmithingSlot(context, action.mDestination.mContainerName.mContainer, *source)
             || !acceptsInSmithingSlot(context, action.mSource.mContainerName.mContainer, *destination)
+            || !acceptsInLoomSlot(action.mDestination.mContainerName.mContainer, *source)
+            || !acceptsInLoomSlot(action.mSource.mContainerName.mContainer, *destination)
+            || !acceptsInBeaconSlot(action.mDestination.mContainerName.mContainer, *source)
+            || !acceptsInBeaconSlot(action.mSource.mContainerName.mContainer, *destination)
             || !acceptsInArmorSlot(action.mDestination.mContainerName, action.mDestination.mSlot, *source)
             || !acceptsInArmorSlot(action.mSource.mContainerName, action.mSource.mSlot, *destination)) {
+            return false;
+        }
+
+        // a created output can hold several stacks: the count is saved as one byte
+        if (source->mCount > PlayerInventory::getMaxStackSize(*source)
+            || destination->mCount > PlayerInventory::getMaxStackSize(*destination)) {
             return false;
         }
 
@@ -622,6 +712,18 @@ namespace {
                 context.mCartographyAdditionalConsumed += action.mCount;
         }
 
+        if (action.mType == ItemStackRequestActionType::Consume) {
+            const int index = PlayerInventory::grindstoneIndex(action.mSource.mContainerName.mContainer);
+            if (index >= 0 || context.mGrindstoneActive) {
+                if (!context.mGrindstoneActive || index < 0 || action.mCount != 1
+                    || !context.mGrindstoneOwed[(size_t) index])
+                    return false;
+                context.mGrindstoneOwed[(size_t) index] = false;
+            }
+        }
+        if (context.mGrindstoneActive && source == &context.mCreatedOutput && !dropped)
+            return false;
+
         if (context.mSmithingActive && action.mType == ItemStackRequestActionType::Consume) {
             const int index = PlayerInventory::smithingIndex(action.mSource.mContainerName.mContainer);
             if (index < 0 || action.mCount != 1 || context.mSmithingConsumed[(size_t) index] != 0)
@@ -629,9 +731,28 @@ namespace {
             context.mSmithingConsumed[(size_t) index] = 1;
         }
 
+        // a loom craft pays one banner and one dye per banner; the pattern item stays
+        if (action.mType == ItemStackRequestActionType::Consume) {
+            const int index = PlayerInventory::loomIndex(action.mSource.mContainerName.mContainer);
+            if (index >= 0) {
+                if (!context.mLoomActive || index == 2
+                    || context.mLoomConsumed[(size_t) index] + action.mCount > context.mLoomRequired)
+                    return false;
+                context.mLoomConsumed[(size_t) index] += action.mCount;
+            }
+        }
+
         if (context.mStonecutterActive && action.mType == ItemStackRequestActionType::Consume
             && action.mSource.mContainerName.mContainer == ContainerSlotType::StonecutterInput)
             context.mStonecutterInputConsumed += action.mCount;
+
+        // the payment slot only empties to pay
+        if (action.mSource.mContainerName.mContainer == ContainerSlotType::BeaconPayment
+            && action.mType == ItemStackRequestActionType::Consume) {
+            if (!BeaconBlockActor::isPaymentItem(source->mDefinition->getIdentifier()))
+                return false;
+            context.mBeaconConsumed += action.mCount;
+        }
 
         if (context.mTradeActive && action.mType == ItemStackRequestActionType::Consume
             && !consumeTradeItem(context, action.mSource.mContainerName.mContainer, *source, action.mCount))
@@ -679,7 +800,7 @@ namespace {
         std::vector<EnchantmentInstance> enchantments;
         int32_t consumeCost = 0;
         int32_t requiredLevel = 0;
-        if (!EnchantmentHelper::takeOption(action.mRecipeNetworkId, enchantments, consumeCost, requiredLevel))
+        if (!EnchantmentHelper::readOption(action.mRecipeNetworkId, enchantments, consumeCost, requiredLevel))
             return false;
 
         ItemStack *input = inventory.resolveSlot(ContainerSlotType::EnchantingInput, 0);
@@ -707,9 +828,17 @@ namespace {
         }
         ItemEnchantments::write(enchanted, enchantments);
 
+        if (context.mObserveEnchant) {
+            context.mEnchantInput = *input;
+            context.mEnchantInput.mCount = 1;
+            context.mEnchantOutput = enchanted;
+            context.mEnchantRequiredLevel = requiredLevel;
+            context.mEnchantCost = consumeCost;
+        }
         context.mCreatedOutput = std::move(enchanted);
         context.mCreatedOutputActive = true;
         context.mEnchantActive = true;
+        context.mEnchantOptionId = action.mRecipeNetworkId;
         context.mEnchantMaterialRequired = context.mCreativeMode ? 0 : consumeCost;
 
         if (!context.mCreativeMode)
@@ -724,6 +853,27 @@ namespace {
                 return &action.mResultItems.front();
         }
         return nullptr;
+    }
+
+    bool craftGrindstone(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        if (!context.mGrindstoneOpen || context.mCraftRecipeSeen || context.mCreatedOutputActive
+            || !context.mCreatedOutput.isAir() || context.mCodecContext == nullptr || action.mNumberOfRequestedCrafts != 1)
+            return false;
+
+        const ItemStack &input = inventory.getGrindstoneItem(0);
+        const ItemStack &additional = inventory.getGrindstoneItem(1);
+        GrindstoneResult result = GrindstoneRepair::createResult(
+                input, additional, context.mCodecContext->getItemDefinitions().getDefinition("minecraft:book"));
+        if (result.mItem.isAir() || action.mRepairCost != AnvilRepair::getRepairCost(result.mItem))
+            return false;
+
+        context.mCraftRecipeSeen = true;
+        context.mGrindstoneActive = true;
+        context.mGrindstoneOwed = {!input.isAir(), !additional.isAir()};
+        context.mGrindstoneXpCost = result.mExperienceCost;
+        context.mCreatedOutput = std::move(result.mItem);
+        context.mCreatedOutputActive = true;
+        return true;
     }
 
     // the anvil sends its typed name as a filter string and leaves crafting to the server: the result is
@@ -749,6 +899,9 @@ namespace {
         if (name != nullptr && !name->empty() && !AnvilRepair::hasCustomName(*input) && predicted != nullptr
             && !AnvilRepair::hasCustomName(*predicted))
             name = nullptr;
+
+        if (name != nullptr && !AnvilRepair::isTypedName(*name))
+            return false;
 
         std::shared_ptr<ItemDefinition> enchantedBook;
         if (context.mCodecContext != nullptr)
@@ -793,6 +946,9 @@ namespace {
             && !AnvilRepair::hasCustomName(*predicted))
             name = nullptr;
 
+        if (name != nullptr && !AnvilRepair::isTypedName(*name))
+            return false;
+
         CartographyResult result = CartographyRecipes::createResult(*input, *additional, name,
                                                                     *context.mCartographyMaps);
         if (result.mResult.isAir())
@@ -804,6 +960,7 @@ namespace {
         context.mCartographyInputRequired = result.mInputCost;
         context.mCartographyAdditionalRequired = result.mAdditionalCost;
         context.mCartographyLock = result.mLock;
+        context.mCartographyExpansion = result.mExpansion;
         return true;
     }
 
@@ -976,6 +1133,145 @@ namespace {
         return true;
     }
 
+    // the client names the pattern and how many banners; the game makes as many as both the banners and the
+    // dyes allow, each the same as the screen's result
+    bool craftLoom(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        if (context.mCraftRecipeSeen || !context.mLoomOpen || context.mCreatedOutputActive)
+            return false;
+        context.mCraftRecipeSeen = true;
+
+        const BannerPatterns::Pattern *pattern = BannerPatterns::find(action.mPatternId);
+        if (pattern == nullptr)
+            return false;
+
+        const ItemStack &banner = inventory.getLoomItem(0);
+        const ItemStack &dye = inventory.getLoomItem(1);
+        ItemStack output = BannerPatterns::loomResult(banner, dye, inventory.getLoomItem(2), *pattern);
+        if (output.isAir())
+            return false;
+
+        const int crafts = action.mTimesCrafted <= 0 ? 1 : action.mTimesCrafted;
+        if (crafts > banner.mCount || crafts > dye.mCount || crafts > PlayerInventory::getMaxStackSize(output))
+            return false;
+
+        output.mCount = crafts;
+        context.mCreatedOutput = std::move(output);
+        context.mCreatedOutputActive = true;
+        context.mLoomActive = true;
+        context.mLoomRequired = crafts;
+        return true;
+    }
+
+    struct MultiCraft {
+        ItemStack mResult = ItemStack::air();
+        std::vector<int32_t> mRequiredBySlot;
+    };
+
+    // the grid decides the result, as the client only names the recipe
+    using GridSolver = std::function<bool(const std::vector<ItemStack> &, MultiCraft &)>;
+
+    void captureCraftInputs(RequestContext &context, const std::vector<ItemStack> &grid,
+                            const std::vector<int32_t> &required, int repetitions) {
+        if (!context.mObserveCraft)
+            return;
+        context.mCraftRepetitions = repetitions;
+        for (size_t slot = 0; slot < required.size(); ++slot) {
+            if (required[slot] <= 0)
+                continue;
+            ItemStack ingredient = grid[slot];
+            context.mCraftSlots.emplace_back((int32_t) slot, ingredient.mCount);
+            ingredient.mCount = required[slot];
+            context.mCraftInputs.push_back(std::move(ingredient));
+        }
+    }
+
+    bool craftFromGrid(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
+                       bool repeatable, const GridSolver &solve) {
+        const int repetitions = action.mNumberOfRequestedCrafts <= 0 ? 1 : action.mNumberOfRequestedCrafts;
+        if (repetitions > 1 && !repeatable)
+            return false;
+        bool tableHasItems = false;
+        for (const ItemStack &item: inventory.getCraftingTableContents()) {
+            if (!item.isAir()) {
+                tableHasItems = true;
+                break;
+            }
+        }
+        if (tableHasItems && !context.mCraftingTableOpen)
+            return false;
+
+        const int gridWidth = tableHasItems ? 3 : 2;
+        const std::vector<ItemStack> &grid = tableHasItems ? inventory.getCraftingTableContents()
+                                                           : inventory.getCraftingContents();
+        MultiCraft craft;
+        if (!solve(grid, craft))
+            return false;
+
+        std::vector<int32_t> required = craft.mRequiredBySlot;
+        for (size_t slot = 0; slot < required.size(); ++slot) {
+            required[slot] *= repetitions;
+            if (required[slot] > 0 && grid[slot].mCount < required[slot])
+                return false;
+        }
+        if (craft.mResult.mCount * repetitions > PlayerInventory::getMaxStackSize(craft.mResult))
+            return false;
+
+        context.mCreatedOutput = craft.mResult;
+        context.mCreatedOutput.mCount = craft.mResult.mCount * repetitions;
+        context.mCreatedOutputActive = true;
+        captureCraftInputs(context, grid, required, repetitions);
+        context.mCraftRecipeId = action.mRecipeNetworkId;
+        context.mCraftingMatch = CraftingRecipeMatch{nullptr, craft.mRequiredBySlot};
+        context.mCraftingRequired = std::move(required);
+        context.mCraftingConsumed.assign(context.mCraftingRequired.size(), 0);
+        context.mCraftingGridWidth = gridWidth;
+        context.mCraftingActive = true;
+        context.mCraftedRecipeOutput = craft.mResult;
+        context.mCraftedRecipe = true;
+        return true;
+    }
+
+    bool craftBannerRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        const BannerRecipes::Kind kind = BannerRecipes::kindOf(action.mRecipeNetworkId);
+        const GridSolver solve = [&](const std::vector<ItemStack> &grid, MultiCraft &out) {
+            BannerRecipes::Craft craft;
+            if (!BannerRecipes::craft(kind, grid, craft))
+                return false;
+            out.mResult = std::move(craft.mResult);
+            out.mRequiredBySlot = std::move(craft.mRequiredBySlot);
+            return true;
+        };
+        return craftFromGrid(inventory, context, action, true, solve);
+    }
+
+    // results with their own map or a single source item are made one at a time
+    bool craftGridRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        const GridRecipes::Kind kind = GridRecipes::kindOf(action.mRecipeNetworkId);
+        if (context.mCodecContext == nullptr)
+            return false;
+        const PacketCodecContext &codec = *context.mCodecContext;
+        const GridRecipes::Make make = [&codec](const std::string &identifier, int32_t count) {
+            ItemStack stack;
+            stack.mDefinition = codec.getItemDefinitions().getDefinition(identifier);
+            if (stack.mDefinition == nullptr)
+                return ItemStack::air();
+            stack.mBlockDefinition = codec.getBlockDefinitions().getDefinition(identifier);
+            stack.mCount = count;
+            return stack;
+        };
+        const bool repeatable = kind == GridRecipes::Kind::Firework || kind == GridRecipes::Kind::DecoratedPot;
+        return craftFromGrid(inventory, context, action, repeatable,
+                             [&](const std::vector<ItemStack> &grid, MultiCraft &out) {
+                                 GridRecipes::Craft craft;
+                                 if (!GridRecipes::craft(kind, grid, make, context.mCraftingMaps, craft))
+                                     return false;
+                                 out.mResult = std::move(craft.mResult);
+                                 out.mRequiredBySlot = std::move(craft.mRequiredBySlot);
+                                 context.mCartographyExpansion = craft.mExpansion;
+                                 return true;
+                             });
+    }
+
     bool craftRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
         if (context.mCraftRecipeSeen) {
@@ -986,6 +1282,11 @@ namespace {
         if (action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE) {
             return craftEnchant(inventory, context, action, touched);
         }
+
+        if (BannerRecipes::kindOf(action.mRecipeNetworkId) != BannerRecipes::Kind::None)
+            return craftBannerRecipe(inventory, context, action);
+        if (GridRecipes::kindOf(action.mRecipeNetworkId) != GridRecipes::Kind::None)
+            return craftGridRecipe(inventory, context, action);
 
         if (context.mRecipeOutputs == nullptr) {
             return false;
@@ -1042,6 +1343,8 @@ namespace {
         context.mCreatedOutput = output;
         context.mCreatedOutput.mCount = output.mCount * repetitions;
         context.mCreatedOutputActive = true;
+        captureCraftInputs(context, grid, required, repetitions);
+        context.mCraftRecipeId = netId;
         context.mCraftingMatch = std::move(match);
         context.mCraftingRequired = std::move(required);
         context.mCraftingConsumed.assign(context.mCraftingRequired.size(), 0);
@@ -1094,14 +1397,16 @@ namespace {
                || container == ContainerSlotType::EnchantingMaterial || container == ContainerSlotType::AnvilInput
                || container == ContainerSlotType::AnvilMaterial || container == ContainerSlotType::CartographyInput
                || container == ContainerSlotType::CartographyAdditional
-               || container == ContainerSlotType::StonecutterInput || PlayerInventory::smithingIndex(container) >= 0;
+               || container == ContainerSlotType::StonecutterInput || PlayerInventory::smithingIndex(container) >= 0
+               || PlayerInventory::grindstoneIndex(container) >= 0 || PlayerInventory::loomIndex(container) >= 0;
     }
 
     // the result was made from what the input slots held: until it is paid, they only give to a consume, or
     // another item would pay for it and the real ingredients would stay
     bool rejectedByPendingCraft(const RequestContext &context, const ItemStackRequestAction &action) {
         if (!context.mCraftingActive && !context.mEnchantActive && !context.mAnvilActive && !context.mCartographyActive
-            && !context.mStonecutterActive && !context.mSmithingActive)
+            && !context.mStonecutterActive && !context.mSmithingActive && !context.mGrindstoneActive
+            && !context.mLoomActive)
             return false;
 
         switch (action.mType) {
@@ -1122,8 +1427,35 @@ namespace {
         }
     }
 
+    // the item itself goes with a consume from the payment slot, checked once the request ends
+    bool payBeacon(RequestContext &context, const ItemStackRequestAction &action) {
+        if (context.mBeaconLevels <= 0 || context.mBeaconActive
+            || !BeaconBlockActor::isEffectAvailable(action.mPrimaryEffect, context.mBeaconLevels))
+            return false;
+
+        context.mBeaconActive = true;
+        context.mBeaconChoice.mPaid = true;
+        context.mBeaconChoice.mPrimary = action.mPrimaryEffect;
+        context.mBeaconChoice.mSecondary = action.mSecondaryEffect;
+        return true;
+    }
+
     bool applyAction(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
+        if (context.mGrindstoneActive) {
+            switch (action.mType) {
+                case ItemStackRequestActionType::Take:
+                case ItemStackRequestActionType::Place:
+                case ItemStackRequestActionType::Consume:
+                case ItemStackRequestActionType::Drop:
+                case ItemStackRequestActionType::Create:
+                case ItemStackRequestActionType::CraftResultsDeprecated:
+                    break;
+                default:
+                    return false;
+            }
+        }
+
         if (rejectedByPendingCraft(context, action))
             return false;
 
@@ -1203,6 +1535,12 @@ namespace {
                     return craftStonecutter(inventory, context, action);
                 return craftRecipe(inventory, context, action, touched);
 
+            case ItemStackRequestActionType::CraftRepairAndDisenchant:
+                return craftGrindstone(inventory, context, action);
+
+            case ItemStackRequestActionType::CraftLoom:
+                return craftLoom(inventory, context, action);
+
             case ItemStackRequestActionType::CraftRecipeOptional:
                 if (context.mCartographyMaps != nullptr)
                     return craftCartography(inventory, context, action);
@@ -1213,8 +1551,10 @@ namespace {
             case ItemStackRequestActionType::CraftNonImplemented:
             case ItemStackRequestActionType::MineBlock:
             case ItemStackRequestActionType::LabTableCombine:
-            case ItemStackRequestActionType::BeaconPayment:
                 return true;
+
+            case ItemStackRequestActionType::BeaconPayment:
+                return payBeacon(context, action);
 
             default:
                 LOG_WARN(LogAreaID::Server, "Unhandled item stack request action %d",
@@ -1234,7 +1574,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock,
         const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem,
         const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
-        int32_t clientProtocol) {
+        int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost, int32_t beaconLevels,
+        BeaconChoice *outBeacon, bool loomOpen, const CartographyRecipes::Maps *craftingMaps,
+        CartographyExpansion *outCartographyExpansion, ServerPlayer *eventPlayer, EventBus *eventBus) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1259,11 +1601,20 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mCreativeMode = creativeMode;
     context.mRequest = &request;
     context.mAnvilOpen = anvilOpen;
+    context.mGrindstoneOpen = grindstoneOpen;
+    context.mLoomOpen = loomOpen;
     context.mCartographyMaps = cartographyMaps;
+    context.mCraftingMaps = craftingMaps;
     context.mStonecutterRecipes = stonecutterRecipes;
     context.mSmithingRecipes = smithingRecipes;
     context.mClientProtocol = clientProtocol;
     context.mTradeOffers = tradeOffers;
+    context.mBeaconLevels = beaconLevels;
+    context.mObserveCraft = eventPlayer != nullptr && eventBus != nullptr
+                            && eventBus->before().mCraftItem.hasSubscribers();
+    context.mObserveEnchant = eventPlayer != nullptr && eventBus != nullptr
+                              && eventBus->before().mItemEnchant.hasSubscribers();
+
 
     if (openContainer != nullptr) {
         const int containerSize = openContainer->getContainerSize();
@@ -1333,6 +1684,28 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         return entry;
     }
 
+    if (context.mLoomActive
+        && (context.mLoomConsumed[0] != context.mLoomRequired || context.mLoomConsumed[1] != context.mLoomRequired
+            || context.mLoomConsumed[2] != 0)) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
+    if (context.mGrindstoneActive
+        && std::any_of(context.mGrindstoneOwed.begin(), context.mGrindstoneOwed.end(), [](bool owed) { return owed; })) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
+    // one item pays: none, or one taken without a payment, means a forged request
+    if (context.mBeaconActive ? context.mBeaconConsumed != 1 : context.mBeaconConsumed != 0) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
     if (context.mTradeActive && context.mTradeConsumed != context.mTradeRequired) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
@@ -1343,6 +1716,30 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
         return entry;
+    }
+
+    if (context.mObserveCraft && context.mCraftingActive) {
+        ItemStack output = context.mCraftedRecipeOutput;
+        output.mCount *= context.mCraftRepetitions;
+        const auto *recipe = context.mCraftingMatch.mRecipe;
+        CraftItemBeforeEvent event(*eventPlayer, output, context.mCraftRepetitions, context.mCraftRecipeId,
+                                   context.mCraftInputs, context.mCraftingGridWidth,
+                                   recipe != nullptr ? recipe->mWidth : 0, context.mCraftSlots);
+        eventBus->before().mCraftItem.emit(event);
+        if (event.isCancelled()) {
+            entry.mResult = RESULT_ERROR;
+            return entry;
+        }
+    }
+
+    if (context.mObserveEnchant && context.mEnchantActive) {
+        ItemEnchantBeforeEvent event(*eventPlayer, context.mEnchantInput, context.mEnchantOutput, context.mEnchantCost,
+                                     context.mEnchantRequiredLevel);
+        eventBus->before().mItemEnchant.emit(event);
+        if (event.isCancelled()) {
+            entry.mResult = RESULT_ERROR;
+            return entry;
+        }
     }
 
     for (const std::unique_ptr<BundleView> &view: context.mBundles) {
@@ -1374,6 +1771,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     }
 
     inventory = std::move(working);
+    if (context.mEnchantActive)
+        EnchantmentHelper::discardOptions({context.mEnchantOptionId});
     if (outDroppedItems != nullptr) {
         outDroppedItems->insert(outDroppedItems->end(), localDroppedItems.begin(), localDroppedItems.end());
     }
@@ -1387,18 +1786,28 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     if (outAnvilUsed != nullptr)
         *outAnvilUsed = context.mAnvilActive;
 
+    if (outGrindstoneXpCost != nullptr && context.mGrindstoneActive)
+        *outGrindstoneXpCost = context.mGrindstoneXpCost;
+
     if (outCraftedRecipeItem != nullptr && context.mCraftedRecipe)
         *outCraftedRecipeItem = context.mCraftedRecipeOutput;
 
     if (outCartographyLock != nullptr)
         *outCartographyLock = context.mCartographyLock;
 
+    if (outCartographyExpansion != nullptr)
+        *outCartographyExpansion = context.mCartographyExpansion;
+
     if (outTrade != nullptr && context.mTradeActive)
         *outTrade = context.mTrade;
 
+    if (outBeacon != nullptr)
+        *outBeacon = context.mBeaconChoice;
+
     for (const TouchedSlot &slot: touched) {
         if (slot.mContainerName.mContainer == ContainerSlotType::CreatedOutput
-            || slot.mContainerName.mContainer == ContainerSlotType::SmithingTableResult) {
+            || slot.mContainerName.mContainer == ContainerSlotType::SmithingTableResult
+            || slot.mContainerName.mContainer == ContainerSlotType::GrindstoneResult) {
             continue;
         }
 
@@ -1425,12 +1834,13 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
             || slot.mContainerName.mContainer == ContainerSlotType::Barrel
             || slot.mContainerName.mContainer == ContainerSlotType::ShulkerBox
             || slot.mContainerName.mContainer == ContainerSlotType::CrafterBlockContainer) {
-            if (openContainer == nullptr || slot.mSlot < 0 || (size_t) slot.mSlot >= context.mContainerSlots.size()) {
+            const int index = openContainer == nullptr
+                                      ? -1 : openContainer->getNetworkSlotIndex(slot.mContainerName.mContainer, slot.mSlot);
+            if (index < 0 || (size_t) index >= context.mContainerSlots.size())
                 continue;
-            }
 
             appendResponseSlot(entry.mContainers, slot.mContainerName, slot.mSlot,
-                               context.mContainerSlots[(size_t) slot.mSlot]);
+                               context.mContainerSlots[(size_t) index]);
             continue;
         }
 

@@ -11,6 +11,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
+#include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
 #include "World/Level/LevelGen/Random/GameRandom.h"
 #include "World/Level/LevelGen/Structure/StrongholdFeature.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
@@ -757,33 +758,53 @@ void StrongholdStructure::postProcess(const Piece &piece, Level &level, LevelChu
     }
 }
 
+namespace {
+    // the starts within reach: the village ones, then the grid ones of the cells the reach meets
+    std::vector<StructureChunkPos> startsNear(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ,
+                                              int32_t reach) {
+        std::vector<StructureChunkPos> starts;
+        for (const StructureChunkPos &start: *StrongholdFeature::villageStrongholds(generator)) {
+            if (std::abs(start.x - chunkX) <= reach && std::abs(start.z - chunkZ) <= reach)
+                starts.push_back(start);
+        }
+        const int64_t seed = generator.getSeed();
+        const int32_t cell = StrongholdFeature::CELL_SIZE;
+        for (int32_t cellX = StrongholdFeature::cellOf(chunkX - reach);
+             cellX <= StrongholdFeature::cellOf(chunkX + reach); ++cellX) {
+            for (int32_t cellZ = StrongholdFeature::cellOf(chunkZ - reach);
+                 cellZ <= StrongholdFeature::cellOf(chunkZ + reach); ++cellZ) {
+                StructureChunkPos start;
+                if (!StrongholdFeature::gridStronghold(seed, cellX * cell + cell / 2, cellZ * cell + cell / 2, start))
+                    continue;
+                if (std::abs(start.x - chunkX) > reach || std::abs(start.z - chunkZ) > reach)
+                    continue;
+                // the generation keeps the origin check the cell draw already made on its centre
+                if ((uint32_t) start.x * (uint32_t) start.x + (uint32_t) start.z * (uint32_t) start.z < 100U)
+                    continue;
+                starts.push_back(start);
+            }
+        }
+        return starts;
+    }
+}
+
+void StrongholdStructure::addBeard(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ,
+                                   TerrainBeard &beard) {
+    // the buried boxes reach 12 blocks past a piece: one chunk more than the pieces themselves
+    for (const StructureChunkPos &start: startsNear(generator, chunkX, chunkZ, REACH + 1)) {
+        const std::shared_ptr<const Layout> layout = cachedPlan(generator.getSeed(), start.x, start.z);
+        for (const Piece &piece: layout->mPieces) {
+            const Box &box = piece.getBox();
+            beard.addBuriedBox(chunkX, chunkZ, {box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ});
+        }
+    }
+}
+
 void StrongholdStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk) {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
     const int64_t seed = generator.getSeed();
-
-    // the starts within reach: the village ones, then the grid ones of the cells the reach meets
-    std::vector<StructureChunkPos> starts;
-    for (const StructureChunkPos &start: *StrongholdFeature::villageStrongholds(generator)) {
-        if (std::abs(start.x - chunkX) <= REACH && std::abs(start.z - chunkZ) <= REACH)
-            starts.push_back(start);
-    }
-    const int32_t cell = StrongholdFeature::CELL_SIZE;
-    for (int32_t cellX = StrongholdFeature::cellOf(chunkX - REACH); cellX <= StrongholdFeature::cellOf(chunkX + REACH);
-         ++cellX) {
-        for (int32_t cellZ = StrongholdFeature::cellOf(chunkZ - REACH);
-             cellZ <= StrongholdFeature::cellOf(chunkZ + REACH); ++cellZ) {
-            StructureChunkPos start;
-            if (!StrongholdFeature::gridStronghold(seed, cellX * cell + cell / 2, cellZ * cell + cell / 2, start))
-                continue;
-            if (std::abs(start.x - chunkX) > REACH || std::abs(start.z - chunkZ) > REACH)
-                continue;
-            // the generation keeps the origin check the cell draw already made on its centre
-            if ((uint32_t) start.x * (uint32_t) start.x + (uint32_t) start.z * (uint32_t) start.z < 100U)
-                continue;
-            starts.push_back(start);
-        }
-    }
+    const std::vector<StructureChunkPos> starts = startsNear(generator, chunkX, chunkZ, REACH);
     if (starts.empty())
         return;
 

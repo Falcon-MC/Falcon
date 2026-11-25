@@ -6,4 +6,5 @@ struct PlayerPoseComponent {
     bool mSneaking = false;
     bool mCrawling = false;
     float mHeight = MovementPhysics::PLAYER_HEIGHT;
+    float mWidth = MovementPhysics::PLAYER_WIDTH;
 };

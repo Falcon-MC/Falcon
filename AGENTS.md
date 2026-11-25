@@ -47,6 +47,8 @@ change that does not compile is worse than no change.
 ## Layout
 
 ```
+Falcon.Protocol/                Packets, network types and their encoders (library `FalconProtocol`)
+Falcon.Network/                 RakNet and NetherNet transport, login parsing (library `FalconNetwork`)
 Falcon.Server/
   include/                      Headers, mirroring src/
   src/
@@ -61,11 +63,11 @@ Falcon.Server/
     Resources/                  Resource packs and pack dependencies
     Scripting/                  JavaScript scripting API for behavior packs
     Falcon/                     Falcon-specific embedding and plugin implementation
-  structure/                    source layout notes and relocation inventory
 ```
 
-The network transport, protocol packets, NBT and Bedrock data files live in separate `Falcon-MC`
-repositories. Never edit their copies under `build/_deps`.
+`Falcon.Protocol` and `Falcon.Network` are part of this repository and are changed in the same pull request
+as the server code that needs them. NBT, the block state updater and the Bedrock data files live in separate
+`Falcon-MC` repositories. Never edit their copies under `build/_deps`.
 
 ---
 

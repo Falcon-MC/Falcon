@@ -337,6 +337,12 @@ public:
 
     bool isChunkPopulated(int32_t chunkX, int32_t chunkZ) const;
 
+    // the workers already hold a request for it
+    bool isChunkRequested(int32_t chunkX, int32_t chunkZ) const;
+
+    // whether the workers take one more chunk now
+    bool canRequestChunk() const;
+
     /**
      * Whether storage holds the chunk. The answers are cached as the
      * game does, until the cache fills or storage is reopened; a chunk queued for saving counts as saved.
@@ -656,8 +662,6 @@ private:
     void _replayPendingChanges(int64_t key);
 
     void _restoreSpilledChanges(int64_t key, std::vector<GeneratedBlockChange> changes);
-
-    void _dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated);
 
     void _flushPendingBlockChanges(bool includeInFlight);
 

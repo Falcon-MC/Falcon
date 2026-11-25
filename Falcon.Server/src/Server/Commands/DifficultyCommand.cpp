@@ -50,13 +50,13 @@ bool DifficultyCommand::parseDifficulty(const std::string &value, Difficulty &ou
 
 bool DifficultyCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() != 1) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
     Difficulty difficulty = Difficulty::Normal;
     if (!parseDifficulty(arguments[0], difficulty)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

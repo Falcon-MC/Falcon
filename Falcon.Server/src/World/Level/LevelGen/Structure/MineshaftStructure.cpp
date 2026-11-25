@@ -9,9 +9,11 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <unordered_set>
 #include <utility>
 
 namespace {
+    const size_t MAX_REMEMBERED_ROLLS = 1 << 16;
     using namespace MineshaftStructure;
     using Box = StructurePiece::Box;
     constexpr int32_t SOUTH = StructurePiece::SOUTH;
@@ -222,9 +224,24 @@ namespace {
 
 std::optional<MineshaftStructure::Plan> MineshaftStructure::plan(const ChunkGenerator &generator, int32_t chunkX,
                                                                int32_t chunkZ) {
-    std::mt19937 random;
-    if (!MineshaftFeature::rollStart(generator.getSeed(), chunkX, chunkZ, random))
+    // every decoration rolls the 15x15 chunks around it: most were rolled for its neighbours already, and
+    // nearly all of them hold no start
+    thread_local int64_t rolledSeed = 0;
+    thread_local std::unordered_set<int64_t> withoutStart;
+    const int64_t seed = generator.getSeed();
+    if (seed != rolledSeed || withoutStart.size() > MAX_REMEMBERED_ROLLS) {
+        withoutStart.clear();
+        rolledSeed = seed;
+    }
+    const int64_t key = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+    if (withoutStart.count(key) != 0)
         return std::nullopt;
+
+    std::mt19937 random;
+    if (!MineshaftFeature::rollStart(seed, chunkX, chunkZ, random)) {
+        withoutStart.insert(key);
+        return std::nullopt;
+    }
 
     const int32_t x = chunkX * 16;
     const int32_t z = chunkZ * 16;

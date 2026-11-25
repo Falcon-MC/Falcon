@@ -27,7 +27,8 @@ public:
     static std::optional<Vector3f> findRespawnPosition(Level &level, const Vector3i &anchor,
                                                        const Vector3i &standPosition);
 
-    static void explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+    static void explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                        ServerPlayer *player = nullptr);
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;

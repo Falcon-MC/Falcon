@@ -16,7 +16,7 @@ public:
 
 private:
     static bool parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
-                              Vector3f &out);
+                              const Vector3f &rotation, Vector3f &out);
 
     bool teleportToPlayer(CommandOrigin &sender, const std::vector<ServerPlayer *> &victims,
                           const std::string &destination);

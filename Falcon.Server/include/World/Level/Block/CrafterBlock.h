@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Protocol/Types/ItemStack.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Level/Block/ContainerBlock.h"
 
 #include <string>
@@ -24,8 +25,10 @@ public:
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
 
-    // every output of the grid's recipe, none when nothing matches
-    static std::vector<ItemStack> craftResults(ServerNetworkHandler &owner, const CrafterBlockActor &crafter);
+    // every output of the grid's recipe, none when nothing matches; the map a map extending would recentre goes in
+    // outExpansion, applied by the caller only when it crafts
+    static std::vector<ItemStack> craftResults(ServerNetworkHandler &owner, const CrafterBlockActor &crafter,
+                                               CartographyExpansion *outExpansion = nullptr);
 
     int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 };

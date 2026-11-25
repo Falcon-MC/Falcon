@@ -19,6 +19,11 @@ public:
 
     static void setHoneyLevel(Level &level, const Vector3i &position, int32_t honeyLevel);
 
+    // a hive or nest full of honey: shears or a bottle can take it
+    static bool isHarvestable(const BlockState &state);
+
+    static void dropHoneycombs(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+
     static int getFrontFace(const BlockState &state);
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

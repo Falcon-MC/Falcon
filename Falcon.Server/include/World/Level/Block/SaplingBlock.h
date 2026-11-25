@@ -1,7 +1,6 @@
 #pragma once
 
 #include "World/Level/Block/PlantBlock.h"
-#include "World/Level/LevelGen/Feature/Tree/TreeWoodType.h"
 
 class SaplingBlock : public PlantBlock {
 public:
@@ -16,8 +15,9 @@ public:
         return true;
     }
 
-private:
-    bool growTree(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const;
+    bool fertilize(Level &level, const Vector3i &position, const BlockState &state, ServerPlayer *player) const;
 
-    TreeWoodType getWoodType() const;
+private:
+    void advanceGrowth(Level &level, const Vector3i &position, const BlockState &state, ServerPlayer *player,
+                       bool forceTree) const;
 };

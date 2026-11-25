@@ -8,6 +8,8 @@ class LoginChainVerifier {
 public:
     bool verify(const std::string &authJwt, const std::string &clientJwt);
 
+    static bool verifiesTransportOffer(const std::string &offer, const std::string &loginPublicKey);
+
     bool isSigned() const {
         return mSigned;
     }

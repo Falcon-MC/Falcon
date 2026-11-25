@@ -201,6 +201,14 @@ void FallingBlock::_land(ServerNetworkHandler &owner, const Vector3i &position) 
             placed = concrete;
     }
 
+    EventSignal<ActorBlockChangeBeforeEvent> &blockChange = owner.getEventBus().before().mActorBlockChange;
+    if (blockChange.hasSubscribers()) {
+        ActorBlockChangeBeforeEvent event(*this, level, target, placed);
+        blockChange.emit(event);
+        if (event.isCancelled())
+            return;
+    }
+
     if (!BlockSupport::isReplaceable(existing))
         FallingBlockSystem::spawnDestroyParticle(owner, level, position, existing);
 

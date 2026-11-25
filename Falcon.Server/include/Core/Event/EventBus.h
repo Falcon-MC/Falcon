@@ -1,76 +1,54 @@
 #pragma once
 
+#include "Core/Event/EventSignal.h"
 #include "Core/Event/GameEvents.h"
+#include "Core/Event/BrewingEvents.h"
+#include "Core/Event/ActorEvents.h"
+#include "Core/Event/LevelEvents.h"
+#include "Core/Event/BlockEvents.h"
+#include "Core/Event/InventoryEvents.h"
+#include "Core/Event/ServerEvents.h"
+#include "Core/Event/PlayerEvents.h"
+#include "Core/Event/TeleportEvents.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <utility>
-#include <vector>
-
-template <typename T>
-class EventSignal {
-public:
-    using Handler = std::function<void(T &)>;
-
-    uint32_t subscribe(Handler handler) {
-        const uint32_t id = mNextId++;
-        mEntries.push_back(Entry{id, std::move(handler)});
-        return id;
-    }
-
-    void unsubscribe(uint32_t id) {
-        for (auto it = mEntries.begin(); it != mEntries.end(); ++it) {
-            if (it->mId == id) {
-                mEntries.erase(it);
-                return;
-            }
-        }
-    }
-
-    void emit(T &event) {
-        if (mEntries.empty())
-            return;
-
-        const std::vector<Entry> snapshot = mEntries;
-        for (const Entry &entry: snapshot)
-            entry.mHandler(event);
-    }
-
-    bool hasSubscribers() const {
-        return !mEntries.empty();
-    }
-
-    size_t subscriberCount() const {
-        return mEntries.size();
-    }
-
-    void clear() {
-        mEntries.clear();
-    }
-
-private:
-    struct Entry {
-        uint32_t mId;
-        Handler mHandler;
-    };
-
-    std::vector<Entry> mEntries;
-    uint32_t mNextId = 1;
-};
-
-class BeforeEvents {
+class BeforeEvents : public BrewingBeforeSignals,
+                     public ActorBeforeSignals,
+                     public LevelBeforeSignals,
+                     public BlockBeforeSignals,
+                     public InventoryBeforeSignals,
+                     public ServerBeforeSignals,
+                     public PlayerBeforeSignals,
+                     public TeleportBeforeSignals {
 public:
     EventSignal<PlayerChatBeforeEvent> mChatSend;
     EventSignal<PlayerBreakBlockBeforeEvent> mPlayerBreakBlock;
+    EventSignal<PlayerJoinMessageBeforeEvent> mPlayerJoinMessage;
+    EventSignal<PlayerLeaveMessageBeforeEvent> mPlayerLeaveMessage;
 
     void clear() {
         mChatSend.clear();
         mPlayerBreakBlock.clear();
+        mPlayerJoinMessage.clear();
+        mPlayerLeaveMessage.clear();
+        clearBrewingBeforeSignals();
+        clearActorBeforeSignals();
+        clearLevelBeforeSignals();
+        clearBlockBeforeSignals();
+        clearInventoryBeforeSignals();
+        clearServerBeforeSignals();
+        clearPlayerBeforeSignals();
+        clearTeleportBeforeSignals();
     }
 };
 
-class AfterEvents {
+class AfterEvents : public BrewingAfterSignals,
+                    public ActorAfterSignals,
+                    public LevelAfterSignals,
+                    public BlockAfterSignals,
+                    public InventoryAfterSignals,
+                    public ServerAfterSignals,
+                    public PlayerAfterSignals,
+                    public TeleportAfterSignals {
 public:
     EventSignal<PlayerChatAfterEvent> mChatSend;
     EventSignal<PlayerBreakBlockAfterEvent> mPlayerBreakBlock;
@@ -104,6 +82,14 @@ public:
         mItemStartUse.clear();
         mItemCompleteUse.clear();
         mEffectAdd.clear();
+        clearBrewingAfterSignals();
+        clearActorAfterSignals();
+        clearLevelAfterSignals();
+        clearBlockAfterSignals();
+        clearInventoryAfterSignals();
+        clearServerAfterSignals();
+        clearPlayerAfterSignals();
+        clearTeleportAfterSignals();
     }
 };
 

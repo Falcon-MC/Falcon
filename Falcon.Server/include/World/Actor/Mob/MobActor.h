@@ -17,8 +17,12 @@
 #include "World/Actor/Mob/Component/MobAreaAttack.h"
 #include "World/Actor/Mob/Component/MobEquipmentChanged.h"
 #include "World/Actor/Mob/Component/MobExplode.h"
-#include "World/Actor/Mob/Component/MobLeash.h"
+#include "World/Actor/ActorLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
+#include "World/Actor/Mob/Component/MobAmbientSounds.h"
+#include "World/Actor/Mob/Component/MobAngerLevel.h"
+#include "World/Actor/Mob/Component/MobEffectAura.h"
+#include "World/Actor/Mob/Component/MobTeleport.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/Component/MobEconomy.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
@@ -33,9 +37,12 @@
 #include "Server/PropertiesSettings.h"
 
 #include <cstdint>
+#include <optional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Level;
@@ -85,6 +92,9 @@ public:
 
     PhysicsComponent getPhysics() const override;
 
+    // minecraft:mob_effect_immunity refuses the effects it lists
+    bool canBeAffected(MobEffectId id) const override;
+
     bool canSwim() const;
 
     bool canWalk() const;
@@ -113,6 +123,11 @@ public:
         return getComponent("minecraft:remove_in_peaceful") != nullptr;
     }
 
+    // a player hit by the mob takes the difficulty's share; the game leaves the evoker's fangs out
+    virtual bool scalesDamageWithDifficulty() const {
+        return true;
+    }
+
     int getBreedingExperience() const;
 
     bool isExpired() const override {
@@ -130,6 +145,9 @@ public:
     virtual void finalizeSpawn() {}
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
+
+    // a catalyst takes what the death would drop, worked out as if a player had made the kill
+    int32_t takeDeathExperience(ServerNetworkHandler &owner) override;
 
     // now instead of on the first tick; at most once
     void startDefinition(ServerNetworkHandler &owner);
@@ -166,6 +184,11 @@ public:
         return mBehaviorsRemoved;
     }
 
+    // the running goals stop; they may start again on the next tick
+    void stopGoals(ServerNetworkHandler &owner) {
+        mGoalSelector.stopAll(owner, *this);
+    }
+
     MobExplode &getExplode() {
         return mExplode;
     }
@@ -179,6 +202,15 @@ public:
     }
 
     void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
+
+    bool dodgeProjectile(ServerNetworkHandler &owner, const ServerActor &projectile) override {
+        return mTeleport.dodge(owner, *this, projectile);
+    }
+
+    // one try at a spot of minecraft:teleport's random_teleport_cube; false without the component
+    bool randomTeleport(ServerNetworkHandler &owner) {
+        return mTeleport.randomTeleport(owner, *this);
+    }
 
     bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) override;
 
@@ -198,15 +230,18 @@ public:
 
     bool shieldFromSunlight() const override;
 
-    virtual float getAttackDamage(Difficulty difficulty) const;
+    // the same on every difficulty: a player takes the difficulty's share when it is hurt
+    virtual float getAttackDamage() const;
 
     const json::Value *getDefinition() const;
 
     const json::Value *getComponent(const std::string &name) const;
 
-    // component names exceed the small string buffer: a temporary std::string per tick lookup allocates;
-    // this reuses one key buffer
+    // found by definition component id: no std::string is built for the literal
     const json::Value *getComponent(const char *name) const;
+
+    // minecraft:persistent in the active groups keeps the mob too
+    bool isPersistent() const override;
 
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
 
@@ -215,7 +250,11 @@ public:
 
     std::vector<std::string> getFamilies() const;
 
-    float getMovementSpeed() const;
+    // the game overrides the movement attribute of a few mobs
+    virtual float getMovementSpeed() const;
+
+    // how far its targets are kept: minecraft:follow_range, 16 without it; the game sets a few mobs' in code
+    virtual float getFollowRange() const;
 
     bool hasComponentGroup(const std::string &group) const;
 
@@ -322,6 +361,20 @@ public:
 
     void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
 
+    // minecraft:color or minecraft:is_dyeable say whether the mob has a color: the value is the one its last color
+    // group or dye gave
+    bool hasColor() const;
+
+    int32_t getColor() const;
+
+    void setColor(ServerNetworkHandler &owner, int32_t color);
+
+    // minecraft:offspring combine_parent_colors, once the baby's born event gave it a color of its own
+    void inheritColor(ServerNetworkHandler &owner, const MobActor &firstParent, const MobActor &secondParent);
+
+    // minecraft:breedable inherit_tamed, before the baby's definition starts: its born event tests is_tamed
+    void inheritOwner(ServerNetworkHandler &owner, const MobActor &firstParent, const MobActor &secondParent);
+
     bool isTamed() const {
         return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty() || mOwnerless;
     }
@@ -338,6 +391,15 @@ public:
 
     bool isSitting() const {
         return mSitting;
+    }
+
+    // a bell rang close by: it hides until its hide goal is done with it
+    bool heardBell() const {
+        return mHeardBell;
+    }
+
+    void setHeardBell(bool heard) {
+        mHeardBell = heard;
     }
 
     bool isPanicking() const {
@@ -385,6 +447,24 @@ public:
         return mLastHurtBy;
     }
 
+    // the runtime id of the last actor this mob damaged
+    uint64_t getLastHurtMob() const {
+        return mLastHurtMob;
+    }
+
+    void setLastHurtMob(uint64_t runtimeId) {
+        mLastHurtMob = runtimeId;
+    }
+
+    // unique id of the leader minecraft:behavior.follow_target_leader follows, 0 for none
+    int64_t getTargetCaptainId() const {
+        return mTargetCaptainId;
+    }
+
+    void setTargetCaptainId(int64_t uniqueId) {
+        mTargetCaptainId = uniqueId;
+    }
+
     uint32_t getHurtCount() const {
         return mHurtCount;
     }
@@ -402,8 +482,8 @@ public:
 
     bool canTarget(const Actor &actor) const;
 
-    // minecraft:rideable with a free seat and an accepted family
-    bool acceptsRider(const MobActor &rider) const;
+    // minecraft:rideable with a free seat and, when checked, an accepted family
+    bool acceptsRider(const MobActor &rider, bool checkFamilies = true) const;
 
     float distanceSquaredTo(const Actor &other) const;
 
@@ -430,9 +510,17 @@ public:
         return mEquipment;
     }
 
-    MobLeash &getLeash() {
+    ActorLeash &getLeash() {
         return mLeash;
     }
+
+    ActorLeash *getActorLeash() override {
+        return &mLeash;
+    }
+
+    const json::Value *getLeashableComponent() const override;
+
+    const json::Value *getLeashableToComponent() const override;
 
     MobAdmiration &getAdmiration() {
         return mAdmiration;
@@ -462,8 +550,39 @@ public:
         return mAnger;
     }
 
+    MobAngerLevel &getAngerLevel() {
+        return mAngerLevel;
+    }
+
+    const MobAngerLevel &getAngerLevel() const {
+        return mAngerLevel;
+    }
+
+    const MobAmbientSounds &getAmbientSounds() const {
+        return mAmbientSounds;
+    }
+
+    // minecraft:suspect_tracking: the block something last disturbed the mob from, and the tick it did
+    const std::optional<Vector3i> &getSuspectPosition() const {
+        return mSuspectPosition;
+    }
+
+    int64_t getSuspectTick() const {
+        return mSuspectTick;
+    }
+
+    void setSuspectPosition(const Vector3i &position, int64_t tick) {
+        mSuspectPosition = position;
+        mSuspectTick = tick;
+    }
+
+    void clearSuspectPosition() {
+        mSuspectPosition.reset();
+    }
+
     // 0 without minecraft:inventory
     int getInventoryCapacity() const;
+    int getInventoryStrength() const;
 
     // a tamed mount with a horse container_type: its saddle, armor and chest slots
     Container *getEntityContainer() override;
@@ -519,6 +638,16 @@ public:
         return true;
     }
 
+    // a natural spawn the spawner settled on, before the mob is made: a few mobs move it, or call it off
+    virtual bool placeNaturalSpawn(ServerNetworkHandler &owner, Level &level, Vector3f &position,
+                                   std::mt19937 &random) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) random;
+        return true;
+    }
+
     RideControlState &getRideControl() {
         return mRideControl;
     }
@@ -527,6 +656,19 @@ protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
         (void) goalSelector;
     }
+
+    // false skips the goals and the navigation of the tick
+    virtual bool runsGoals() const {
+        return true;
+    }
+
+    // false leaves the loot and the experience to dropDeathRewards, called later by the mob
+    virtual bool dropsRewardsOnDeath() const {
+        return true;
+    }
+
+    // loot, equipment and experience, under domobloot; killer may be null
+    void dropDeathRewards(ServerNetworkHandler &owner, ServerPlayer *killer, int32_t lootingLevel);
 
     void tickControls(ServerNetworkHandler &owner);
 
@@ -537,7 +679,13 @@ private:
         explicit InventoryView(MobActor &mob) : mMob(mob) {}
 
         int getContainerSize() const override {
+            if (mMob._isMountInventory() && mMob.getComponent("minecraft:is_chested") == nullptr)
+                return getEquipmentSlotCount();
             return mMob.getInventoryCapacity();
+        }
+
+        int getEquipmentSlotCount() const override {
+            return mMob._isMountInventory() ? mMob._equippableSlotCount() : 0;
         }
 
         const ItemStack &getContainerItem(int slot) const override {
@@ -549,7 +697,9 @@ private:
         }
 
         bool canHoldInSlot(int slot, const ItemStack &item) const override {
-            return mMob._acceptsInEquippableSlot(slot, item);
+            return slot >= 0 && slot < getContainerSize()
+                   && (slot >= getEquipmentSlotCount() || item.isAir() || item.mCount == 1)
+                   && mMob._acceptsInEquippableSlot(slot, item);
         }
 
     private:
@@ -572,6 +722,7 @@ private:
         bool mSwims = false;
         bool mClimbsLadders = false;
         bool mClimbsWalls = false;
+        bool mBlockClimber = false;
         bool mDefinitionFriction = false;
         float mBounciness = 0.0f;
         float mFrictionModifier = 1.0f;
@@ -586,6 +737,8 @@ private:
     const DefinitionPhysics &_getDefinitionPhysics() const;
 
     void _rebuildComponents() const;
+
+    const json::Value *_findComponent(std::string_view name) const;
 
     const SensorComponents &_getSensorComponents() const;
 
@@ -614,11 +767,14 @@ private:
 
     void _tickTimer(ServerNetworkHandler &owner);
 
+    void _tickBreakBlocks(ServerNetworkHandler &owner);
+    void _tickDamageOverTime(ServerNetworkHandler &owner);
+
     void _tickScheduler(ServerNetworkHandler &owner);
 
     void _tickAttackCooldown(ServerNetworkHandler &owner);
 
-    int _experienceReward(const char *key, const ServerPlayer *player) const;
+    int _experienceReward(const char *key, const ServerPlayer *player, bool lastHitByPlayer = false) const;
 
     int _deathExperience(const ServerPlayer *killer) const;
 
@@ -654,11 +810,20 @@ private:
 
     bool _tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
-    bool _tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+    // the feeding steps set used when they take the held item: onInteract uses it up once for all of them
+    bool _tryFeedBaby(ServerNetworkHandler &owner, const ItemStack &held, bool &used);
 
-    bool _tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+    bool _trySpawnEggBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryStartLove(ServerNetworkHandler &owner, const ItemStack &held, bool &used);
 
     bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    bool _tryDye(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held, bool &used);
+
+    int32_t _mixColors(int32_t first, int32_t second);
 
     bool _tryInteract(ServerNetworkHandler &owner, ServerPlayer &player);
 
@@ -666,7 +831,9 @@ private:
 
     bool _tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
-    bool _tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+    bool _tryTieLeads(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    bool _tryFeedMount(ServerNetworkHandler &owner, const ItemStack &held, bool &used);
 
     bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
 
@@ -698,8 +865,7 @@ private:
 
     void _givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack item);
 
-    void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle,
-                               const std::string &type);
+    void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle);
 
     // true when an attribute the client must hear about changed
     bool _syncMovementAttributes();
@@ -722,6 +888,8 @@ private:
     bool mOwnerless = false;
     int64_t mSyncedOwnerId = NO_OWNER;
     bool mSitting = false;
+    std::optional<int32_t> mColor;
+    bool mHeardBell = false;
     bool mGoalsRegistered = false;
     bool mGoalsDirty = false;
     bool mBehaviorsRemoved = false;
@@ -736,7 +904,15 @@ private:
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;
     const json::Value *mTimerComponent = nullptr;
-    int32_t mTimerTicks = 0;
+    // the world tick the timer runs out on, as saved; a loaded timer resumes from it
+    int64_t mTimerStamp = 0;
+    bool mTimerExecuted = false;
+    // a saved stamp waiting for the timer component to come back after a load
+    bool mTimerLoaded = false;
+    const json::Value *mBreakBlocksComponent = nullptr;
+    std::unordered_set<std::string> mBreakableBlocks;
+    const json::Value *mDamageOverTimeComponent = nullptr;
+    int32_t mHurtCountdown = 0;
     const json::Value *mSchedulerComponent = nullptr;
     // the scheduled event whose filters held last; -1 for none
     int32_t mScheduledEvent = -1;
@@ -772,19 +948,15 @@ private:
     mutable bool mDefinitionResolved = false;
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
-    mutable std::string mComponentKey;
-    struct RecentComponent {
-        const char *mAddress;
-        std::string mName;
-        const json::Value *mValue;
-    };
-    static constexpr size_t MAX_RECENT_COMPONENTS = 64;
-    // emptied with the components: a group added or removed changes what a name finds
-    mutable std::vector<RecentComponent> mRecentComponents;
+    // mComponents by definition component id, filled as names are looked up; emptied with the components: a group
+    // added or removed changes what a name finds
+    mutable std::vector<const json::Value *> mRecentComponents;
     mutable SensorComponents mSensorComponents;
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
+    uint64_t mLastHurtMob = 0;
+    int64_t mTargetCaptainId = 0;
     ActorDamageSource mLastHurtSource;
     uint32_t mHurtCount = 0;
     uint64_t mTargetRuntimeId = 0;
@@ -796,6 +968,9 @@ private:
     BodyControl mBodyControl;
     MobEquipment mEquipment;
     MobEconomy mEconomy;
+    bool _isMountInventory() const;
+    int _equippableSlotCount() const;
+    int mLoadedInventoryStrength = -1;
     InventoryView mInventoryView{*this};
     MobEntitySpawner mEntitySpawner;
     std::vector<int32_t> mEntitySensorCooldowns;
@@ -804,10 +979,16 @@ private:
     mutable float mRolledJumpStrength = -1.0f;
     RideControlState mRideControl;
     MobAnger mAnger;
+    MobAngerLevel mAngerLevel;
+    MobAmbientSounds mAmbientSounds;
+    MobEffectAura mEffectAura;
+    MobTeleport mTeleport;
+    std::optional<Vector3i> mSuspectPosition;
+    int64_t mSuspectTick = 0;
     MobDweller mDweller;
     MobAddRider mAddRider;
     MobAdmiration mAdmiration;
-    MobLeash mLeash;
+    ActorLeash mLeash;
     MobAreaAttack mAreaAttack;
     MobExplode mExplode;
     MobEquipmentChanged mEquipmentChanged;
@@ -827,4 +1008,5 @@ private:
     mutable DefinitionPhysics mDefinitionPhysics;
     mutable bool mDefinitionPhysicsStale = true;
     mutable PushableByEntityPresets mPushPresets;
+    bool mDeathExperienceTaken = false;
 };

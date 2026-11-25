@@ -19,6 +19,7 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/StonecutterRecipes.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Item/EnchantmentHelper.h"
 #include "World/Item/FurnaceExperience.h"
 #include "World/Inventory/CraftingManager.h"
 #include "World/Level/Level.h"
@@ -26,7 +27,6 @@
 #include "Network/PacketSender.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/BlockActorDataPacket.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
@@ -54,6 +54,8 @@
 
 namespace {
     const int32_t CHEST_ANIMATION_EVENT_TYPE = 1;
+    // the ender chest opens like a chest: the client keeps the lid up while the value is above zero
+    const int32_t ENDER_CHEST_OPEN_DATA = 1;
 
     const ItemStack &itemAt(const PlayerInventory &inventory, InventoryManager::InventoryId id, int slot) {
         switch (id) {
@@ -492,7 +494,7 @@ namespace {
         if (id == "minecraft:bookshelf" || id == "minecraft:crafting_table" || id == "minecraft:cartography_table"
             || id == "minecraft:fletching_table" || id == "minecraft:smithing_table" || id == "minecraft:chest"
             || id == "minecraft:trapped_chest" || id == "minecraft:barrel" || id == "minecraft:jukebox"
-            || id == "minecraft:note_block" || id == "minecraft:daylight_detector" || id == "minecraft:banner"
+            || id == "minecraft:noteblock" || id == "minecraft:daylight_detector" || id == "minecraft:banner"
             || id.find("_banner") != std::string::npos || id.find("_hanging_sign") != std::string::npos)
             return 300;
         return 0;
@@ -614,17 +616,11 @@ namespace {
             ItemStack fuel = state.mInventory.mItems[FurnaceInventory::SLOT_FUEL];
             int duration = fuelTime(fuel);
             if (duration > 0 && fuel.mCount > 0) {
-                if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_BURN)) {
-                    ItemStack burning = fuel;
-                    PluginEvent burnEvent;
-                    burnEvent.mType = FALCON_EVENT_FURNACE_BURN;
-                    burnEvent.mCancellable = true;
-                    burnEvent.mLevel = level;
-                    burnEvent.mBlockPosition = position;
-                    burnEvent.mItem = &burning;
-                    burnEvent.mAmount = (double) duration;
-                    plugins->dispatch(burnEvent);
-                    duration = burnEvent.mCancelled ? 0 : std::max(0, (int) burnEvent.mAmount);
+                EventSignal<FurnaceBurnBeforeEvent> &burn = owner.getEventBus().before().mFurnaceBurn;
+                if (burn.hasSubscribers()) {
+                    FurnaceBurnBeforeEvent burnEvent(*level, position, fuel, duration);
+                    burn.emit(burnEvent);
+                    duration = burnEvent.isCancelled() ? 0 : burnEvent.mBurnTime;
                 }
             }
             if (duration > 0 && fuel.mCount > 0) {
@@ -653,17 +649,11 @@ namespace {
                 if (state.mCookTime >= duration) {
                     ItemStack smelted = result;
                     bool allowed = true;
-                    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FURNACE_SMELT)) {
-                        ItemStack source = input;
-                        PluginEvent smeltEvent;
-                        smeltEvent.mType = FALCON_EVENT_FURNACE_SMELT;
-                        smeltEvent.mCancellable = true;
-                        smeltEvent.mLevel = level;
-                        smeltEvent.mBlockPosition = position;
-                        smeltEvent.mItem = &source;
-                        smeltEvent.mResult = &smelted;
-                        plugins->dispatch(smeltEvent);
-                        allowed = !smeltEvent.mCancelled && !smelted.isAir()
+                    EventSignal<FurnaceSmeltBeforeEvent> &smelt = owner.getEventBus().before().mFurnaceSmelt;
+                    if (smelt.hasSubscribers()) {
+                        FurnaceSmeltBeforeEvent smeltEvent(*level, position, input, smelted);
+                        smelt.emit(smeltEvent);
+                        allowed = !smeltEvent.isCancelled() && !smelted.isAir()
                                   && (currentOutput.isAir() || stackMatches(currentOutput, smelted));
                     }
 
@@ -919,6 +909,19 @@ void InventoryManager::onCurrentWindowRemove() {
     close.mWindowId = (int8_t) currentWindowId;
     close.mType = mCurrentWindowType;
     close.mServerInitiated = true;
+    if (mPluginWindow != nullptr) {
+        if (mHasPendingCloseWindow)
+            return;
+        mPendingCloseWindowId = currentWindowId;
+        mHasPendingCloseWindow = true;
+        const auto closing = mPluginWindow;
+        mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), close);
+        if (mPluginWindow == closing) {
+            _closeContainerWindow();
+            mContainerWindowId = CONTAINER_ID_NONE;
+        }
+        return;
+    }
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), close);
 
     mPendingCloseWindowId = currentWindowId;
@@ -954,20 +957,13 @@ bool InventoryManager::_allowPluginOpen(const Vector3i &position) {
     if (mOwner == nullptr || mPlayer == nullptr)
         return true;
 
-    PluginManager &plugins = mOwner->getPluginManager();
-    if (!plugins.hasSubscribers(FALCON_EVENT_INVENTORY_OPEN) && !plugins.hasSubscribers(FALCON_EVENT_INVENTORY_CLOSE))
+    EventSignal<BlockContainerOpenBeforeEvent> &open = mOwner->getEventBus().before().mBlockContainerOpen;
+    if (!open.hasSubscribers())
         return true;
 
-    Level &level = mOwner->getLevelFor(*mPlayer);
-    PluginEvent openEvent;
-    openEvent.mType = FALCON_EVENT_INVENTORY_OPEN;
-    openEvent.mCancellable = true;
-    openEvent.mPlayer = mPlayer;
-    openEvent.mLevel = &level;
-    openEvent.mBlockPosition = position;
-    openEvent.mBlockName = level.getBlockState(position.x, position.y, position.z).mName;
-    plugins.dispatch(openEvent);
-    if (openEvent.mCancelled)
+    BlockContainerOpenBeforeEvent openEvent(*mPlayer, mOwner->getLevelFor(*mPlayer), position);
+    open.emit(openEvent);
+    if (openEvent.isCancelled())
         return false;
 
     mPluginOpen = true;
@@ -993,15 +989,12 @@ void InventoryManager::dispatchPluginClose() {
         return;
 
     mPluginOpen = false;
-    Level &level = mOwner->getLevelFor(*mPlayer);
-    PluginEvent closeEvent;
-    closeEvent.mType = FALCON_EVENT_INVENTORY_CLOSE;
-    closeEvent.mPlayer = mPlayer;
-    closeEvent.mLevel = &level;
-    closeEvent.mBlockPosition = mPluginOpenPosition;
-    closeEvent.mBlockName =
-            level.getBlockState(mPluginOpenPosition.x, mPluginOpenPosition.y, mPluginOpenPosition.z).mName;
-    mOwner->getPluginManager().dispatch(closeEvent);
+    EventSignal<BlockContainerCloseAfterEvent> &close = mOwner->getEventBus().after().mBlockContainerClose;
+    if (!close.hasSubscribers())
+        return;
+
+    BlockContainerCloseAfterEvent closeEvent(*mPlayer, mOwner->getLevelFor(*mPlayer), mPluginOpenPosition);
+    close.emit(closeEvent);
 }
 
 bool InventoryManager::onClientOpenCraftingTable(const Vector3i &position) {
@@ -1043,6 +1036,68 @@ bool InventoryManager::onClientOpenCartography(const Vector3i &position) {
     return _openWorkbench(ContainerType::Cartography, position);
 }
 
+bool InventoryManager::onClientOpenGrindstone(const Vector3i &position) {
+    if (mPlayer == nullptr || mOwner == nullptr)
+        return false;
+    const Level &level = mOwner->getLevelFor(*mPlayer);
+    if (isGrindstoneOpen() && !isGrindstoneOpenIn(level)) {
+        onCurrentWindowRemove();
+        return false;
+    }
+    return _openWorkbench(ContainerType::Grindstone, position);
+}
+
+bool InventoryManager::isGrindstoneOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Grindstone;
+}
+
+bool InventoryManager::isGrindstoneOpenIn(const Level &level) const {
+    return isGrindstoneOpen() && mWorkbenchLevel == &level;
+}
+
+void InventoryManager::syncGrindstoneInputs() {
+    if (mPlayer == nullptr || mSender == nullptr || !isGrindstoneOpen())
+        return;
+    for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+        InventorySlotPacket packet;
+        packet.mContainerId = CONTAINER_ID_UI;
+        packet.mSlot = PlayerInventory::GRINDSTONE_FIRST_SLOT + index;
+        packet.mItem = mPlayer->getInventory().getGrindstoneItem(index);
+        mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
+    }
+}
+
+bool InventoryManager::onClientOpenLoom(const Vector3i &position) {
+    if (mPlayer == nullptr || mOwner == nullptr)
+        return false;
+    const Level &level = mOwner->getLevelFor(*mPlayer);
+    if (isLoomOpen() && !isLoomOpenIn(level)) {
+        onCurrentWindowRemove();
+        return false;
+    }
+    return _openWorkbench(ContainerType::Loom, position);
+}
+
+bool InventoryManager::isLoomOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Loom;
+}
+
+bool InventoryManager::isLoomOpenIn(const Level &level) const {
+    return isLoomOpen() && mWorkbenchLevel == &level;
+}
+
+void InventoryManager::syncLoomInputs() {
+    if (mPlayer == nullptr || mSender == nullptr || !isLoomOpen())
+        return;
+    for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+        InventorySlotPacket packet;
+        packet.mContainerId = CONTAINER_ID_UI;
+        packet.mSlot = PlayerInventory::LOOM_FIRST_SLOT + index;
+        packet.mItem = mPlayer->getInventory().getLoomItem(index);
+        mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
+    }
+}
+
 bool InventoryManager::onClientOpenSmithing(const Vector3i &position) {
     return _openWorkbench(ContainerType::SmithingTable, position);
 }
@@ -1072,8 +1127,9 @@ bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &positi
     if (mPlayer == nullptr || mSender == nullptr)
         return false;
 
+    const Level *level = mOwner == nullptr ? nullptr : &mOwner->getLevelFor(*mPlayer);
     if (mAnvilWindowId != CONTAINER_ID_NONE)
-        return mAnvilWindowType == type && mAnvilPosition == position;
+        return mAnvilWindowType == type && mAnvilPosition == position && mWorkbenchLevel == level;
 
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
         || mFurnaceWindowId != CONTAINER_ID_NONE || mContainerWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
@@ -1086,6 +1142,7 @@ bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &positi
     mAnvilWindowId = windowId;
     mAnvilWindowType = type;
     mAnvilPosition = position;
+    mWorkbenchLevel = level;
     mCurrentWindowType = type;
     mStonecutterSelectedRecipe = 0;
 
@@ -1096,6 +1153,10 @@ bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &positi
     open.mUniqueActorId = -1;
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
     return true;
+}
+
+bool InventoryManager::isWorkbenchOpenIn(const Level &level) const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mWorkbenchLevel == &level;
 }
 
 bool InventoryManager::isAnvilOpen() const {
@@ -1152,7 +1213,28 @@ void InventoryManager::_closeAnvil() {
         return;
 
     mClientMapLock = CartographyLock();
+    mWorkbenchLevel = nullptr;
     PlayerInventory &inventory = mPlayer->getInventory();
+    if (mAnvilWindowType == ContainerType::Grindstone) {
+        for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+            ItemStack item = inventory.getGrindstoneItem(index);
+            if (item.isAir())
+                continue;
+            inventory.setGrindstoneItem(index, ItemStack::air());
+            _returnToInventory(std::move(item));
+        }
+        return;
+    }
+    if (mAnvilWindowType == ContainerType::Loom) {
+        for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+            ItemStack item = inventory.getLoomItem(index);
+            if (item.isAir())
+                continue;
+            inventory.setLoomItem(index, ItemStack::air());
+            _returnToInventory(std::move(item));
+        }
+        return;
+    }
     if (mAnvilWindowType == ContainerType::SmithingTable) {
         for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
             ItemStack item = inventory.getSmithingItem(index);
@@ -1268,6 +1350,27 @@ bool InventoryManager::refreshEnchantInput(const ItemStack &current, int32_t new
     return true;
 }
 
+void InventoryManager::setEnchantOptions(std::vector<int32_t> enchantNetIds) {
+    EnchantmentHelper::discardOptions(mEnchantOptionIds);
+    mEnchantOptionIds = std::move(enchantNetIds);
+}
+
+bool InventoryManager::offersEnchant(int32_t enchantNetId, const ItemStack &input) const {
+    if (std::find(mEnchantOptionIds.begin(), mEnchantOptionIds.end(), enchantNetId) == mEnchantOptionIds.end())
+        return false;
+
+    return !input.isAir() && input.mDefinition != nullptr && input.mDefinition->getIdentifier() == mEnchantInputId
+           && input.mCount == mEnchantInputCount && input.mDamage == mEnchantInputDamage;
+}
+
+void InventoryManager::clearEnchantOptions() {
+    setEnchantOptions({});
+    // the next item put in the table is a new one, even the same kind: its options are rolled again
+    mEnchantInputId.clear();
+    mEnchantInputCount = 0;
+    mEnchantInputDamage = 0;
+}
+
 void InventoryManager::refreshOpenContainer(const Vector3i &position) {
     if (mContainerWindowId == CONTAINER_ID_NONE || mContainerActorId != -1 || !(mContainerPosition == position))
         return;
@@ -1278,6 +1381,8 @@ void InventoryManager::refreshOpenContainer(const Vector3i &position) {
 }
 
 Container *InventoryManager::getContainer() {
+    if (mPluginWindow != nullptr)
+        return isContainerOpen() ? mPluginWindow.get() : nullptr;
     if (mContainerActorId != -1) {
         ServerActor *actor = mOwner == nullptr ? nullptr : mOwner->getActor(mContainerActorId);
         return actor == nullptr || !isContainerOpen() ? nullptr : actor->getEntityContainer();
@@ -1355,8 +1460,11 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
         if (shulkerBox->getViewerCount() == 1)
             _animateBlockContainer(position, true, LevelSoundEvent::SHULKER_BOX_OPEN,
                                    LevelSoundEvent::SHULKER_BOX_CLOSED);
-    } else if (dynamic_cast<EnderChestBlockActor *>(blockActor) != nullptr) {
-        _animateBlockContainer(position, true, LevelSoundEvent::ENDER_CHEST_OPEN, LevelSoundEvent::ENDER_CHEST_CLOSED);
+    } else if (EnderChestBlockActor *enderChest = dynamic_cast<EnderChestBlockActor *>(blockActor)) {
+        enderChest->addViewer();
+        if (enderChest->getViewerCount() == 1)
+            _animateBlockContainer(position, true, LevelSoundEvent::ENDER_CHEST_OPEN,
+                                   LevelSoundEvent::ENDER_CHEST_CLOSED, ENDER_CHEST_OPEN_DATA);
     }
 
     RedstoneSystem::queueRedstoneNotification(mOwner->getLevelFor(*mPlayer), position);
@@ -1367,8 +1475,9 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
 bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType type) {
     if (mPlayer == nullptr || mSender == nullptr || mOwner == nullptr)
         return false;
+    // the command block screen of a command block minecart has no slots
     Container *container = actor.getEntityContainer();
-    if (container == nullptr)
+    if (container == nullptr && type != ContainerType::CommandBlock)
         return false;
     if (mContainerWindowId != CONTAINER_ID_NONE)
         return mContainerActorId == actor.getUniqueId();
@@ -1391,10 +1500,51 @@ bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType typ
     open.mBlockPosition = mContainerPosition;
     open.mUniqueActorId = actor.getUniqueId();
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
-    _sendContentPackets(windowId, *container);
+    if (container != nullptr)
+        _sendContentPackets(windowId, *container);
 
     mOwner->getScriptEngine().onEntityContainerOpened(actor, *mPlayer);
     return true;
+}
+
+int InventoryManager::openPluginWindow(std::shared_ptr<Container> container, ContainerType type,
+                                      const Vector3i &position, int64_t actorId, std::function<void(int)> onClosed) {
+    if (container == nullptr || mPlayer == nullptr || mSender == nullptr || mOwner == nullptr)
+        return CONTAINER_ID_NONE;
+    if (mContainerWindowId != CONTAINER_ID_NONE || mMainInventoryWindowId != CONTAINER_ID_NONE
+        || mCraftingTableWindowId != CONTAINER_ID_NONE || mFurnaceWindowId != CONTAINER_ID_NONE
+        || mAnvilWindowId != CONTAINER_ID_NONE || mTradeWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        return CONTAINER_ID_NONE;
+
+    const int windowId = _getNewWindowId();
+    mContainerWindowId = windowId;
+    mContainerActorId = actorId;
+    mContainerPosition = position;
+    mCurrentWindowType = type;
+    mPluginWindow = std::move(container);
+    mPluginWindowClosed = std::move(onClosed);
+
+    ContainerOpenPacket open;
+    open.mWindowId = (int8_t) windowId;
+    open.mType = type;
+    open.mBlockPosition = position;
+    open.mUniqueActorId = actorId;
+    const auto opened = mPluginWindow;
+    mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
+    if (mPluginWindow == opened)
+        _sendContentPackets(windowId, *opened);
+    return windowId;
+}
+
+Container *InventoryManager::getPluginWindow(int windowId) {
+    if (mPluginWindow == nullptr || windowId == CONTAINER_ID_NONE || windowId != mContainerWindowId)
+        return nullptr;
+    return mPluginWindow.get();
+}
+
+void InventoryManager::refreshPluginWindow() {
+    if (mPluginWindow != nullptr && isContainerOpen())
+        _sendContentPackets(mContainerWindowId, *mPluginWindow);
 }
 
 void InventoryManager::refreshEntityContainer(int64_t actorId) {
@@ -1407,6 +1557,17 @@ void InventoryManager::refreshEntityContainer(int64_t actorId) {
 
 // the entity container window fires entityContainerClosed, a block one closes its block actor
 void InventoryManager::_closeContainerWindow() {
+    clearEnchantOptions();
+    if (mPluginWindow != nullptr) {
+        const int windowId = mContainerWindowId;
+        auto onClosed = std::move(mPluginWindowClosed);
+        mPluginWindow.reset();
+        mPluginWindowClosed = nullptr;
+        mContainerActorId = -1;
+        if (onClosed)
+            onClosed(windowId);
+        return;
+    }
     if (mContainerActorId == -1) {
         _closeBlockContainer();
         return;
@@ -1499,7 +1660,7 @@ void InventoryManager::_animateChest(ChestBlockActor &chest, bool open) {
 }
 
 void InventoryManager::_animateBlockContainer(const Vector3i &position, bool open, const char *openSound,
-                                              const char *closeSound) {
+                                              const char *closeSound, int32_t openData) {
     if (mOwner == nullptr || mPlayer == nullptr)
         return;
 
@@ -1509,7 +1670,7 @@ void InventoryManager::_animateBlockContainer(const Vector3i &position, bool ope
     BlockEventPacket event;
     event.mBlockPosition = position;
     event.mEventType = CHEST_ANIMATION_EVENT_TYPE;
-    event.mEventData = open ? 2 : 0;
+    event.mEventData = open ? openData : 0;
     BlockActionHandler::broadcastToViewers(*mOwner, level, center, event);
     mOwner->playLevelSound(level, open ? openSound : closeSound, center);
 }
@@ -1573,9 +1734,14 @@ void InventoryManager::_closeBlockContainer() {
         return;
     }
 
-    if (dynamic_cast<EnderChestBlockActor *>(blockActor) != nullptr)
-        _animateBlockContainer(mContainerPosition, false, LevelSoundEvent::ENDER_CHEST_OPEN,
-                               LevelSoundEvent::ENDER_CHEST_CLOSED);
+    EnderChestBlockActor *enderChest = dynamic_cast<EnderChestBlockActor *>(blockActor);
+    if (enderChest != nullptr) {
+        const bool wasLastViewer = enderChest->getViewerCount() == 1;
+        enderChest->removeViewer();
+        if (wasLastViewer)
+            _animateBlockContainer(mContainerPosition, false, LevelSoundEvent::ENDER_CHEST_OPEN,
+                                   LevelSoundEvent::ENDER_CHEST_CLOSED, ENDER_CHEST_OPEN_DATA);
+    }
 }
 
 bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind kind, ContainerType type) {

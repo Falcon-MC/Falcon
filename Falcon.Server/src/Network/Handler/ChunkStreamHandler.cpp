@@ -22,6 +22,29 @@ namespace {
     const double MIN_FOV_CHECK_DISTANCE = 4.0;
     // a Falcon choice: generation takes longer than this many ticks
     const int64_t LOAD_RETRY_TICKS = 4;
+    // queued chunks looked at per tick, generating ones included
+    const size_t MAX_SCANNED_PER_TICK = 1024;
+    // pending chunk bytes shared by every player, and the most one player holds: alone, a player flying fast needs
+    // more than one tick of chunks waiting on the network thread
+    const size_t TOTAL_QUEUED_CHUNK_BYTES = 16 * 1024 * 1024;
+    const size_t MAX_QUEUED_CHUNK_BYTES_PER_PLAYER = 1024 * 1024;
+
+    // chunks sent per tick by every player together, and the most one player is sent: at flying speed a view of 32
+    // takes in more than 20 new chunks a tick
+    const unsigned TOTAL_SENDS_PER_TICK = 512;
+    const unsigned MAX_SENDS_PER_TICK_PER_PLAYER = 48;
+
+    unsigned sendsPerTickFor(ServerNetworkHandler &owner) {
+        const unsigned players = (unsigned) std::max<size_t>(1, owner.getPlayers().size());
+        return std::clamp(TOTAL_SENDS_PER_TICK / players, ChunkStreamHandler::MAX_SENDS_PER_TICK,
+                          MAX_SENDS_PER_TICK_PER_PLAYER);
+    }
+
+    size_t queuedChunkBytesFor(ServerNetworkHandler &owner) {
+        const size_t players = std::max<size_t>(1, owner.getPlayers().size());
+        return std::clamp(TOTAL_QUEUED_CHUNK_BYTES / players, ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES,
+                          MAX_QUEUED_CHUNK_BYTES_PER_PLAYER);
+    }
     const double MIN_FOV_CHECK_DISTANCE_SQUARED = MIN_FOV_CHECK_DISTANCE * MIN_FOV_CHECK_DISTANCE;
 
     int32_t streamRadius(const ChunkStreamState &state, const Level &level) {
@@ -227,10 +250,12 @@ namespace {
     void updateChunkSendingQueue(ChunkStreamState &state, ServerPlayer &player) {
         const std::unordered_set<int64_t> &sent = player.getSentChunks();
 
+        // a chunk already waiting to be sent stays out: queued twice, it would be built and sent twice
+        const std::unordered_set<int64_t> ready(state.mReadyToSend.begin(), state.mReadyToSend.end());
         state.mSendQueue.clear();
         state.mLoadRetryTick = 0;
         for (const int64_t hash: state.mInRadius) {
-            if (sent.find(hash) == sent.end())
+            if (sent.find(hash) == sent.end() && ready.find(hash) == ready.end())
                 state.mSendQueue.push_back(hash);
         }
 
@@ -288,11 +313,14 @@ namespace {
         const bool clientSideGeneration = isClientSideGeneration(owner);
         BuildDecision decision(owner, player, level, streamRadius(state, level));
         std::vector<int64_t> requeue;
-        int32_t tried = 0;
+        // only new requests use up the attempts: chunks already generating would otherwise hold the nearest
+        // slots and leave the workers idle
+        int32_t requested = 0;
+        size_t scanned = 0;
         bool progressed = false;
 
-        while (!state.mSendQueue.empty() && tried < attempts) {
-            ++tried;
+        while (!state.mSendQueue.empty() && requested < attempts && scanned < MAX_SCANNED_PER_TICK) {
+            ++scanned;
 
             const int64_t hash = popQueue(state, state.mSendQueue);
 
@@ -321,25 +349,27 @@ namespace {
                 continue;
             }
 
-            if (level.isChunkResident(chunkX, chunkZ)) {
-                state.mLoading.erase(hash);
-                level.requestChunkAsync(chunkX, chunkZ);
-                requeue.push_back(hash);
-                continue;
-            }
-
-            // generation backpressure can defer admission; Level dedupes accepted requests: retry anyway
-            level.requestChunkAsync(chunkX, chunkZ);
-            state.mLoading.insert(hash);
-
             requeue.push_back(hash);
+            const bool resident = level.isChunkResident(chunkX, chunkZ);
+            if (resident)
+                state.mLoading.erase(hash);
+            else
+                state.mLoading.insert(hash);
+            if (level.isChunkRequested(chunkX, chunkZ))
+                continue;
+            // the workers are full: the chunks behind wait for the next tick as well
+            if (!level.canRequestChunk())
+                break;
+
+            level.requestChunkAsync(chunkX, chunkZ);
+            ++requested;
         }
 
         for (const int64_t hash: requeue)
             pushQueue(state, state.mSendQueue, hash);
 
         // every chunk tried is still generating: sorting the same ones again each tick buys nothing
-        if (!progressed)
+        if (!progressed && requested == 0)
             state.mLoadRetryTick = owner.getChunkStreamTick() + LOAD_RETRY_TICKS;
     }
 
@@ -392,7 +422,7 @@ namespace {
         // the spawn status waits on the nearest chunks: one tick sends them, their compression is shared;
         // meanwhile players already in hold back the link and the clients' decoding
         const bool spawning = !player.hasSpawnChunksReady();
-        unsigned budget = ChunkStreamHandler::MAX_SENDS_PER_TICK;
+        unsigned budget = ChunkStreamHandler::getSendsPerTick(owner);
         if (spawning)
             budget = (unsigned) ChunkStreamHandler::SPAWN_CHUNK_COUNT;
         else if (owner.isJoinBurst())
@@ -403,8 +433,9 @@ namespace {
         // chunks encoded faster than the network thread compresses only pile up and delay everything else
         NetworkHandler &network = owner.getNetworkHandler();
         const NetworkIdentifier &id = player.getNetworkIdentifier();
+        const size_t queuedBytes = queuedChunkBytesFor(owner);
         const auto hasRoom = [&]() {
-            return spawning || network.getPendingOutboundBytes(id) < ChunkStreamHandler::MAX_QUEUED_CHUNK_BYTES;
+            return spawning || network.getPendingOutboundBytes(id) < queuedBytes;
         };
         if (!hasRoom())
             return;
@@ -438,12 +469,20 @@ namespace {
                 continue;
             }
 
+            if (sent.find(hash) != sent.end())
+                continue;
+
             const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
             const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
 
             sendChunk(owner, player, level, chunkX, chunkZ, hash);
             level.registerChunkLoader(player.getRuntimeId(), chunkX, chunkZ);
             sent.insert(hash);
+            EventSignal<PlayerChunkSentAfterEvent> &chunkSent = owner.getEventBus().after().mPlayerChunkSent;
+            if (chunkSent.hasSubscribers()) {
+                PlayerChunkSentAfterEvent event(player, level, chunkX, chunkZ);
+                chunkSent.emit(event);
+            }
             ++added;
             ++state.mSendsThisTick;
 
@@ -611,6 +650,7 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
             updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
                                  state.mComparatorChunkZ);
             removeOutOfRadiusChunks(state, owner, player);
+            pruneQueueOutOfRadius(state, state.mReadyToSend, owner.getLevelFor(player), player.getRuntimeId());
             updateChunkSendingQueue(state, player);
         }
     }
@@ -618,12 +658,25 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
     const int32_t attempts = player.hasSpawnChunksReady()
                                      ? (int32_t) owner.getChunksPerTick()
                                      : std::max((int32_t) owner.getChunksPerTick(), (int32_t) SPAWN_CHUNK_COUNT);
-    loadQueuedChunks(state, owner, player, attempts);
+    // generation admission goes first come: a spawned view loading its edge would take the slots a spawn waits on
+    if (!player.hasSpawnChunksReady() || !owner.hasPlayersAwaitingTerrain())
+        loadQueuedChunks(state, owner, player, attempts);
     sendReadyChunks(state, owner, player);
     if (clientSideGeneration)
         recheckClientBuilt(state, owner, player);
 
     player.setLastChunkPosition(state.mComparatorChunkX, state.mComparatorChunkZ);
+}
+
+unsigned ChunkStreamHandler::getSendsPerTick(ServerNetworkHandler &owner) {
+    return sendsPerTickFor(owner);
+}
+
+void ChunkStreamHandler::loadDeferred(ServerNetworkHandler &owner, ServerPlayer &player) {
+    if (!player.hasSpawnChunksReady() || !owner.hasPlayersAwaitingTerrain())
+        return;
+
+    loadQueuedChunks(player.getChunkStreamState(), owner, player, (int32_t) owner.getChunksPerTick());
 }
 
 void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlayer &player) {

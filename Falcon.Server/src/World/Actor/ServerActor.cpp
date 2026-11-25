@@ -8,12 +8,14 @@
 #include "World/Actor/SunlightBurn.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/SpawnEggItem.h"
 #include "Server/Profiler.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Storage/FalconDataVersion.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -211,33 +213,43 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     if (!isAlive() || amount < 0.0f || isInvulnerable())
         return false;
 
+    // a mob struck for nothing still flinches and is pushed: other actors ignore it
+    const bool living = dynamic_cast<MobActor *>(this) != nullptr;
+    if (amount <= 0.0f && !living)
+        return false;
+
     if (getNoDamageTicks() > 0 && amount <= getLastDamageAmount())
         return false;
 
     if (!senseDamage(owner, amount, damageSource))
         return false;
 
-    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, damageSource) || amount <= 0.0f)
+    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, damageSource) || amount < 0.0f
+        || (amount <= 0.0f && !living))
         return false;
 
-    PluginEvent damageEvent;
-    damageEvent.mType = FALCON_EVENT_ENTITY_DAMAGE;
-    damageEvent.mCancellable = true;
-    damageEvent.mEntity = this;
-    damageEvent.mAttacker = attacker;
-    damageEvent.mAmount = amount;
-    damageEvent.mCause = damageSource.mDeathMessageKey;
-    PluginManager::getInstance().dispatch(damageEvent);
-    if (damageEvent.mCancelled)
-        return false;
+    // a hit from an attacker pushes: listeners see the game's push and may change it
+    float knockbackHorizontal = 0.4f;
+    float knockbackVertical = 0.4f;
+    EventSignal<ActorDamageBeforeEvent> &damage = owner.getEventBus().before().mActorDamage;
+    if (damage.hasSubscribers()) {
+        ActorDamageBeforeEvent event(*this, damageSource, amount, knockbackHorizontal, knockbackVertical);
+        damage.emit(event);
+        if (attacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
+            setKnockbackOverride(knockbackHorizontal, knockbackVertical);
+        if (event.isCancelled())
+            return false;
 
-    amount = (float) damageEvent.mAmount;
-    if (amount <= 0.0f)
-        return false;
+        amount = event.mDamage;
+        if (amount < 0.0f || (amount <= 0.0f && !living))
+            return false;
+    }
 
     ServerPlayer *source = dynamic_cast<ServerPlayer *>(attacker);
     if (source != nullptr)
         source->recordAttacked(getRuntimeId(), owner.getCurrentTick());
+    else if (auto *mobAttacker = dynamic_cast<MobActor *>(attacker); mobAttacker != nullptr && mobAttacker != this)
+        mobAttacker->setLastHurtMob(getRuntimeId());
 
     const float rawAmount = amount;
     if (damageSource.mApplyArmor) {
@@ -262,10 +274,12 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
         owner.syncActorAttributes(*this);
 
     owner.broadcastActorEvent(*this, EntityEventType::HurtAnimation);
+    owner.getLevelFor(*this).postGameEvent(GameEvents::ENTITY_DAMAGE, getPosition(), this);
     owner.playLevelSound(owner.getLevelFor(*this), LevelSoundEvent::HIT, getPosition(), mIdentifier);
     owner.getScriptEngine().onEntityHurt(*this, amount, damageSource);
 
-    if (source != nullptr) {
+    // a projectile pushes along its own flight, not away from whoever shot it
+    if (source != nullptr && !damageSource.mProjectile) {
         const Vector3f sourcePosition = source->getPosition();
         owner.knockBack(*this, getPosition().x - sourcePosition.x, getPosition().z - sourcePosition.z,
                         ATTACK_KNOCKBACK);
@@ -286,6 +300,10 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     return true;
 }
 
+std::string ServerActor::getPickItem() const {
+    return SpawnEggItem::eggOf(getIdentifier());
+}
+
 void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
     (void) lootingLevel;
 
@@ -298,11 +316,24 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     setDead(true);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
 
-    PluginEvent event;
-    event.mType = FALCON_EVENT_ENTITY_DEATH;
-    event.mEntity = this;
-    event.mAttacker = source;
-    PluginManager::getInstance().dispatch(event);
+    EventSignal<ActorDeathBeforeEvent> &death = owner.getEventBus().before().mActorDeath;
+    if (death.hasSubscribers()) {
+        ActorDeathBeforeEvent event(*this, source, mDeathDropsHeld ? &mDeathDrops : nullptr,
+                                    mDeathDropsHeld ? &mDeathExperience : nullptr);
+        death.emit(event);
+    }
+
+    if (mDeathDropsHeld) {
+        mDeathDropsHeld = false;
+        Level &level = owner.getLevelFor(*this);
+        const Vector3f position = getPosition();
+        for (const ItemStack &drop: mDeathDrops)
+            owner.dropItem(level, position, drop, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+        owner.spawnExperienceOrbs(level, position, mDeathExperience);
+        mDeathDrops.clear();
+        mDeathExperience = 0;
+    }
 
     if (mFatalSource != nullptr) {
         owner.getScriptEngine().onEntityDie(*this, *mFatalSource);
@@ -435,7 +466,8 @@ Tag ServerActor::saveNbt() const {
     if (!mNameTag.empty())
         data.putString("CustomName", mNameTag);
     data.putByte("Persistent", mPersistent ? 1 : 0);
-    data.putLong("OwnerUniqueId", mOwnerUniqueId);
+    // the game's key for any actor's owner: a mob saved after this writes its tamer over it
+    data.putLong("OwnerNew", mOwnerUniqueId);
     saveTags(data);
 
     if (hasPassengers()) {
@@ -501,7 +533,7 @@ void ServerActor::loadNbt(const Tag &data) {
 
     mNameTag = data.getString("CustomName", data.getString("NameTag", mNameTag));
     mPersistent = data.getByte("Persistent", 1) != 0;
-    mOwnerUniqueId = data.getLong("OwnerUniqueId", mOwnerUniqueId);
+    mOwnerUniqueId = data.getLong("OwnerNew", mOwnerUniqueId);
 
     loadTags(data);
 

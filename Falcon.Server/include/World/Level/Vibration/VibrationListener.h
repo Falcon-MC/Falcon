@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 
+class ServerActor;
 class Actor;
 class Level;
 
@@ -53,6 +54,9 @@ public:
 
     VibrationListener(VibrationListenerConfig &config, const Vector3i &blockPosition, uint32_t range);
 
+    // one carried by an entity: it hears from the entity's head, wherever the entity goes
+    VibrationListener(VibrationListenerConfig &config, const ServerActor &actor, uint32_t range);
+
     void handleGameEvent(Level &level, const GameEvent &event, const GameEventContext &context) override;
 
     bool getPosition(Level &level, Vector3f &position) const override;
@@ -76,13 +80,18 @@ public:
     void load(const Tag &data);
 
 private:
-    void _select(int64_t tick, const GameEvent &event, const GameEventContext &context);
+    void _select(int64_t tick, const Vector3i &listener, const GameEvent &event, const GameEventContext &context);
 
-    bool _adjacentChunksTicking(Level &level) const;
+    bool _adjacentChunksTicking(Level &level, const Vector3i &listener) const;
+
+    // where the listener hears from this tick
+    Vector3f _center() const;
 
     VibrationListenerConfig &mConfig;
     Vector3i mBlockPosition;
     Vector3f mCenter;
+    // the entity carrying the listener, which owns it; null for a block
+    const ServerActor *mActor = nullptr;
     uint32_t mRange;
     // VibrationSelector: the tick its candidate was heard on, -1 for none
     int64_t mSelectorTick = -1;

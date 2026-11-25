@@ -151,34 +151,39 @@ jobs:
         if: matrix.os == 'macos-15'
         run: brew install ninja ccache openssl@3
 
-      - name: Install MSYS2 toolchain
+      - name: Install MSYS2
         if: matrix.os == 'windows-2022'
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-lld
-            mingw-w64-x86_64-ccache
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-openssl
-            git
+          update: false
 
-      - name: Cache compiler objects
+      - name: Cache the pinned MSYS2 packages
+        if: matrix.os == 'windows-2022'
         uses: actions/cache@v4
         with:
+          path: .msys2-packages
+          key: msys2-toolchain-${{ hashFiles('.github/msys2/toolchain.txt') }}
+
+      - name: Install the pinned MSYS2 toolchain
+        if: matrix.os == 'windows-2022'
+        shell: msys2 {0}
+        run: bash .github/msys2/install.sh .msys2-packages
+
+      # the ci caches of the default branch, read only: a release run saves nothing nobody reads again
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
+        with:
           path: .ccache
-          key: ccache-${{ matrix.name }}-${{ github.sha }}
-          restore-keys: ccache-${{ matrix.name }}-
+          key: ci-ccache-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: ci-ccache-${{ matrix.name }}-
 
       - name: Configure and build (Linux)
         if: matrix.os == 'ubuntu-22.04'
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -194,6 +199,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -209,6 +215,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -258,6 +265,8 @@ jobs:
   release:
     name: Publish release
     needs: [prepare, build]
+    # a platform whose runners are down must not hold back the others: rerunning adds its files to the release
+    if: ${{ always() && needs.prepare.result == 'success' }}
     runs-on: ubuntu-22.04
 
     steps:

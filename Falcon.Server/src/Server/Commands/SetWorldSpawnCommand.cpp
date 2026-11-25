@@ -25,7 +25,7 @@ std::vector<CommandOverloadData> SetWorldSpawnCommand::getOverloads() const {
 
 bool SetWorldSpawnCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (!arguments.empty() && arguments.size() != 3) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -45,8 +45,8 @@ bool SetWorldSpawnCommand::execute(CommandOrigin &sender, const std::vector<std:
     Vector3i spawn((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                    (int32_t) std::floor(position.z));
 
-    if (!arguments.empty() && !parseBlockPosition(arguments, 0, spawn, spawn)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+    if (!arguments.empty() && !parseBlockPosition(arguments, 0, position, self->getRotation(), spawn)) {
+        sendUsageError(sender);
         return false;
     }
 

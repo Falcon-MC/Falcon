@@ -1,3 +1,6 @@
+#include "Falcon/Plugin/LoadedPlugin.h"
+#include "Falcon/Plugin/PluginManager.h"
+#include "Falcon/Plugin/PluginServerApi.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
 #include "World/Item/CraftingRecipeTable.h"
@@ -161,6 +164,40 @@ namespace {
         require(noFuel.time() == 0, "an unfuelled stand started a countdown");
         noFuel.expectPotions(0);
     }
+
+    void pluginEvents() {
+        Fixture fixture;
+        BeforeEvents &before = fixture.mOwner.getEventBus().before();
+        const FalconServerApi &api = PluginServerApi::get();
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Brewing fixture";
+        listener.mEnabled = true;
+        const auto fuel = api.subscribe(
+                PluginManager::toHandle(listener), FALCON_EVENT_BREWING_FUEL_USE, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *) { PluginServerApi::get().eventSetAmount(event, 5.0); }, nullptr);
+        const auto potion = api.subscribe(
+                PluginManager::toHandle(listener), FALCON_EVENT_BREW_ITEM, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *) {
+                    if (PluginServerApi::get().eventSourceSlot(event) == 2)
+                        PluginServerApi::get().eventSetCancelled(event, 1);
+                },
+                nullptr);
+        require(before.mBrewingFuelUse.hasSubscribers() && before.mBrewItem.hasSubscribers()
+                        && !before.mBrew.hasSubscribers(),
+                "the plugin layer did not hook exactly the brewing events a plugin listens to");
+
+        fixture.tick();
+        require(fixture.fuel() == 5, "the stand ignored the plugin's fuel time");
+        fixture.tick(400);
+        const auto meta = [&](int slot) { return fixture.mStand->getInventory().getContainerItem(slot).mDamage; };
+        require(meta(1) == 4 && meta(2) == 0 && meta(3) == 4, "a cancelled potion slot still brewed");
+        require(fixture.fuel() == 4, "a partly cancelled brew did not spend one fuel charge");
+
+        api.unsubscribe(fuel);
+        api.unsubscribe(potion);
+        require(!before.mBrewingFuelUse.hasSubscribers() && !before.mBrewItem.hasSubscribers(),
+                "the plugin layer stayed hooked with no plugin listening");
+    }
 }
 
 int main(int argc, char **argv) {
@@ -172,7 +209,7 @@ int main(int argc, char **argv) {
     try {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
-        require(argc == 2, "expected idle-save, ingredient-change or countdown");
+        require(argc == 2, "expected idle-save, ingredient-change, countdown or plugin-events");
         const std::string scenario = argv[1];
         if (scenario == "idle-save")
             idleSave();
@@ -180,6 +217,8 @@ int main(int argc, char **argv) {
             ingredientChange();
         else if (scenario == "countdown")
             countdown();
+        else if (scenario == "plugin-events")
+            pluginEvents();
         else
             throw std::runtime_error("unknown test case");
     } catch (const std::exception &error) {

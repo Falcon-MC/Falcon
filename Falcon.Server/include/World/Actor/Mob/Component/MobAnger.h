@@ -17,6 +17,8 @@ public:
     void onAttack(ServerNetworkHandler &owner, MobActor &mob, Actor &victim);
 
 private:
+    bool _keepsTarget(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) const;
+
     void _start(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component);
 
     void _calm(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component);

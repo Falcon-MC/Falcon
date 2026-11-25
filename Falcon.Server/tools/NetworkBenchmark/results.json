@@ -1,0 +1,147 @@
+{
+  "hardware": {
+    "cpu": "Apple M4",
+    "logicalCpus": 10,
+    "memoryGiB": 16
+  },
+  "minecraftVersion": "1.26.60",
+  "protocol": 2225,
+  "sourceBase": "7e76c4bc8996fbb47cc349ef3b867452de2fe6d4",
+  "runs": [
+    {
+      "scenario": "20 groups of up to 50, 256 blocks between groups; global chat",
+      "clients": 1000,
+      "connection_retries_before_measurement": 1,
+      "connections_completed": 1000,
+      "clients_without_read_error": 1000,
+      "receiving_other_movement_and_chat": 1000,
+      "totals": {
+        "Moves": 23706206,
+        "Chats": 8667860,
+        "Blocks": 2531584,
+        "SentMoves": 1147220,
+        "SentChats": 9571,
+        "SentAttacks": 28472
+      },
+      "errors": {},
+      "measurement": {
+        "elapsedMs": 60042,
+        "ticks": 1200,
+        "minOnline": 1000,
+        "online": 1000,
+        "hits": 16356,
+        "broken": 27246
+      },
+      "measured_tps": 19.9860097931448,
+      "interval_p95_ms": 78,
+      "interval_max_ms": 208,
+      "chat_delay_mean_ms": 4904.449939546786,
+      "chat_delay_max_ms": 25417,
+      "validation_errors": [],
+      "run": {
+        "players": 1000,
+        "seconds": 60,
+        "groupSize": 50,
+        "groupSpacing": 256,
+        "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+        "machine": "arm64",
+        "serverSha256": "ea296db5bd7074698b2549f0fd9343dab9776b984758bd50f325110b23e0f865",
+        "settleSeconds": 15
+      },
+      "Average TPS": 19.97,
+      "Average MSPT": 40.66,
+      "Peak MSPT": 180.81,
+      "Lowest MSPT": 14.19
+    },
+    {
+      "scenario": "50 groups of up to 20, 256 blocks between groups; global chat",
+      "clients": 1000,
+      "connection_retries_before_measurement": 0,
+      "connections_completed": 1000,
+      "clients_without_read_error": 1000,
+      "receiving_other_movement_and_chat": 1000,
+      "totals": {
+        "Moves": 17237092,
+        "Chats": 9828274,
+        "Blocks": 1217948,
+        "SentMoves": 1182400,
+        "SentChats": 9854,
+        "SentAttacks": 29316
+      },
+      "errors": {},
+      "measurement": {
+        "elapsedMs": 60000,
+        "ticks": 1200,
+        "minOnline": 1000,
+        "online": 1000,
+        "hits": 21728,
+        "broken": 29019
+      },
+      "measured_tps": 20.0,
+      "interval_p95_ms": 58,
+      "interval_max_ms": 91,
+      "chat_delay_mean_ms": 267.33417251086,
+      "chat_delay_max_ms": 17838,
+      "validation_errors": [],
+      "run": {
+        "players": 1000,
+        "seconds": 60,
+        "groupSize": 20,
+        "groupSpacing": 256,
+        "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+        "machine": "arm64",
+        "serverSha256": "ea296db5bd7074698b2549f0fd9343dab9776b984758bd50f325110b23e0f865",
+        "settleSeconds": 15
+      },
+      "Average TPS": 19.98,
+      "Average MSPT": 31.87,
+      "Peak MSPT": 74.27,
+      "Lowest MSPT": 17.77
+    },
+    {
+      "scenario": "50 groups of up to 20, 256 blocks between groups; global chat",
+      "clients": 1000,
+      "connection_retries_before_measurement": 2,
+      "connections_completed": 1000,
+      "clients_without_read_error": 1000,
+      "receiving_other_movement_and_chat": 1000,
+      "totals": {
+        "Moves": 18892324,
+        "Chats": 9870961,
+        "Blocks": 1240107,
+        "SentMoves": 1187040,
+        "SentChats": 9897,
+        "SentAttacks": 29388
+      },
+      "errors": {},
+      "measurement": {
+        "elapsedMs": 59996,
+        "ticks": 1200,
+        "minOnline": 1000,
+        "online": 1000,
+        "hits": 24627,
+        "broken": 29636
+      },
+      "measured_tps": 20.00133342222815,
+      "interval_p95_ms": 57,
+      "interval_max_ms": 69,
+      "chat_delay_mean_ms": 109.06416072356076,
+      "chat_delay_max_ms": 412,
+      "validation_errors": [],
+      "run": {
+        "players": 1000,
+        "seconds": 60,
+        "settleSeconds": 60,
+        "groupSize": 20,
+        "groupSpacing": 256,
+        "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+        "machine": "arm64",
+        "serverSha256": "ea296db5bd7074698b2549f0fd9343dab9776b984758bd50f325110b23e0f865"
+      },
+      "Average TPS": 19.98,
+      "Average MSPT": 32.02,
+      "Peak MSPT": 62.95,
+      "Lowest MSPT": 18.87
+    }
+  ]
+}

@@ -979,7 +979,7 @@ void EnderDragon::shootFireball(ServerNetworkHandler &owner, const Actor &target
         return;
 
     fireball->setProjectile(true);
-    fireball->setOwnerUniqueId((int64_t) getRuntimeId());
+    fireball->setOwnerUniqueId(getUniqueId());
     fireball->setMotion(
             Vector3f(dx / length * FIREBALL_SPEED, dy / length * FIREBALL_SPEED, dz / length * FIREBALL_SPEED));
     owner.allowProjectileLaunch(*fireball, this);

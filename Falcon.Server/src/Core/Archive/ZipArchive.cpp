@@ -1,6 +1,8 @@
 #include "Core/Archive/ZipArchive.h"
 
+#include <algorithm>
 #include <filesystem>
+#include <iterator>
 #include <fstream>
 
 #include <zlib.h>
@@ -27,29 +29,57 @@ namespace {
         out.push_back((char) ((value >> 24) & 0xff));
     }
 
-    bool inflateRaw(const std::string &input, size_t uncompressedSize, std::string &out) {
-        z_stream stream{};
-        if (inflateInit2(&stream, -MAX_WBITS) != Z_OK)
+}
+
+bool ZipArchive::readEntry(std::string_view input, uint16_t method, size_t expected, size_t limit, std::string &out) {
+    if (expected > std::min(limit, MAX_ENTRY_BYTES))
+        return false;
+    if (method == 0) {
+        if (input.size() != expected)
             return false;
-
-        out.resize(uncompressedSize);
-        stream.next_in = (Bytef *) input.data();
-        stream.avail_in = (uInt) input.size();
-        stream.next_out = (Bytef *) &out[0];
-        stream.avail_out = (uInt) uncompressedSize;
-
-        const int result = inflate(&stream, Z_FINISH);
-        inflateEnd(&stream);
-        return result == Z_STREAM_END;
+        out.assign(input);
+        return true;
     }
+    if (method != 8 || input.size() > UINT32_MAX)
+        return false;
+
+    z_stream stream{};
+    if (inflateInit2(&stream, -MAX_WBITS) != Z_OK)
+        return false;
+    struct EndInflate {
+        z_stream &stream;
+        ~EndInflate() {
+            inflateEnd(&stream);
+        }
+    } end{stream};
+
+    stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(input.data()));
+    stream.avail_in = static_cast<uInt>(input.size());
+    std::string decoded;
+    char buffer[32 * 1024];
+    int status;
+    do {
+        stream.next_out = reinterpret_cast<Bytef *>(buffer);
+        stream.avail_out = sizeof(buffer);
+        status = inflate(&stream, Z_NO_FLUSH);
+        const size_t produced = sizeof(buffer) - stream.avail_out;
+        if ((status != Z_OK && status != Z_STREAM_END) || produced > expected - decoded.size())
+            return false;
+        decoded.append(buffer, produced);
+    } while (status != Z_STREAM_END);
+
+    if (decoded.size() != expected || stream.avail_in != 0)
+        return false;
+    out = std::move(decoded);
+    return true;
 }
 
 bool ZipArchive::isZip(const std::string &data) {
     return data.size() >= 4 && readU32(data, 0) == 0x04034b50;
 }
 
-bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out) {
-    if (zip.size() < 22)
+bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out, size_t budget) {
+    if (zip.size() < 22 || zip.size() > MAX_ARCHIVE_BYTES)
         return false;
 
     size_t eocd = std::string::npos;
@@ -69,6 +99,7 @@ bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out)
     // archive offsets: 64-bit arithmetic, a 32-bit sum could wrap past the size check into an OOB readU32
     size_t offset = readU32(zip, eocd + 16);
 
+    std::vector<ZipEntry> entries;
     for (uint16_t entry = 0; entry < entryCount; entry++) {
         if (offset + 46 > zip.size() || readU32(zip, offset) != 0x02014b50)
             return false;
@@ -81,6 +112,8 @@ bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out)
         const uint16_t commentLength = readU16(zip, offset + 32);
         const size_t localOffset = readU32(zip, offset + 42);
 
+        if (offset + 46 + nameLength + extraLength + commentLength > eocd)
+            return false;
         const std::string name = zip.substr(offset + 46, nameLength);
         offset += (size_t) 46 + nameLength + extraLength + commentLength;
 
@@ -97,22 +130,17 @@ bool ZipArchive::listEntries(const std::string &zip, std::vector<ZipEntry> &out)
         if (dataStart + compressedSize > zip.size())
             return false;
 
-        const std::string raw = zip.substr(dataStart, compressedSize);
-
+        if (method != 0 && method != 8)
+            continue;
         ZipEntry result;
         result.mName = name;
-
-        if (method == 0) {
-            result.mData = raw;
-        } else if (method == 8) {
-            if (!inflateRaw(raw, uncompressedSize, result.mData))
-                continue;
-        } else {
-            continue;
-        }
-
-        out.push_back(std::move(result));
+        const std::string_view raw(zip.data() + dataStart, compressedSize);
+        if (!readEntry(raw, method, uncompressedSize, budget, result.mData))
+            return false;
+        budget -= result.mData.size();
+        entries.push_back(std::move(result));
     }
+    out.insert(out.end(), std::make_move_iterator(entries.begin()), std::make_move_iterator(entries.end()));
 
     return true;
 }

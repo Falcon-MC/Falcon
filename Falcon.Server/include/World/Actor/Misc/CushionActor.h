@@ -36,6 +36,8 @@ public:
         return mColor;
     }
 
+    std::string getPickItem() const override;
+
     void tick(ServerNetworkHandler &owner) override;
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;

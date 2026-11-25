@@ -4,7 +4,7 @@
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Level/Level.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,6 +13,8 @@
 #include <map>
 
 namespace {
+    // the game lifts a knocked back mob by 1.2 times the vertical power; players take another path there
+    const float VERTICAL_KNOCKBACK_FACTOR = 1.2f;
     const char *const UNDEAD_ACTORS[] = {"minecraft:bogged",
                                          "minecraft:drowned",
                                          "minecraft:husk",
@@ -99,6 +101,8 @@ bool Actor::tickFire() {
 void Actor::moveToLevel(const Level &level) {
     mDimension = level.getDimensionType();
     mWorldId = level.getWorldId();
+    ServerNetworkHandler *owner = level.getOwner();
+    mEventBus = owner != nullptr ? &owner->getEventBus() : nullptr;
 }
 
 bool Actor::isIn(const Level &level) const {
@@ -118,18 +122,12 @@ void Actor::setXpAndProgress(int level, float progress) {
 }
 
 void Actor::addXp(int amount) {
-    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EXPERIENCE_CHANGE)
-                                        : nullptr;
-    if (plugins != nullptr) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_EXPERIENCE_CHANGE;
-        event.mCancellable = true;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
-        event.mAmount = (double) amount;
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    if (isPlayer() && mEventBus != nullptr && mEventBus->before().mPlayerExperienceChange.hasSubscribers()) {
+        PlayerExperienceChangeBeforeEvent event(static_cast<ServerPlayer &>(*this), amount);
+        mEventBus->before().mPlayerExperienceChange.emit(event);
+        if (event.isCancelled())
             return;
-        amount = (int) event.mAmount;
+        amount = event.mXp;
     }
 
     mExperience.addXp(amount);
@@ -185,6 +183,7 @@ void Actor::tickCombat(int tickDiff) {
     if (tickDiff <= 0)
         return;
 
+    clearKnockbackOverride();
     mNoDamageTicks = std::max(0, mNoDamageTicks - tickDiff);
     mAttackTime = std::max(0, mAttackTime - tickDiff);
     if (mNoDamageTicks == 0)
@@ -192,6 +191,13 @@ void Actor::tickCombat(int tickDiff) {
 }
 
 void Actor::knockBack(float x, float z, float force, float verticalLimit) {
+    if (mKnockbackOverride) {
+        if (mKnockbackOverrideUsed)
+            return;
+        mKnockbackOverrideUsed = true;
+        force = mKnockbackHorizontal;
+        verticalLimit = mKnockbackVertical;
+    }
     const float length = std::sqrt(x * x + z * z);
     if (length <= 0.0f || force <= 0.0f)
         return;
@@ -205,8 +211,32 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     const float inverse = 1.0f / length;
     Vector3f motion = getMotion();
     motion.x = motion.x * 0.5f + x * inverse * base;
-    motion.y = std::min(motion.y * 0.5f + base, verticalLimit);
+    const float lift = isPlayer() ? base : base * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(motion.y * 0.5f + lift, verticalLimit);
     motion.z = motion.z * 0.5f + z * inverse * base;
+    setMotion(motion);
+    if (isPlayer())
+        static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);
+}
+
+void Actor::knockBack(float x, float z, float horizontalPower, float verticalPower, float verticalCap,
+                      float slowdownScale) {
+    // a negative resistance pushes harder; the game weakens both powers alike
+    const float resistance = getAttributes().get("minecraft:knockback_resistance") + getArmorKnockbackResistance();
+    const float kept = std::max(1.0f - resistance, 0.0f);
+    const float horizontal = horizontalPower * kept;
+    const float vertical = verticalPower * kept;
+    const float slowdown = std::min(std::max(slowdownScale, 0.0f), 1.0f);
+
+    const float length = std::sqrt(x * x + z * z);
+    const float directionX = length < 0.0001f ? 0.0f : x / length;
+    const float directionZ = length < 0.0001f ? 0.0f : z / length;
+
+    Vector3f motion = getMotion();
+    motion.x = motion.x * slowdown + directionX * horizontal;
+    const float lift = isPlayer() ? vertical : vertical * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(lift + motion.y * slowdown, verticalCap);
+    motion.z = motion.z * slowdown + directionZ * horizontal;
     setMotion(motion);
     if (isPlayer())
         static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);
@@ -221,18 +251,7 @@ float Actor::getMaxFood() const {
 }
 
 void Actor::setFood(float food) {
-    const float old = mAttributes.get(ATTRIBUTE_HUNGER);
     mAttributes.setClamped(ATTRIBUTE_HUNGER, food);
-
-    const float updated = mAttributes.get(ATTRIBUTE_HUNGER);
-    const float bounds[3] = {17.0f, 6.0f, 0.0f};
-
-    for (float bound: bounds) {
-        if ((old > bound) != (updated > bound)) {
-            mFoodTickTimer = 0;
-            break;
-        }
-    }
 }
 
 void Actor::addFood(float amount) {
@@ -399,18 +418,12 @@ void Actor::exhaust(float amount) {
 }
 
 void Actor::_changeFood(float food) {
-    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE) : nullptr;
-    if (plugins != nullptr) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_FOOD_CHANGE;
-        event.mCancellable = true;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
-        event.mAmount = (double) food;
-        event.mPreviousAmount = (double) getFood();
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    if (isPlayer() && mEventBus != nullptr && mEventBus->before().mPlayerFoodChange.hasSubscribers()) {
+        PlayerFoodChangeBeforeEvent event(static_cast<ServerPlayer &>(*this), food, getFood());
+        mEventBus->before().mPlayerFoodChange.emit(event);
+        if (event.isCancelled())
             return;
-        food = (float) event.mAmount;
+        food = event.mFood;
     }
 
     setFood(food);
@@ -449,33 +462,31 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
     float food = previousFood;
     const float maxHealth = getMaxHealth();
 
-    mFoodTickTimer += tickDiff;
-    if (mFoodTickTimer >= FOOD_TICK_PERIOD)
-        mFoodTickTimer = 0;
-
-    if (difficulty == DIFFICULTY_PEACEFUL && mFoodTickTimer % 10 == 0) {
+    mHungerTicks += tickDiff;
+    if (difficulty == DIFFICULTY_PEACEFUL && mHungerTicks % 10 == 0) {
         if (food < getMaxFood()) {
             addFood(1.0f);
             food = getFood();
         }
 
-        if (mFoodTickTimer % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
+        if (mHungerTicks % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
             heal(1.0f, HealCause::SelfHeal);
     }
 
-    if (mFoodTickTimer == 0) {
-        if (food >= 18.0f && naturalRegeneration) {
-            if (getHealth() < maxHealth) {
-                heal(1.0f, HealCause::SelfHeal);
-                exhaust(6.0f);
-            }
-        } else if (food <= 0.0f) {
-            const float health = getHealth();
-            const bool starve = (difficulty == DIFFICULTY_EASY && health > 10.0f)
-                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f) || difficulty == DIFFICULTY_HARD;
-
-            if (starve)
-                mPendingStarveDamage = true;
+    // the game compares whole hearts: 19.5 of 20 no longer heals
+    const float health = std::ceil(getHealth());
+    const bool regenerating = food >= 18.0f && naturalRegeneration && health > 0.0f && health < std::ceil(maxHealth);
+    // the timer only runs while healing or starving: 80 ticks from the moment either starts
+    if (!regenerating && food > 0.0f) {
+        mFoodTickTimer = 0;
+    } else if ((mFoodTickTimer += tickDiff) >= FOOD_TICK_PERIOD) {
+        mFoodTickTimer = 0;
+        if (regenerating) {
+            heal(1.0f, HealCause::SelfHeal);
+            exhaust(6.0f);
+        } else if ((difficulty == DIFFICULTY_EASY && health > 10.0f) || (difficulty == DIFFICULTY_NORMAL && health > 1.0f)
+                   || difficulty == DIFFICULTY_HARD) {
+            mPendingStarveDamage = true;
         }
     }
 
@@ -506,9 +517,6 @@ float Actor::reduceHealth(float amount) {
     if (amount <= 0.0f || !isAlive())
         return getHealth();
 
-    if (const MobEffectInstance *resistance = getEffect(MobEffectId::Resistance))
-        amount *= std::max(0.0f, 1.0f - 0.2f * (float) resistance->level());
-
     const float absorption = mAttributes.get("minecraft:absorption");
     if (absorption > 0.0f) {
         const float absorbed = std::min(absorption, amount);
@@ -522,23 +530,22 @@ float Actor::reduceHealth(float amount) {
     return getHealth();
 }
 
+float Actor::resistDamage(float amount) const {
+    if (const MobEffectInstance *resistance = getEffect(MobEffectId::Resistance))
+        amount *= std::max(0.0f, 1.0f - 0.2f * (float) resistance->level());
+    return amount;
+}
+
 float Actor::heal(float amount, HealCause cause) {
     if (amount <= 0.0f || !isAlive())
         return getHealth();
     if (sHealFilter && (!sHealFilter(*this, amount, cause) || amount <= 0.0f))
         return getHealth();
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_HEAL)) {
-        static const char *const CAUSES[] = {"heal", "regeneration", "self_heal", "totem"};
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_HEAL;
-        event.mCancellable = true;
-        event.mEntity = this;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
-        event.mAmount = (double) amount;
-        event.mCause = CAUSES[(size_t) cause];
-        plugins->dispatch(event);
-        amount = (float) event.mAmount;
-        if (event.mCancelled || !(amount > 0.0f))
+    if (mEventBus != nullptr && mEventBus->before().mActorHeal.hasSubscribers()) {
+        ActorHealBeforeEvent event(*this, amount, cause);
+        mEventBus->before().mActorHeal.emit(event);
+        amount = event.mHeal;
+        if (event.isCancelled() || !(amount > 0.0f))
             return getHealth();
     }
     const float previous = getHealth();

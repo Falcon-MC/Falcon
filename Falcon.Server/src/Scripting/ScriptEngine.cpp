@@ -688,10 +688,10 @@ void ScriptEngine::onProjectileHitEntity(ServerActor &projectile, Actor &hitEnti
                   ServerPlayer *owner = api.resolvePlayerByHandle(projectile.getOwnerPlayerHandle());
                   if (owner != nullptr)
                       JS_SetPropertyStr(ctx, event, "source", api.makePlayer(*owner));
-              } else if (projectile.getOwnerUniqueId() >= 0) {
-                  ServerActor *owner = api.host().getActor(projectile.getOwnerUniqueId());
+              } else if (projectile.getOwnerUniqueId() != -1) {
+                  Actor *owner = api.host().getEntity(projectile.getOwnerUniqueId());
                   if (owner != nullptr)
-                      JS_SetPropertyStr(ctx, event, "source", api.makeActor(*owner));
+                      JS_SetPropertyStr(ctx, event, "source", api.makeEntity(*owner));
               }
 
               JSValue hit = JS_NewObject(ctx);
@@ -1012,6 +1012,7 @@ void ScriptEngine::onCustomBlockFallOn(Actor &actor, Level &level, const std::st
 
 void ScriptEngine::forgetLevel(const Level &level) {
     mRedstonePower.erase(&level);
+    mGameTests.forgetLevel(level);
 }
 
 void ScriptEngine::onCustomBlockRedstone(Level &level, const std::string &blockId, const Vector3i &position,
@@ -2174,6 +2175,7 @@ bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> do
     const uint32_t token = mNextJoinToken++;
     PendingJoin &join = mPendingJoins[token];
     join.mId = player.getNetworkIdentifier();
+    join.mPlayer = &player;
     join.mDone = std::move(done);
     // counted before the first emit: a callback that settles at once must not finish the join early
     join.mOutstanding = 1;
@@ -2208,10 +2210,22 @@ bool ScriptEngine::isHoldingJoin(const NetworkIdentifier &id) const {
     return false;
 }
 
+void ScriptEngine::forgetPlayerJoins(const NetworkIdentifier &id) {
+    for (auto it = mPendingJoins.begin(); it != mPendingJoins.end();) {
+        if (it->second.mId == id)
+            it = mPendingJoins.erase(it);
+        else
+            ++it;
+    }
+}
+
 bool ScriptEngine::isJoinPending(uint32_t token) const {
     const auto it = mPendingJoins.find(token);
-    return it != mPendingJoins.end() && !it->second.mRefused && mHost != nullptr
-           && mHost->getPlayers().find(it->second.mId) != mHost->getPlayers().end();
+    if (it == mPendingJoins.end() || it->second.mRefused || mHost == nullptr)
+        return false;
+    const auto player = mHost->getPlayers().find(it->second.mId);
+    return player != mHost->getPlayers().end() && &player->second == it->second.mPlayer
+           && player->second.getLoginState() < ServerPlayer::LoginState::LoggedIn;
 }
 
 void ScriptEngine::_refuseJoin(PendingJoin &join, const std::string &reason) {

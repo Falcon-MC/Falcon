@@ -29,6 +29,12 @@ public:
 
     static bool hasCustomName(const ItemStack &item);
 
+    // the text box of the anvil and of the cartography table holds 30 characters on one line
+    static constexpr size_t MAX_NAME_LENGTH = 30;
+
+    // false for a name the text box cannot produce
+    static bool isTypedName(const std::string &name);
+
     static int32_t getEnchantValue(const std::vector<EnchantmentInstance> &enchantments, bool bookModifier);
 
     // returns the level cost the material's enchantments add

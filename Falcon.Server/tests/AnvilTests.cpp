@@ -154,6 +154,15 @@ namespace {
         require(AnvilRepair::hasCustomName(renamed.mResult) && renamed.mCost == 1, "renaming costs one level");
         require(AnvilRepair::getRepairCost(renamed.mResult) == 0, "renaming alone keeps the penalty");
 
+        std::string accented;
+        for (int index = 0; index < 30; ++index)
+            accented += "\xc3\xa9";
+        require(AnvilRepair::isTypedName(name) && AnvilRepair::isTypedName(std::string(30, 'a'))
+                        && AnvilRepair::isTypedName(accented) && AnvilRepair::isTypedName(std::string()),
+                "a name the text box holds was refused");
+        require(!AnvilRepair::isTypedName(std::string(31, 'a')) && !AnvilRepair::isTypedName("Foo\nBar"),
+                "a name the text box cannot hold passed");
+
         const std::string same = "Diamond Sword";
         require(combine(stack("minecraft:diamond_sword"), ItemStack::air(), &same).mResult.isAir(),
                 "keeping the name changes nothing");

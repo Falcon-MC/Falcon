@@ -8,8 +8,9 @@ public:
 
     using HostileActor::HostileActor;
 
+    // minecraft:collision_box of the game's ravager definition
     ActorSize getSize() const override {
-        return ActorSize{1.2f, 1.9f};
+        return ActorSize{1.95f, 2.2f};
     }
 
     float getDefaultMaxHealth() const override {

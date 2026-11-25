@@ -6,7 +6,7 @@
 #include "World/Actor/Mob/Hostile/EnderDragon.h"
 #include "World/Item/ItemData.h"
 #include "Protocol/Types/StartGameTypes.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "Core/Event/EventBus.h"
 
 #include <algorithm>
 #include <cctype>
@@ -168,7 +168,7 @@ void InstantHealthMobEffect::tick(Actor &actor, const MobEffectInstance &instanc
 }
 
 void InstantDamageMobEffect::tick(Actor &actor, const MobEffectInstance &instance) const {
-    actor.reduceHealth((float) (6 << std::min(instance.mAmplifier, 7)));
+    actor.reduceHealth(actor.resistDamage((float) (6 << std::min(instance.mAmplifier, 7))));
 }
 
 void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
@@ -221,7 +221,7 @@ int32_t PoisonMobEffect::getApplyInterval(const MobEffectInstance &instance) con
 
 void PoisonMobEffect::tick(Actor &actor, const MobEffectInstance &) const {
     if (mFatal || actor.getHealth() > 1.0f)
-        actor.reduceHealth(1.0f);
+        actor.reduceHealth(actor.resistDamage(1.0f));
 }
 
 int32_t RegenerationMobEffect::getApplyInterval(const MobEffectInstance &instance) const {
@@ -243,7 +243,7 @@ int32_t WitherMobEffect::getApplyInterval(const MobEffectInstance &instance) con
 }
 
 void WitherMobEffect::tick(Actor &actor, const MobEffectInstance &) const {
-    actor.reduceHealth(1.0f);
+    actor.reduceHealth(actor.resistDamage(1.0f));
 }
 
 std::unique_ptr<MobEffect> MobEffectManager::create(MobEffectId id) {
@@ -304,30 +304,22 @@ void MobEffectManager::emit(const MobEffectInstance &instance, MobEffectEvent ev
 }
 
 namespace {
-    // FALCON_EVENT_ENTITY_EFFECT_ADD once the effect would apply; false when a plugin refuses it
-    bool allowedByPlugins(Actor &actor, const MobEffectInstance &instance) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_EFFECT_ADD);
-        if (plugins == nullptr)
+    // false when a listener refuses the effect
+    bool allowedByListeners(Actor &actor, const MobEffectInstance &instance) {
+        EventBus *bus = actor.getEventBus();
+        if (bus == nullptr || !bus->before().mActorEffectAdd.hasSubscribers())
             return true;
 
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_EFFECT_ADD;
-        event.mCancellable = true;
-        event.mEntity = &actor;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(&actor);
-        event.mHasEffect = true;
-        event.mEffect.type = (FalconEffectType) instance.mId;
-        event.mEffect.duration = instance.mInfinite ? FALCON_EFFECT_INFINITE : instance.mDuration;
-        event.mEffect.amplifier = instance.mAmplifier;
-        event.mEffect.showParticles = instance.mParticles ? 1 : 0;
-        event.mEffect.ambient = instance.mAmbient ? 1 : 0;
-        plugins->dispatch(event);
-        return !event.mCancelled;
+        ActorEffectAddBeforeEvent event(actor, instance);
+        bus->before().mActorEffectAdd.emit(event);
+        return !event.isCancelled();
     }
 }
 
 bool MobEffectManager::add(const MobEffectInstance &input) {
     if (input.mId == MobEffectId::Freezing && FreezingMobEffect::isImmune(mActor))
+        return false;
+    if (!mActor.canBeAffected(input.mId))
         return false;
     if (input.mDuration == 0 && !input.mInfinite)
         return false;
@@ -346,7 +338,7 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
             || (instance.mAmplifier == existing->second.mAmplifier && !instance.mInfinite
                 && instance.mDuration <= existing->second.mDuration))
             return false;
-        if (!allowedByPlugins(mActor, instance))
+        if (!allowedByListeners(mActor, instance))
             return false;
         const MobEffectInstance previous = existing->second;
         existing->second = instance;
@@ -358,7 +350,7 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
         return true;
     }
 
-    if (!allowedByPlugins(mActor, instance))
+    if (!allowedByListeners(mActor, instance))
         return false;
     mEffects.emplace(key, instance);
     effect(instance.mId).onAdd(mActor, instance);

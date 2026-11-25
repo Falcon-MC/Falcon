@@ -31,6 +31,7 @@
 #include <cmath>
 #include <random>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -79,49 +80,8 @@ namespace {
         return value.isNumber() ? value.integer(-1) : difficultyOf(value.string());
     }
 
-    bool isNegation(const std::string &op) {
-        return op == "!=" || op == "not" || op == "<>";
-    }
-
-    bool compareNumbers(int64_t left, int64_t right, const std::string &op) {
-        if (op == "<")
-            return left < right;
-        if (op == ">")
-            return left > right;
-        if (op == "<=")
-            return left <= right;
-        if (op == ">=")
-            return left >= right;
-        if (isNegation(op))
-            return left != right;
-        return left == right;
-    }
-
-    bool compareFloats(float left, float right, const std::string &op) {
-        if (op == "<")
-            return left < right;
-        if (op == ">")
-            return left > right;
-        if (op == "<=")
-            return left <= right;
-        if (op == ">=")
-            return left >= right;
-        if (isNegation(op))
-            return left != right;
-        return left == right;
-    }
-
-    bool applyBoolean(bool result, const json::Value *value, const std::string &op) {
-        const bool expected = value == nullptr || value->boolean(true);
-        return isNegation(op) ? result != expected : result == expected;
-    }
-
     const char *const PLAYER_FAMILY = "player";
     const char *const TYPE_FAMILY_COMPONENT = "minecraft:type_family";
-
-    bool matchesFamily(const Actor *actor, const json::Value *value) {
-        return actor != nullptr && value != nullptr && EntityFilter::hasFamily(*actor, textOf(*value));
-    }
 
     Vector3i blockPosition(const Actor &actor) {
         const Vector3f position = actor.getPosition();
@@ -145,9 +105,38 @@ namespace {
         return block != nullptr && block->bindsHomeActors();
     }
 
+    const MobActor *mobOf(const Actor &actor) {
+        return actor.hasTypeFlag(ActorTypeFlag::MobFlagComponent) ? static_cast<const MobActor *>(&actor) : nullptr;
+    }
+
+    const ServerPlayer *playerOf(const Actor &actor) {
+        return actor.hasTypeFlag(ActorTypeFlag::PlayerComponent) ? static_cast<const ServerPlayer *>(&actor)
+                                                                  : nullptr;
+    }
+
+    // players and item actors are the only actors that are not server actors
+    const ServerActor *serverActorOf(const Actor &actor) {
+        return actor.hasTypeFlag(ActorTypeFlag::PlayerComponent)
+                               || actor.hasTypeFlag(ActorTypeFlag::ItemActorFlagComponent)
+                       ? nullptr
+                       : static_cast<const ServerActor *>(&actor);
+    }
+
+    // only a mob has a target
+    const Actor *targetOf(ServerNetworkHandler &owner, const ServerActor &self) {
+        const MobActor *mob = mobOf(self);
+        return mob == nullptr ? nullptr : mob->getTarget(owner);
+    }
+
+    float distanceSquared(const Actor &from, const Actor &to) {
+        const Vector3f &a = from.getPosition();
+        const Vector3f &b = to.getPosition();
+        return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z);
+    }
+
     std::vector<const ItemStack *> equipmentOf(const Actor &actor, const std::string &domain) {
         std::vector<const ItemStack *> items;
-        if (const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor)) {
+        if (const ServerPlayer *player = playerOf(actor)) {
             const PlayerInventory &inventory = player->getInventory();
             const bool any = domain == "any";
             if (any || domain == "hand")
@@ -169,7 +158,7 @@ namespace {
             return items;
         }
 
-        const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+        const MobActor *mob = mobOf(actor);
         if (mob == nullptr)
             return items;
 
@@ -300,8 +289,10 @@ namespace {
         const bool spectator = gameType == (int32_t) GameType::Spectator;
         if (ability == "instabuild")
             return creative;
-        if (ability == "invulnerable" || ability == "mayfly")
+        if (ability == "invulnerable")
             return creative || spectator;
+        if (ability == "mayfly")
+            return player.canToggleFlight();
         if (ability == "flying")
             return player.isFlying();
         if (ability == "operator_commands" || ability == "teleport")
@@ -310,22 +301,992 @@ namespace {
     }
 
     int32_t componentValue(const Actor &actor, const char *component) {
-        const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+        const MobActor *mob = mobOf(actor);
         const json::Value *data = mob == nullptr ? nullptr : mob->getComponent(component);
         const json::Value *value = data == nullptr ? nullptr : data->get("value");
         return value == nullptr ? -1 : value->integer(-1);
     }
 }
 
-// family list read in place: is_family runs for every candidate of every targeting or sensing scan, every tick
+// one test of a filter: its keys and value read once, when it is compiled
+struct EntityFilter::Test {
+    enum class Type : uint8_t {
+        Unknown,
+        IsDifficulty,
+        RandomChance,
+        HourlyClockTime,
+        HasTarget,
+        TargetDistance,
+        YRotation,
+        IsGameRule,
+        HasDamage,
+        IsTarget,
+        ActorHealth,
+        RiderCount,
+        HasNametag,
+        IsFamily,
+        IsVehicleFamily,
+        IsControllingPassengerFamily,
+        IsSneaking,
+        IsSitting,
+        IsBaby,
+        IsVariant,
+        IsMarkVariant,
+        BoolProperty,
+        EnumProperty,
+        IntProperty,
+        FloatProperty,
+        HomeDistance,
+        IsBoundToCreakingHeart,
+        HasComponent,
+        IsPanicking,
+        OwnerDistance,
+        InNether,
+        InOverworld,
+        HasContainerOpen,
+        HasSilkTouch,
+        Weather,
+        HasBiomeTag,
+        IsDaytime,
+        InWater,
+        IsUnderwater,
+        IsBrightness,
+        IsUnderground,
+        HasEquipment,
+        HasEquipmentTag,
+        IsSnowCovered,
+        OnGround,
+        OnFire,
+        IsRiding,
+        IsRidingSelf,
+        IsSprinting,
+        IsMoving,
+        IsSleeping,
+        IsLeashed,
+        IsVisible,
+        IsMissingHealth,
+        IsPersistent,
+        IsTamed,
+        IsOwner,
+        WasLastHurtBy,
+        IsAvoidingMobs,
+        IsNavigating,
+        InactivityTimer,
+        HasAbility,
+        HasMobEffect,
+        IsColor,
+        IsSkinId,
+        HasRangedWeapon,
+        AllSlotsEmpty,
+        HasDamagedEquipment,
+        HasItemWithEnchantmentInSlot,
+        HasSameEquipmentInSlotAs,
+        DistanceToNearestPlayer,
+        InLava,
+        InContactWithWater,
+        InWaterOrRain,
+        InBlock,
+        OnHotBlock,
+        TakingFireDamage,
+        IsBiome,
+        IsTemperatureValue,
+        WeatherAtPosition,
+        RedstoneStrengthAtPosition,
+        InCaravan,
+        IsInVillage,
+        Unsupported,
+        IsBlock,
+        IsWaterlogged
+    };
+
+    enum class Operator : uint8_t { Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual };
+
+    enum class Subject : uint8_t { Self, Other, Target, Block };
+
+    bool mHasTest = false;
+    Type mType = Type::Unknown;
+    Operator mOperator = Operator::Equal;
+    // the operator spelled "==" or left out: inactivity_timer reads it as >=
+    bool mExactEquals = false;
+    Subject mSubject = Subject::Self;
+    bool mHasValue = false;
+    bool mValueIsNumber = false;
+    double mNumber = 0.0;
+    // value missing or true; what the boolean tests compare against
+    bool mExpected = true;
+    std::string mText;
+    // the namespaced text; the block form of is_block
+    std::string mQualified;
+    int32_t mInteger = 0;
+    bool mHasDomain = false;
+    std::string mDomain;
+    std::string mEquipmentDomain;
+    // has_equipment resolves its items on each test: the item names may not be loaded yet at compile time
+    std::shared_ptr<const json::Value> mItems;
+    // has_component on minecraft:effect.<name>
+    bool mEffectComponent = false;
+    bool mHasEffect = false;
+    MobEffectId mEffect = MobEffectId::Speed;
+};
+
+struct EntityFilter::Group {
+    enum class Mode : uint8_t { All, Any, None, Single };
+
+    Mode mMode = Mode::Single;
+    std::vector<Group> mChildren;
+    Test mTest;
+};
+
+namespace {
+    using FilterTest = EntityFilter::Test;
+    using FilterTestType = EntityFilter::Test::Type;
+    using FilterOperator = EntityFilter::Test::Operator;
+    using FilterSubject = EntityFilter::Test::Subject;
+    using FilterNode = EntityFilter::Group;
+    using FilterMode = EntityFilter::Group::Mode;
+
+    struct FilterTestName {
+        const char *mName;
+        FilterTestType mTest;
+    };
+
+    const FilterTestName FILTER_TESTS[] = {
+            {"is_difficulty", FilterTestType::IsDifficulty},
+            {"random_chance", FilterTestType::RandomChance},
+            {"hourly_clock_time", FilterTestType::HourlyClockTime},
+            {"has_target", FilterTestType::HasTarget},
+            {"target_distance", FilterTestType::TargetDistance},
+            {"y_rotation", FilterTestType::YRotation},
+            {"is_game_rule", FilterTestType::IsGameRule},
+            {"has_damage", FilterTestType::HasDamage},
+            {"is_target", FilterTestType::IsTarget},
+            {"actor_health", FilterTestType::ActorHealth},
+            {"rider_count", FilterTestType::RiderCount},
+            {"has_nametag", FilterTestType::HasNametag},
+            {"is_family", FilterTestType::IsFamily},
+            {"is_vehicle_family", FilterTestType::IsVehicleFamily},
+            {"is_controlling_passenger_family", FilterTestType::IsControllingPassengerFamily},
+            {"is_sneak_held", FilterTestType::IsSneaking},
+            {"is_sneaking", FilterTestType::IsSneaking},
+            {"is_sitting", FilterTestType::IsSitting},
+            {"is_baby", FilterTestType::IsBaby},
+            {"is_variant", FilterTestType::IsVariant},
+            {"is_mark_variant", FilterTestType::IsMarkVariant},
+            {"bool_property", FilterTestType::BoolProperty},
+            {"enum_property", FilterTestType::EnumProperty},
+            {"int_property", FilterTestType::IntProperty},
+            {"float_property", FilterTestType::FloatProperty},
+            {"home_distance", FilterTestType::HomeDistance},
+            {"is_bound_to_creaking_heart", FilterTestType::IsBoundToCreakingHeart},
+            {"has_component", FilterTestType::HasComponent},
+            {"is_panicking", FilterTestType::IsPanicking},
+            {"owner_distance", FilterTestType::OwnerDistance},
+            {"in_nether", FilterTestType::InNether},
+            {"in_overworld", FilterTestType::InOverworld},
+            {"has_container_open", FilterTestType::HasContainerOpen},
+            {"has_silk_touch", FilterTestType::HasSilkTouch},
+            {"weather", FilterTestType::Weather},
+            {"has_biome_tag", FilterTestType::HasBiomeTag},
+            {"is_daytime", FilterTestType::IsDaytime},
+            {"in_water", FilterTestType::InWater},
+            {"is_underwater", FilterTestType::IsUnderwater},
+            {"is_brightness", FilterTestType::IsBrightness},
+            {"is_underground", FilterTestType::IsUnderground},
+            {"has_equipment", FilterTestType::HasEquipment},
+            {"has_equipment_tag", FilterTestType::HasEquipmentTag},
+            {"is_snow_covered", FilterTestType::IsSnowCovered},
+            {"on_ground", FilterTestType::OnGround},
+            {"on_fire", FilterTestType::OnFire},
+            {"is_riding", FilterTestType::IsRiding},
+            {"is_riding_self", FilterTestType::IsRidingSelf},
+            {"is_sprinting", FilterTestType::IsSprinting},
+            {"is_moving", FilterTestType::IsMoving},
+            {"is_sleeping", FilterTestType::IsSleeping},
+            {"is_leashed", FilterTestType::IsLeashed},
+            {"is_visible", FilterTestType::IsVisible},
+            {"is_missing_health", FilterTestType::IsMissingHealth},
+            {"is_persistent", FilterTestType::IsPersistent},
+            {"is_tamed", FilterTestType::IsTamed},
+            {"is_owner", FilterTestType::IsOwner},
+            {"was_last_hurt_by", FilterTestType::WasLastHurtBy},
+            {"is_avoiding_mobs", FilterTestType::IsAvoidingMobs},
+            {"is_navigating", FilterTestType::IsNavigating},
+            {"inactivity_timer", FilterTestType::InactivityTimer},
+            {"has_ability", FilterTestType::HasAbility},
+            {"has_mob_effect", FilterTestType::HasMobEffect},
+            {"is_color", FilterTestType::IsColor},
+            {"is_skin_id", FilterTestType::IsSkinId},
+            {"has_ranged_weapon", FilterTestType::HasRangedWeapon},
+            {"all_slots_empty", FilterTestType::AllSlotsEmpty},
+            {"has_damaged_equipment", FilterTestType::HasDamagedEquipment},
+            {"actor_has_item_with_enchantment_in_slot", FilterTestType::HasItemWithEnchantmentInSlot},
+            {"has_same_equipment_in_slot_as", FilterTestType::HasSameEquipmentInSlotAs},
+            {"distance_to_nearest_player", FilterTestType::DistanceToNearestPlayer},
+            {"in_lava", FilterTestType::InLava},
+            {"in_contact_with_water", FilterTestType::InContactWithWater},
+            {"in_water_or_rain", FilterTestType::InWaterOrRain},
+            {"in_block", FilterTestType::InBlock},
+            {"on_hot_block", FilterTestType::OnHotBlock},
+            {"taking_fire_damage", FilterTestType::TakingFireDamage},
+            {"is_biome", FilterTestType::IsBiome},
+            {"is_temperature_value", FilterTestType::IsTemperatureValue},
+            {"weather_at_position", FilterTestType::WeatherAtPosition},
+            {"redstone_strength_at_position", FilterTestType::RedstoneStrengthAtPosition},
+            {"in_caravan", FilterTestType::InCaravan},
+            {"is_in_village", FilterTestType::IsInVillage},
+            {"is_raider", FilterTestType::Unsupported},
+            {"has_trade_supply", FilterTestType::Unsupported},
+            {"trusts", FilterTestType::Unsupported},
+            {"is_leashed_to", FilterTestType::Unsupported},
+            {"is_block", FilterTestType::IsBlock},
+            {"is_waterlogged", FilterTestType::IsWaterlogged}};
+
+
+    FilterOperator operatorOf(const json::Value *value, bool &exactEquals) {
+        const std::string &op = enumName(value, NUMERIC_OPERATORS,
+                                         sizeof(NUMERIC_OPERATORS) / sizeof(NUMERIC_OPERATORS[0]),
+                                         NUMERIC_OPERATORS[0]);
+        exactEquals = op == "==";
+        if (op == "<")
+            return FilterOperator::Less;
+        if (op == ">")
+            return FilterOperator::Greater;
+        if (op == "<=")
+            return FilterOperator::LessEqual;
+        if (op == ">=")
+            return FilterOperator::GreaterEqual;
+        if (op == "!=" || op == "not" || op == "<>")
+            return FilterOperator::NotEqual;
+        return FilterOperator::Equal;
+    }
+
+    FilterSubject subjectOf(const json::Value *value) {
+        const std::string &subject = enumName(value, NUMERIC_SUBJECTS,
+                                              sizeof(NUMERIC_SUBJECTS) / sizeof(NUMERIC_SUBJECTS[0]),
+                                              NUMERIC_SUBJECTS[0]);
+        if (subject == "other" || subject == "damager" || subject == "player")
+            return FilterSubject::Other;
+        if (subject == "target")
+            return FilterSubject::Target;
+        if (subject == "block")
+            return FilterSubject::Block;
+        return FilterSubject::Self;
+    }
+
+    FilterTestType testOf(const std::string &name) {
+        for (const FilterTestName &entry: FILTER_TESTS) {
+            if (name == entry.mName)
+                return entry.mTest;
+        }
+        return FilterTestType::Unknown;
+    }
+
+    FilterTest compileTest(const json::Value &filter) {
+        FilterTest single;
+        const json::Value *testValue = nullptr;
+        const json::Value *operatorValue = nullptr;
+        const json::Value *subjectValue = nullptr;
+        const json::Value *domain = nullptr;
+        const json::Value *value = nullptr;
+        for (const auto &entry: filter.mObject) {
+            const std::string &key = entry.first;
+            if (key == "test")
+                testValue = entry.second.get();
+            else if (key == "operator")
+                operatorValue = entry.second.get();
+            else if (key == "value")
+                value = entry.second.get();
+            else if (key == "subject")
+                subjectValue = entry.second.get();
+            else if (key == "domain")
+                domain = entry.second.get();
+        }
+        if (testValue == nullptr)
+            return single;
+
+        const std::string &name = textOf(*testValue);
+        single.mHasTest = true;
+        single.mType = testOf(name);
+        single.mOperator = operatorOf(operatorValue, single.mExactEquals);
+        single.mSubject = subjectOf(subjectValue);
+        single.mHasValue = value != nullptr;
+        single.mValueIsNumber = value != nullptr && value->isNumber();
+        single.mNumber = value == nullptr ? 0.0 : value->number(0.0);
+        single.mExpected = value == nullptr || value->boolean(true);
+        single.mText = value == nullptr ? std::string() : value->string();
+        single.mHasDomain = domain != nullptr;
+        single.mDomain = domain == nullptr ? std::string() : domain->string();
+        single.mEquipmentDomain = equipmentDomain(single.mType == FilterTestType::AllSlotsEmpty ? value : domain);
+
+        switch (single.mType) {
+            case FilterTestType::IsDifficulty:
+                single.mInteger = value == nullptr ? -1 : difficultyValue(*value);
+                break;
+            case FilterTestType::RandomChance:
+                single.mInteger = value == nullptr ? 1 : std::max(1, value->integer(1));
+                break;
+            case FilterTestType::IsBlock:
+                single.mQualified = "minecraft:" + single.mText;
+                break;
+            case FilterTestType::HasDamagedEquipment:
+            case FilterTestType::InBlock:
+                single.mQualified = value == nullptr ? std::string() : withNamespace(single.mText);
+                break;
+            case FilterTestType::HasComponent: {
+                const std::string prefix = EFFECT_COMPONENT_PREFIX;
+                if (value == nullptr || single.mText.rfind(prefix, 0) != 0)
+                    break;
+                // has_component on an effect reads the effect, not a definition component
+                single.mEffectComponent = true;
+                single.mHasEffect = parseDefinitionMobEffect(single.mText.substr(prefix.size()), single.mEffect);
+                break;
+            }
+            case FilterTestType::HasEquipment:
+                if (value != nullptr)
+                    single.mItems = value->clone();
+                break;
+            case FilterTestType::HasMobEffect:
+                single.mHasEffect = value != nullptr && parseDefinitionMobEffect(single.mText, single.mEffect);
+                break;
+            default:
+                break;
+        }
+        return single;
+    }
+
+    bool isFilterGroup(const std::string &key) {
+        return key == "all_of" || key == "AND" || key == "any_of" || key == "OR" || key == "none_of"
+               || key == "NOT";
+    }
+
+    FilterNode compileNode(const json::Value &filter);
+
+    // a group holding one filter instead of a list tests that filter alone
+    FilterNode compileGroup(FilterMode mode, const json::Value &group) {
+        FilterNode node;
+        node.mMode = mode;
+        if (!group.isArray()) {
+            node.mChildren.push_back(compileNode(group));
+            return node;
+        }
+
+        for (const std::unique_ptr<json::Value> &entry: group.mArray)
+            node.mChildren.push_back(compileNode(*entry));
+        return node;
+    }
+
+    FilterNode compileNode(const json::Value &filter) {
+        if (filter.isArray())
+            return compileGroup(FilterMode::All, filter);
+
+        const size_t GROUP_COUNT = 6;
+        const char *const GROUP_KEYS[GROUP_COUNT] = {"all_of", "AND", "any_of", "OR", "none_of", "NOT"};
+        const FilterMode GROUP_MODES[GROUP_COUNT] = {FilterMode::All, FilterMode::All, FilterMode::Any,
+                                                     FilterMode::Any, FilterMode::None, FilterMode::None};
+        // every group present must hold: villager_v2 become_zombie pairs all_of with any_of
+        FilterNode node;
+        node.mMode = FilterMode::All;
+        for (size_t index = 0; index < GROUP_COUNT; ++index) {
+            const json::Value *group = filter.get(GROUP_KEYS[index]);
+            if (group != nullptr)
+                node.mChildren.push_back(compileGroup(GROUP_MODES[index], *group));
+        }
+        if (!node.mChildren.empty())
+            return node;
+
+        node.mMode = FilterMode::Single;
+        node.mTest = compileTest(filter);
+        return node;
+    }
+
+    bool looksLikeFilter(const json::Value &value) {
+        if (value.isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: value.mArray) {
+                if (looksLikeFilter(*entry))
+                    return true;
+            }
+            return false;
+        }
+
+        for (const auto &entry: value.mObject) {
+            if (entry.first == "test" || isFilterGroup(entry.first))
+                return true;
+        }
+        return false;
+    }
+
+    std::unordered_map<const json::Value *, FilterNode> &compiledFilters() {
+        static std::unordered_map<const json::Value *, FilterNode> filters;
+        return filters;
+    }
+
+    void compileTree(const json::Value &value) {
+        if (!value.isArray() && !value.isObject())
+            return;
+        if (looksLikeFilter(value))
+            compiledFilters().emplace(&value, compileNode(value));
+        for (const std::unique_ptr<json::Value> &entry: value.mArray)
+            compileTree(*entry);
+        for (const auto &entry: value.mObject)
+            compileTree(*entry.second);
+    }
+
+    bool compareNumbers(int64_t left, int64_t right, FilterOperator op) {
+        switch (op) {
+            case FilterOperator::Less:
+                return left < right;
+            case FilterOperator::Greater:
+                return left > right;
+            case FilterOperator::LessEqual:
+                return left <= right;
+            case FilterOperator::GreaterEqual:
+                return left >= right;
+            case FilterOperator::NotEqual:
+                return left != right;
+            default:
+                return left == right;
+        }
+    }
+
+    bool compareFloats(float left, float right, FilterOperator op) {
+        switch (op) {
+            case FilterOperator::Less:
+                return left < right;
+            case FilterOperator::Greater:
+                return left > right;
+            case FilterOperator::LessEqual:
+                return left <= right;
+            case FilterOperator::GreaterEqual:
+                return left >= right;
+            case FilterOperator::NotEqual:
+                return left != right;
+            default:
+                return left == right;
+        }
+    }
+
+    bool applyBoolean(bool result, const FilterTest &filter) {
+        return filter.mOperator == FilterOperator::NotEqual ? result != filter.mExpected
+                                                            : result == filter.mExpected;
+    }
+
+    bool applyNegation(bool result, const FilterTest &filter) {
+        return filter.mOperator == FilterOperator::NotEqual ? !result : result;
+    }
+
+    bool hasValue(const FilterTest &filter) {
+        return filter.mHasValue;
+    }
+
+    float numberOf(const FilterTest &filter) {
+        return (float) filter.mNumber;
+    }
+
+    int64_t wholeOf(const FilterTest &filter) {
+        return (int64_t) filter.mNumber;
+    }
+
+    bool testBlock(const FilterTest &filter, ServerNetworkHandler &owner, const ServerActor &self) {
+        const MobActor *mob = mobOf(self);
+        if (mob == nullptr || !mob->hasEventBlock())
+            return false;
+
+        Level &level = owner.getLevelFor(self);
+        const Vector3i &position = mob->getEventBlock();
+        const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
+        if (state == nullptr)
+            return false;
+
+        if (filter.mType == FilterTestType::IsBlock) {
+            const bool result = !filter.mText.empty()
+                                && (state->mName == filter.mText || state->mName == filter.mQualified);
+            return applyNegation(result, filter);
+        }
+
+        if (filter.mType == FilterTestType::IsWaterlogged) {
+            const BlockState *liquid = level.peekBlockPtr(position.x, position.y, position.z, 1);
+            return applyBoolean(liquid != nullptr && LiquidView(*liquid).isWater(), filter);
+        }
+
+        return false;
+    }
+
+    // the tests that read the level at the subject's block
+    bool testAtBlock(const FilterTest &filter, ServerNetworkHandler &owner, const Actor &target) {
+        Level &level = owner.getLevelFor(target);
+        const Vector3i position = blockPosition(target);
+        switch (filter.mType) {
+            case FilterTestType::Weather: {
+                bool result;
+                if (filter.mText == "clear")
+                    result = !level.isRaining();
+                else if (filter.mText == "precipitation")
+                    result = level.isRaining();
+                else if (filter.mText == "thunderstorm")
+                    result = level.isThundering();
+                else
+                    return false;
+                return applyNegation(result, filter);
+            }
+            case FilterTestType::HasBiomeTag:
+            case FilterTestType::IsBiome: {
+                LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
+                const int32_t biome = chunk == nullptr
+                                              ? -1
+                                              : (int32_t) chunk->getBiomeAt(position.x & 15, position.y,
+                                                                            position.z & 15);
+                const bool result = hasValue(filter) && BiomeChunkGenDataRegistry::hasTag(biome, filter.mText);
+                return applyNegation(result, filter);
+            }
+            case FilterTestType::IsDaytime:
+                return applyBoolean(((level.getTime() % DAY_LENGTH) + DAY_LENGTH) % DAY_LENGTH < DAYTIME_END,
+                                    filter);
+            case FilterTestType::InWater:
+            case FilterTestType::IsUnderwater: {
+                const int32_t y = filter.mType == FilterTestType::IsUnderwater
+                                          ? (int32_t) std::floor(target.getPosition().y + 1.0f)
+                                          : position.y;
+                return applyBoolean(LiquidView(level.getBlockState(position.x, y, position.z)).isWater(), filter);
+            }
+            case FilterTestType::IsBrightness: {
+                const int32_t blockLight = level.getBlockLightAt(position.x, position.y, position.z);
+                const int32_t skyLight = level.getSkyLightAt(position.x, position.y, position.z)
+                                         - level.getSkyLightSubtracted();
+                const float brightness = (float) std::max(blockLight, skyLight) / MAX_LIGHT;
+                return hasValue(filter) && compareFloats(brightness, numberOf(filter), filter.mOperator);
+            }
+            case FilterTestType::IsUnderground:
+                return applyBoolean(position.y < level.getHeightAt(position.x, position.z), filter);
+            case FilterTestType::IsSnowCovered:
+                return applyBoolean(
+                        level.getBlockState(position.x, position.y, position.z).mName == "minecraft:snow_layer",
+                        filter);
+            case FilterTestType::InLava:
+            case FilterTestType::InContactWithWater:
+            case FilterTestType::InWaterOrRain: {
+                const LiquidContact contact = LiquidBlocksFetch::at(level, target.getPosition());
+                bool result = filter.mType == FilterTestType::InLava ? contact.lava : contact.water;
+                if (filter.mType != FilterTestType::InLava)
+                    result = result || PrecipitationSystem::isRainingOn(level, position);
+                return applyBoolean(result, filter);
+            }
+            case FilterTestType::InBlock:
+                return applyNegation(
+                        level.getBlockState(position.x, position.y, position.z).mName == filter.mQualified, filter);
+            case FilterTestType::OnHotBlock:
+                return applyBoolean(level.getBlockState(position.x, position.y - 1, position.z).mName == HOT_BLOCK,
+                                    filter);
+            case FilterTestType::TakingFireDamage: {
+                const bool burning = target.isOnFire() || LiquidBlocksFetch::at(level, target.getPosition()).lava;
+                return applyBoolean(burning && !target.isFireImmune()
+                                            && !target.hasEffect(MobEffectId::FireResistance),
+                                    filter);
+            }
+            case FilterTestType::IsTemperatureValue:
+                return hasValue(filter)
+                       && compareFloats(temperatureAt(level, position), numberOf(filter), filter.mOperator);
+            case FilterTestType::WeatherAtPosition: {
+                const bool exposed = position.y >= level.getHeightAt(position.x, position.z);
+                const bool cold = PrecipitationSystem::isCold(level, position);
+                bool result;
+                if (filter.mText == "clear")
+                    result = !level.isRaining() || !exposed;
+                else if (filter.mText == "rain")
+                    result = PrecipitationSystem::isRainingOn(level, position);
+                else if (filter.mText == "snow")
+                    result = level.isRaining() && exposed && cold;
+                else if (filter.mText == "precipitation")
+                    result = level.isRaining() && exposed;
+                else if (filter.mText == "thunderstorm")
+                    result = level.isThundering() && exposed;
+                else
+                    return false;
+                return applyNegation(result, filter);
+            }
+            case FilterTestType::RedstoneStrengthAtPosition:
+                return hasValue(filter)
+                       && compareNumbers(redstoneStrengthAt(owner, level, position), wholeOf(filter),
+                                         filter.mOperator);
+            default:
+                return false;
+        }
+    }
+
+    bool matchesFamily(const Actor *actor, const FilterTest &filter) {
+        return actor != nullptr && hasValue(filter) && EntityFilter::hasFamily(*actor, filter.mText);
+    }
+
+    bool testProperty(const FilterTest &filter, const Actor &target) {
+        const ServerActor *actor = serverActorOf(target);
+        const ActorPropertyDescription *descriptor = actor == nullptr || !filter.mHasDomain
+                                                             ? nullptr
+                                                             : actor->findPropertyDescription(filter.mDomain);
+        if (descriptor == nullptr)
+            return false;
+
+        const std::string &name = descriptor->mName;
+        switch (filter.mType) {
+            case FilterTestType::BoolProperty:
+                return applyBoolean(actor->getIntProperty(name, descriptor->mDefaultInt) != 0, filter);
+            case FilterTestType::EnumProperty: {
+                const int32_t index = actor->getIntProperty(name, descriptor->mDefaultInt);
+                const bool result = descriptor->mType == ActorPropertyDescription::Type::Enum && hasValue(filter)
+                                    && index == descriptor->findEnumIndex(filter.mText);
+                return applyNegation(result, filter);
+            }
+            case FilterTestType::FloatProperty:
+                return hasValue(filter)
+                       && compareFloats(actor->getFloatProperty(name, descriptor->mDefaultFloat), numberOf(filter),
+                                        filter.mOperator);
+            default:
+                return hasValue(filter)
+                       && compareNumbers(actor->getIntProperty(name, descriptor->mDefaultInt), wholeOf(filter),
+                                         filter.mOperator);
+        }
+    }
+
+    bool testOne(const FilterTest &filter, ServerNetworkHandler &owner, const ServerActor &self,
+                    const Actor *other) {
+        if (!filter.mHasTest)
+            return true;
+
+        const Actor *target = &self;
+        if (filter.mSubject == FilterSubject::Other)
+            target = other;
+        else if (filter.mSubject == FilterSubject::Target)
+            target = targetOf(owner, self);
+
+        if (filter.mSubject == FilterSubject::Block)
+            return testBlock(filter, owner, self);
+
+        // the tests on the world or on self alone, whatever the subject
+        switch (filter.mType) {
+            case FilterTestType::IsDifficulty:
+                return filter.mInteger >= 0
+                       && compareNumbers((int32_t) owner.getProperties().getDifficulty(), filter.mInteger,
+                                         filter.mOperator);
+            case FilterTestType::RandomChance: {
+                const bool result = std::uniform_int_distribution<int32_t>(0, filter.mInteger - 1)(filterRandom())
+                                    == 0;
+                return applyNegation(result, filter);
+            }
+            case FilterTestType::HourlyClockTime: {
+                const int64_t timeOfDay = ((owner.getLevelFor(self).getTime() % DAY_LENGTH) + DAY_LENGTH)
+                                          % DAY_LENGTH;
+                return hasValue(filter) && compareNumbers(timeOfDay, wholeOf(filter), filter.mOperator);
+            }
+            case FilterTestType::HasTarget:
+                return applyBoolean(targetOf(owner, self) != nullptr, filter);
+            case FilterTestType::TargetDistance: {
+                const Actor *mobTarget = targetOf(owner, self);
+                return mobTarget != nullptr && hasValue(filter)
+                       && compareFloats(std::sqrt(distanceSquared(self, *mobTarget)), numberOf(filter),
+                                        filter.mOperator);
+            }
+            case FilterTestType::YRotation: {
+                const float yaw = std::remainder(self.getRotation().y, 360.0f);
+                return hasValue(filter) && compareFloats(yaw, numberOf(filter), filter.mOperator);
+            }
+            case FilterTestType::IsGameRule: {
+                if (!filter.mHasDomain)
+                    return false;
+
+                const GameRules &rules = owner.getWorldFor(self).getOverworld().getGameRules();
+                if (filter.mValueIsNumber)
+                    return compareNumbers(rules.getInt(filter.mDomain), wholeOf(filter), filter.mOperator);
+                return applyBoolean(rules.getBool(filter.mDomain), filter);
+            }
+            case FilterTestType::HasDamage: {
+                if (activeDamage == nullptr || !hasValue(filter))
+                    return false;
+
+                const bool result = filter.mText == FATAL_DAMAGE ? activeDamageAmount >= self.getHealth()
+                                                                 : DamageCause::matches(filter.mText, *activeDamage);
+                return applyNegation(result, filter);
+            }
+            default:
+                break;
+        }
+
+        if (target == nullptr)
+            return false;
+
+        switch (filter.mType) {
+            case FilterTestType::IsTarget:
+                return applyBoolean(target == targetOf(owner, self), filter);
+            case FilterTestType::ActorHealth:
+                return hasValue(filter)
+                       && compareNumbers((int64_t) std::ceil(target->getHealth()), wholeOf(filter), filter.mOperator);
+            case FilterTestType::RiderCount:
+                return hasValue(filter)
+                       && compareNumbers((int64_t) target->getPassengers().size(), wholeOf(filter), filter.mOperator);
+            case FilterTestType::HasNametag: {
+                const ServerActor *named = dynamic_cast<const ServerActor *>(target);
+                return applyBoolean(named != nullptr && !named->getNameTag().empty(), filter);
+            }
+            case FilterTestType::IsFamily:
+                return applyNegation(matchesFamily(target, filter), filter);
+            case FilterTestType::IsVehicleFamily:
+                return applyNegation(matchesFamily(vehicleOf(owner, *target), filter), filter);
+            case FilterTestType::IsControllingPassengerFamily:
+                return applyNegation(matchesFamily(controllerOf(owner, *target), filter), filter);
+            case FilterTestType::IsSneaking:
+                return applyBoolean(target->getFlags().get(ActorFlag::Sneaking), filter);
+            case FilterTestType::IsSitting: {
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && (mob->isSitting() || mob->getFlags().get(ActorFlag::Sitting)),
+                                    filter);
+            }
+            case FilterTestType::IsBaby: {
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr, filter);
+            }
+            case FilterTestType::IsVariant:
+            case FilterTestType::IsMarkVariant: {
+                const MobActor *mob = mobOf(*target);
+                const char *name = filter.mType == FilterTestType::IsVariant ? "minecraft:variant"
+                                                                             : "minecraft:mark_variant";
+                const json::Value *component = mob == nullptr ? nullptr : mob->getComponent(name);
+                const json::Value *current = component == nullptr ? nullptr : component->get("value");
+                return hasValue(filter)
+                       && compareNumbers((int64_t) (current == nullptr ? 0 : current->integer(0)), wholeOf(filter),
+                                         filter.mOperator);
+            }
+            case FilterTestType::BoolProperty:
+            case FilterTestType::EnumProperty:
+            case FilterTestType::IntProperty:
+            case FilterTestType::FloatProperty:
+                return testProperty(filter, *target);
+            case FilterTestType::HomeDistance: {
+                const MobActor *mob = mobOf(*target);
+                if (mob == nullptr || !mob->hasHome() || !hasValue(filter))
+                    return false;
+
+                const Vector3f position = mob->getPosition();
+                const Vector3f &home = mob->getHomePosition();
+                const float dx = position.x - home.x;
+                const float dy = position.y - home.y;
+                const float dz = position.z - home.z;
+                return compareFloats(std::sqrt(dx * dx + dy * dy + dz * dz), numberOf(filter), filter.mOperator);
+            }
+            case FilterTestType::IsBoundToCreakingHeart: {
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && isBoundToHomeBlock(owner, *mob), filter);
+            }
+            case FilterTestType::HasComponent: {
+                if (filter.mEffectComponent)
+                    return applyNegation(filter.mHasEffect && target->hasEffect(filter.mEffect), filter);
+
+                const MobActor *mob = mobOf(*target);
+                return applyNegation(mob != nullptr && hasValue(filter) && mob->getComponent(filter.mText) != nullptr,
+                                     filter);
+            }
+            case FilterTestType::IsPanicking: {
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && mob->isPanicking(), filter);
+            }
+            case FilterTestType::OwnerDistance: {
+                const MobActor *mob = mobOf(*target);
+                const ServerPlayer *mobOwner = mob == nullptr ? nullptr : mob->getOwner(owner);
+                return mobOwner != nullptr && hasValue(filter)
+                       && compareFloats(std::sqrt(mob->distanceSquaredTo(*mobOwner)), numberOf(filter),
+                                        filter.mOperator);
+            }
+            case FilterTestType::InNether:
+                return applyBoolean(target->getDimension() == DimensionType::Nether, filter);
+            case FilterTestType::InOverworld:
+                return applyBoolean(target->getDimension() == DimensionType::Overworld, filter);
+            case FilterTestType::HasContainerOpen: {
+                const ServerPlayer *player = playerOf(*target);
+                return applyBoolean(player != nullptr && player->getInventoryManager().isContainerOpen(), filter);
+            }
+            case FilterTestType::HasSilkTouch: {
+                const ServerPlayer *player = playerOf(*target);
+                const bool result = player != nullptr
+                                    && ItemEnchantments::getLevel(player->getInventory().getItemInHand(),
+                                                                  EnchantmentIds::SILK_TOUCH)
+                                               > 0;
+                return applyBoolean(result, filter);
+            }
+            case FilterTestType::HasEquipment:
+                return applyNegation(hasValue(filter)
+                                             && hasEquipmentIn(*target, filter.mEquipmentDomain,
+                                                               BehaviorItems(filter.mItems.get())),
+                                     filter);
+            case FilterTestType::HasEquipmentTag:
+                return applyNegation(hasValue(filter)
+                                             && hasEquipmentTagIn(*target, filter.mEquipmentDomain, filter.mText),
+                                     filter);
+            case FilterTestType::OnGround:
+                return applyBoolean(target->isOnGround(), filter);
+            case FilterTestType::OnFire:
+                return applyBoolean(target->isOnFire(), filter);
+            case FilterTestType::IsRiding:
+                return applyBoolean(target->isRiding(), filter);
+            case FilterTestType::IsRidingSelf:
+                return applyBoolean(target->getVehicleId() == self.getUniqueId(), filter);
+            case FilterTestType::IsSprinting:
+                return applyBoolean(target->getFlags().get(ActorFlag::Sprinting), filter);
+            case FilterTestType::IsMoving: {
+                const Vector3f motion = target->getMotion();
+                const bool moving = target->getFlags().get(ActorFlag::Moving)
+                                    || motion.x * motion.x + motion.z * motion.z > 1.0e-6f;
+                return applyBoolean(moving, filter);
+            }
+            case FilterTestType::IsSleeping: {
+                const ServerPlayer *player = playerOf(*target);
+                const bool sleeping = player != nullptr ? player->isSleeping()
+                                                        : target->getFlags().get(ActorFlag::Sleeping);
+                return applyBoolean(sleeping, filter);
+            }
+            case FilterTestType::IsLeashed:
+                return applyBoolean(target->getFlags().get(ActorFlag::Leashed), filter);
+            case FilterTestType::IsVisible:
+                return applyBoolean(!target->hasEffect(MobEffectId::Invisibility), filter);
+            case FilterTestType::IsMissingHealth:
+                return applyBoolean(target->getHealth() < target->getMaxHealth(), filter);
+            case FilterTestType::IsPersistent: {
+                const ServerActor *actor = dynamic_cast<const ServerActor *>(target);
+                return applyBoolean(actor != nullptr && actor->isPersistent(), filter);
+            }
+            case FilterTestType::IsTamed: {
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && mob->isTamed(), filter);
+            }
+            case FilterTestType::IsOwner: {
+                const MobActor *selfMob = mobOf(self);
+                return applyBoolean(selfMob != nullptr && selfMob->isOwnedBy(*target), filter);
+            }
+            case FilterTestType::WasLastHurtBy: {
+                const MobActor *selfMob = mobOf(self);
+                return applyBoolean(selfMob != nullptr && selfMob->getLastHurtBy() != 0
+                                            && selfMob->getLastHurtBy() == target->getRuntimeId(),
+                                    filter);
+            }
+            case FilterTestType::IsAvoidingMobs: {
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && mob->isAvoidingMobs(), filter);
+            }
+            case FilterTestType::IsNavigating: {
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && !mob->getNavigation().isDone(), filter);
+            }
+            case FilterTestType::InactivityTimer: {
+                const MobActor *mob = mobOf(*target);
+                const int32_t seconds = mob == nullptr ? 0 : mob->getInactivityTicks() / TICKS_PER_SECOND;
+                // a bare == reads as at least
+                return hasValue(filter)
+                       && compareNumbers(seconds, wholeOf(filter),
+                                         filter.mExactEquals ? FilterOperator::GreaterEqual : filter.mOperator);
+            }
+            case FilterTestType::HasAbility: {
+                const ServerPlayer *player = playerOf(*target);
+                return applyNegation(player != nullptr && hasValue(filter) && hasAbility(*player, filter.mText),
+                                     filter);
+            }
+            case FilterTestType::HasMobEffect:
+                return applyNegation(hasValue(filter) && filter.mHasEffect && target->hasEffect(filter.mEffect),
+                                     filter);
+            case FilterTestType::IsColor: {
+                const MobActor *colored = dynamic_cast<const MobActor *>(target);
+                const int32_t color = colored != nullptr && colored->hasColor() ? colored->getColor() : -1;
+                return applyNegation(hasValue(filter) && color >= 0 && color < 16 && filter.mText == COLOR_NAMES[color],
+                                     filter);
+            }
+            case FilterTestType::IsSkinId:
+                return hasValue(filter)
+                       && compareNumbers(componentValue(*target, "minecraft:skin_id"), wholeOf(filter),
+                                         filter.mOperator);
+            case FilterTestType::HasRangedWeapon: {
+                const std::vector<const ItemStack *> hand = equipmentOf(*target, "hand");
+                const std::string held = hand.empty() ? std::string() : itemIdentifier(*hand.front());
+                const bool result = std::find(std::begin(RANGED_WEAPONS), std::end(RANGED_WEAPONS), held)
+                                    != std::end(RANGED_WEAPONS);
+                return applyBoolean(result, filter);
+            }
+            case FilterTestType::AllSlotsEmpty: {
+                bool empty = true;
+                for (const ItemStack *item: equipmentOf(*target, filter.mEquipmentDomain))
+                    empty = empty && item->isAir();
+                return applyNegation(empty, filter);
+            }
+            case FilterTestType::HasDamagedEquipment: {
+                bool result = false;
+                for (const ItemStack *item: equipmentOf(*target, filter.mEquipmentDomain))
+                    result = result
+                             || (item->mDamage > 0
+                                 && (filter.mQualified.empty() || itemIdentifier(*item) == filter.mQualified));
+                return applyNegation(result, filter);
+            }
+            case FilterTestType::HasItemWithEnchantmentInSlot: {
+                const EnchantmentData *enchantment = hasValue(filter) ? EnchantmentTable::findByName(filter.mText)
+                                                                      : nullptr;
+                bool result = false;
+                if (enchantment != nullptr) {
+                    for (const ItemStack *item: equipmentOf(*target, filter.mEquipmentDomain))
+                        result = result || ItemEnchantments::getLevel(*item, enchantment->mId) > 0;
+                }
+                return applyNegation(result, filter);
+            }
+            case FilterTestType::HasSameEquipmentInSlotAs: {
+                const std::vector<const ItemStack *> mine = equipmentOf(self, filter.mEquipmentDomain);
+                const std::vector<const ItemStack *> theirs = equipmentOf(*target, filter.mEquipmentDomain);
+                const bool result = !mine.empty() && !theirs.empty() && !mine.front()->isAir()
+                                    && itemIdentifier(*mine.front()) == itemIdentifier(*theirs.front());
+                return applyBoolean(result, filter);
+            }
+            case FilterTestType::DistanceToNearestPlayer:
+                return hasValue(filter)
+                       && compareFloats(nearestPlayerDistance(owner, *target), numberOf(filter), filter.mOperator);
+            case FilterTestType::InCaravan:
+                return applyBoolean(FollowCaravanGoal::isInCaravan(target->getUniqueId()), filter);
+            case FilterTestType::IsInVillage: {
+                const std::shared_ptr<Village> village = owner.getLevelFor(*target)
+                                                                 .getVillageManager()
+                                                                 .getClosestVillage(blockPosition(*target), 0);
+                return applyBoolean(village != nullptr, filter);
+            }
+            case FilterTestType::Unsupported:
+                return applyBoolean(false, filter);
+            default:
+                return testAtBlock(filter, owner, *target);
+        }
+    }
+
+    bool testNode(const FilterNode &node, ServerNetworkHandler &owner, const ServerActor &self, const Actor *other) {
+        switch (node.mMode) {
+            case FilterMode::All:
+                for (const FilterNode &child: node.mChildren) {
+                    if (!testNode(child, owner, self, other))
+                        return false;
+                }
+                return true;
+            case FilterMode::Any:
+                for (const FilterNode &child: node.mChildren) {
+                    if (testNode(child, owner, self, other))
+                        return true;
+                }
+                return false;
+            case FilterMode::None:
+                for (const FilterNode &child: node.mChildren) {
+                    if (testNode(child, owner, self, other))
+                        return false;
+                }
+                return true;
+            default:
+                return testOne(node.mTest, owner, self, other);
+        }
+    }
+}
+
 bool EntityFilter::hasFamily(const Actor &actor, const std::string &family) {
     if (actor.isPlayer())
         return family == PLAYER_FAMILY;
 
     const json::Value *typeFamily = nullptr;
-    if (const MobActor *mob = dynamic_cast<const MobActor *>(&actor)) {
+    if (const MobActor *mob = mobOf(actor)) {
         typeFamily = mob->getComponent(TYPE_FAMILY_COMPONENT);
-    } else if (const ServerActor *serverActor = dynamic_cast<const ServerActor *>(&actor)) {
+    } else if (const ServerActor *serverActor = serverActorOf(actor)) {
         const json::Value *definition = EntityDefinitions::find(serverActor->getIdentifier());
         const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
         typeFamily = components == nullptr ? nullptr : components->get(TYPE_FAMILY_COMPONENT);
@@ -352,601 +1313,27 @@ EntityFilter::DamageScope::~DamageScope() {
     activeDamageAmount = 0.0f;
 }
 
-// runs for every candidate of every scan: keys matched in one pass over the object, not a hashed lookup per group
-bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
+std::shared_ptr<const EntityFilter::Group> EntityFilter::compile(const json::Value *filter) {
+    return filter == nullptr ? nullptr : std::make_shared<const Group>(compileNode(*filter));
+}
+
+void EntityFilter::compileDefinitions(const json::Value *root) {
+    compiledFilters().clear();
+    if (root != nullptr)
+        compileTree(*root);
+}
+
+bool EntityFilter::test(const Group &filter, ServerNetworkHandler &owner, const ServerActor &self,
                         const Actor *other) {
-    if (filter.isArray())
-        return _testAll(filter, owner, self, other);
-
-    const size_t GROUP_COUNT = 6;
-    const json::Value *groups[GROUP_COUNT] = {};
-    for (const auto &entry: filter.mObject) {
-        const std::string &key = entry.first;
-        if (key == "all_of")
-            groups[0] = entry.second.get();
-        else if (key == "AND")
-            groups[1] = entry.second.get();
-        else if (key == "any_of")
-            groups[2] = entry.second.get();
-        else if (key == "OR")
-            groups[3] = entry.second.get();
-        else if (key == "none_of")
-            groups[4] = entry.second.get();
-        else if (key == "NOT")
-            groups[5] = entry.second.get();
-    }
-
-    // every group present must hold: villager_v2 become_zombie pairs all_of with any_of
-    bool grouped = false;
-    for (size_t index = 0; index < GROUP_COUNT; ++index) {
-        if (groups[index] == nullptr)
-            continue;
-        grouped = true;
-        bool passed;
-        if (index < 2)
-            passed = _testAll(*groups[index], owner, self, other);
-        else if (index < 4)
-            passed = _testAny(*groups[index], owner, self, other);
-        else
-            passed = !_testAny(*groups[index], owner, self, other);
-        if (!passed)
-            return false;
-    }
-    return grouped || _testSingle(filter, owner, self, other);
+    return testNode(filter, owner, self, other);
 }
 
-bool EntityFilter::_testAll(const json::Value &filters, ServerNetworkHandler &owner, const MobActor &self,
-                            const Actor *other) {
-    if (!filters.isArray())
-        return test(filters, owner, self, other);
-
-    for (const std::unique_ptr<json::Value> &entry: filters.mArray) {
-        if (!test(*entry, owner, self, other))
-            return false;
-    }
-    return true;
-}
-
-bool EntityFilter::_testAny(const json::Value &filters, ServerNetworkHandler &owner, const MobActor &self,
-                            const Actor *other) {
-    if (!filters.isArray())
-        return test(filters, owner, self, other);
-
-    for (const std::unique_ptr<json::Value> &entry: filters.mArray) {
-        if (test(*entry, owner, self, other))
-            return true;
-    }
-    return false;
-}
-
-bool EntityFilter::_testBlock(const std::string &test, const std::string &op, const json::Value *value,
-                              ServerNetworkHandler &owner, const MobActor &self) {
-    if (!self.hasEventBlock())
-        return false;
-
-    Level &level = owner.getLevelFor(self);
-    const Vector3i &position = self.getEventBlock();
-    const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
-    if (state == nullptr)
-        return false;
-
-    if (test == "is_block") {
-        const std::string expected = value == nullptr ? std::string() : value->string();
-        const bool result = !expected.empty() && (state->mName == expected || state->mName == "minecraft:" + expected);
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_waterlogged") {
-        const BlockState *liquid = level.peekBlockPtr(position.x, position.y, position.z, 1);
-        return applyBoolean(liquid != nullptr && LiquidView(*liquid).isWater(), value, op);
-    }
-
-    return false;
-}
-
-bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
-                               const Actor *other) {
-    const json::Value *testValue = nullptr;
-    const json::Value *operatorValue = nullptr;
-    const json::Value *value = nullptr;
-    const json::Value *subjectValue = nullptr;
-    for (const auto &entry: filter.mObject) {
-        const std::string &key = entry.first;
-        if (key == "test")
-            testValue = entry.second.get();
-        else if (key == "operator")
-            operatorValue = entry.second.get();
-        else if (key == "value")
-            value = entry.second.get();
-        else if (key == "subject")
-            subjectValue = entry.second.get();
-    }
-    if (testValue == nullptr)
-        return true;
-
-    const std::string &test = textOf(*testValue);
-    const std::string &op = enumName(operatorValue, NUMERIC_OPERATORS,
-                                     sizeof(NUMERIC_OPERATORS) / sizeof(NUMERIC_OPERATORS[0]), NUMERIC_OPERATORS[0]);
-    const std::string &subject = enumName(subjectValue, NUMERIC_SUBJECTS,
-                                          sizeof(NUMERIC_SUBJECTS) / sizeof(NUMERIC_SUBJECTS[0]), NUMERIC_SUBJECTS[0]);
-    const Actor *target = &self;
-    if (subject == "other" || subject == "damager" || subject == "player")
-        target = other;
-    else if (subject == "target")
-        target = self.getTarget(owner);
-
-    if (subject == "block")
-        return _testBlock(test, op, value, owner, self);
-
-    if (test == "is_difficulty") {
-        const int32_t expected = value == nullptr ? -1 : difficultyValue(*value);
-        return expected >= 0 && compareNumbers((int32_t) owner.getProperties().getDifficulty(), expected, op);
-    }
-
-    if (test == "random_chance") {
-        const int32_t bound = value == nullptr ? 1 : std::max(1, value->integer(1));
-        const bool result = std::uniform_int_distribution<int32_t>(0, bound - 1)(filterRandom()) == 0;
-        return applyBoolean(result, nullptr, op);
-    }
-
-    if (test == "hourly_clock_time") {
-        const int64_t timeOfDay = ((owner.getLevelFor(self).getTime() % DAY_LENGTH) + DAY_LENGTH) % DAY_LENGTH;
-        return value != nullptr && compareNumbers(timeOfDay, (int64_t) value->number(0.0), op);
-    }
-
-    if (test == "has_target")
-        return applyBoolean(self.getTarget(owner) != nullptr, value, op);
-
-    if (test == "target_distance") {
-        const Actor *mobTarget = self.getTarget(owner);
-        return mobTarget != nullptr && value != nullptr
-               && compareFloats(std::sqrt(self.distanceSquaredTo(*mobTarget)), (float) value->number(0.0), op);
-    }
-
-    if (test == "y_rotation") {
-        const float yaw = std::remainder(self.getRotation().y, 360.0f);
-        return value != nullptr && compareFloats(yaw, (float) value->number(0.0), op);
-    }
-
-    if (test == "is_game_rule") {
-        const json::Value *domain = filter.get("domain");
-        if (domain == nullptr)
-            return false;
-
-        const GameRules &rules = owner.getWorldFor(self).getOverworld().getGameRules();
-        if (value != nullptr && value->isNumber())
-            return compareNumbers(rules.getInt(domain->string()), (int64_t) value->number(0.0), op);
-        return applyBoolean(rules.getBool(domain->string()), value, op);
-    }
-
-    if (test == "has_damage") {
-        if (activeDamage == nullptr || value == nullptr)
-            return false;
-
-        const std::string cause = value->string();
-        const bool result = cause == FATAL_DAMAGE ? activeDamageAmount >= self.getHealth()
-                                                  : DamageCause::matches(cause, *activeDamage);
-        return isNegation(op) ? !result : result;
-    }
-
-    if (target == nullptr)
-        return false;
-
-    if (test == "actor_health")
-        return value != nullptr
-               && compareNumbers((int64_t) std::ceil(target->getHealth()), (int64_t) value->number(0.0), op);
-
-    if (test == "rider_count")
-        return value != nullptr
-               && compareNumbers((int64_t) target->getPassengers().size(), (int64_t) value->number(0.0), op);
-
-    if (test == "has_nametag") {
-        const ServerActor *named = dynamic_cast<const ServerActor *>(target);
-        return applyBoolean(named != nullptr && !named->getNameTag().empty(), value, op);
-    }
-
-    if (test == "is_family") {
-        const bool result = matchesFamily(target, value);
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_vehicle_family") {
-        const bool result = matchesFamily(vehicleOf(owner, *target), value);
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_controlling_passenger_family") {
-        const bool result = matchesFamily(controllerOf(owner, *target), value);
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_sneak_held" || test == "is_sneaking")
-        return applyBoolean(target->getFlags().get(ActorFlag::Sneaking), value, op);
-
-    if (test == "is_sitting") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        return applyBoolean(mob != nullptr && (mob->isSitting() || mob->getFlags().get(ActorFlag::Sitting)), value, op);
-    }
-
-    if (test == "is_baby") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        return applyBoolean(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr, value, op);
-    }
-
-    if (test == "is_variant" || test == "is_mark_variant") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        const json::Value *component = mob == nullptr
-                                               ? nullptr
-                                               : mob->getComponent(test == "is_variant" ? "minecraft:variant"
-                                                                                        : "minecraft:mark_variant");
-        const json::Value *current = component == nullptr ? nullptr : component->get("value");
-        return value != nullptr
-               && compareNumbers((int64_t) (current == nullptr ? 0 : current->integer(0)), (int64_t) value->number(0.0),
-                                 op);
-    }
-
-    if (test == "bool_property" || test == "enum_property" || test == "int_property" || test == "float_property") {
-        const ServerActor *actor = dynamic_cast<const ServerActor *>(target);
-        const json::Value *domain = filter.get("domain");
-        const ActorPropertyDescription *descriptor = actor == nullptr || domain == nullptr
-                                                             ? nullptr
-                                                             : actor->findPropertyDescription(domain->string());
-        if (descriptor == nullptr)
-            return false;
-
-        const std::string &name = descriptor->mName;
-        if (test == "bool_property")
-            return applyBoolean(actor->getIntProperty(name, descriptor->mDefaultInt) != 0, value, op);
-
-        if (test == "enum_property") {
-            const int32_t index = actor->getIntProperty(name, descriptor->mDefaultInt);
-            const bool result = descriptor->mType == ActorPropertyDescription::Type::Enum && value != nullptr
-                                && index == descriptor->findEnumIndex(value->string());
-            return isNegation(op) ? !result : result;
-        }
-
-        if (test == "float_property")
-            return value != nullptr
-                   && compareFloats(actor->getFloatProperty(name, descriptor->mDefaultFloat),
-                                    (float) value->number(0.0), op);
-
-        return value != nullptr
-               && compareNumbers(actor->getIntProperty(name, descriptor->mDefaultInt), (int64_t) value->number(0.0),
-                                 op);
-    }
-
-    if (test == "home_distance") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        if (mob == nullptr || !mob->hasHome() || value == nullptr)
-            return false;
-
-        const Vector3f position = mob->getPosition();
-        const Vector3f &home = mob->getHomePosition();
-        const float dx = position.x - home.x;
-        const float dy = position.y - home.y;
-        const float dz = position.z - home.z;
-        return compareFloats(std::sqrt(dx * dx + dy * dy + dz * dz), (float) value->number(0.0), op);
-    }
-
-    if (test == "is_bound_to_creaking_heart") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        return applyBoolean(mob != nullptr && isBoundToHomeBlock(owner, *mob), value, op);
-    }
-
-    if (test == "has_component" && value != nullptr && value->string().rfind(EFFECT_COMPONENT_PREFIX, 0) == 0) {
-        MobEffectId effect;
-        const std::string name = value->string().substr(std::string(EFFECT_COMPONENT_PREFIX).size());
-        const bool result = parseDefinitionMobEffect(name, effect) && target->hasEffect(effect);
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "has_component") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        const bool result = mob != nullptr && value != nullptr && mob->getComponent(value->string()) != nullptr;
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_panicking") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        return applyBoolean(mob != nullptr && mob->isPanicking(), value, op);
-    }
-
-    if (test == "owner_distance") {
-        const MobActor *mob = dynamic_cast<const MobActor *>(target);
-        const ServerPlayer *mobOwner = mob == nullptr ? nullptr : mob->getOwner(owner);
-        return mobOwner != nullptr && value != nullptr
-               && compareFloats(std::sqrt(mob->distanceSquaredTo(*mobOwner)), (float) value->number(0.0), op);
-    }
-
-    if (test == "in_nether")
-        return applyBoolean(target->getDimension() == DimensionType::Nether, value, op);
-
-    if (test == "in_overworld")
-        return applyBoolean(target->getDimension() == DimensionType::Overworld, value, op);
-
-    if (test == "has_container_open") {
-        const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
-        return applyBoolean(player != nullptr && player->getInventoryManager().isContainerOpen(), value, op);
-    }
-
-    if (test == "has_silk_touch") {
-        const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
-        const bool result = player != nullptr
-                            && ItemEnchantments::getLevel(player->getInventory().getItemInHand(),
-                                                          EnchantmentIds::SILK_TOUCH)
-                                       > 0;
-        return applyBoolean(result, value, op);
-    }
-
-    Level &level = owner.getLevelFor(*target);
-    const Vector3i position = blockPosition(*target);
-
-    if (test == "weather") {
-        const std::string weather = value == nullptr ? std::string() : value->string();
-        bool result = false;
-        if (weather == "clear")
-            result = !level.isRaining();
-        else if (weather == "precipitation")
-            result = level.isRaining();
-        else if (weather == "thunderstorm")
-            result = level.isThundering();
-        else
-            return false;
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "has_biome_tag") {
-        LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const int32_t biome = chunk == nullptr
-                                      ? -1
-                                      : (int32_t) chunk->getBiomeAt(position.x & 15, position.y, position.z & 15);
-        const bool result = value != nullptr && BiomeChunkGenDataRegistry::hasTag(biome, value->string());
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_daytime")
-        return applyBoolean(((level.getTime() % DAY_LENGTH) + DAY_LENGTH) % DAY_LENGTH < DAYTIME_END, value, op);
-
-    if (test == "in_water" || test == "is_underwater") {
-        const int32_t y = test == "is_underwater" ? (int32_t) std::floor(target->getPosition().y + 1.0f) : position.y;
-        const bool result = LiquidView(level.getBlockState(position.x, y, position.z)).isWater();
-        return applyBoolean(result, value, op);
-    }
-
-    if (test == "is_brightness") {
-        const int32_t blockLight = level.getBlockLightAt(position.x, position.y, position.z);
-        const int32_t skyLight = level.getSkyLightAt(position.x, position.y, position.z)
-                                 - level.getSkyLightSubtracted();
-        const float brightness = (float) std::max(blockLight, skyLight) / MAX_LIGHT;
-        return value != nullptr && compareFloats(brightness, (float) value->number(0.0), op);
-    }
-
-    if (test == "is_underground")
-        return applyBoolean(position.y < level.getHeightAt(position.x, position.z), value, op);
-
-    if (test == "has_equipment") {
-        const json::Value *domain = filter.get("domain");
-        const bool result = value != nullptr && hasEquipmentIn(*target, equipmentDomain(domain), BehaviorItems(value));
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "has_equipment_tag") {
-        const json::Value *domain = filter.get("domain");
-        const bool result = value != nullptr && hasEquipmentTagIn(*target, equipmentDomain(domain), value->string());
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_snow_covered") {
-        const bool result = level.getBlockState(position.x, position.y, position.z).mName == "minecraft:snow_layer";
-        return applyBoolean(result, value, op);
-    }
-
-    const MobActor *targetMob = dynamic_cast<const MobActor *>(target);
-    const ServerPlayer *targetPlayer = dynamic_cast<const ServerPlayer *>(target);
-
-    if (test == "on_ground")
-        return applyBoolean(target->isOnGround(), value, op);
-
-    if (test == "on_fire")
-        return applyBoolean(target->isOnFire(), value, op);
-
-    if (test == "is_riding")
-        return applyBoolean(target->isRiding(), value, op);
-
-    if (test == "is_riding_self")
-        return applyBoolean(target->getVehicleId() == self.getUniqueId(), value, op);
-
-    if (test == "is_sprinting")
-        return applyBoolean(target->getFlags().get(ActorFlag::Sprinting), value, op);
-
-    if (test == "is_moving") {
-        const Vector3f motion = target->getMotion();
-        const bool moving = target->getFlags().get(ActorFlag::Moving)
-                            || motion.x * motion.x + motion.z * motion.z > 1.0e-6f;
-        return applyBoolean(moving, value, op);
-    }
-
-    if (test == "is_sleeping") {
-        const bool sleeping = targetPlayer != nullptr ? targetPlayer->isSleeping()
-                                                      : target->getFlags().get(ActorFlag::Sleeping);
-        return applyBoolean(sleeping, value, op);
-    }
-
-    if (test == "is_leashed")
-        return applyBoolean(target->getFlags().get(ActorFlag::Leashed), value, op);
-
-    if (test == "is_visible")
-        return applyBoolean(!target->hasEffect(MobEffectId::Invisibility), value, op);
-
-    if (test == "is_missing_health")
-        return applyBoolean(target->getHealth() < target->getMaxHealth(), value, op);
-
-    if (test == "is_persistent") {
-        const ServerActor *actor = dynamic_cast<const ServerActor *>(target);
-        return applyBoolean(actor != nullptr && actor->isPersistent(), value, op);
-    }
-
-    if (test == "is_tamed")
-        return applyBoolean(targetMob != nullptr && targetMob->isTamed(), value, op);
-
-    if (test == "is_owner")
-        return applyBoolean(self.isOwnedBy(*target), value, op);
-
-    if (test == "was_last_hurt_by")
-        return applyBoolean(self.getLastHurtBy() != 0 && self.getLastHurtBy() == target->getRuntimeId(), value, op);
-
-    if (test == "is_avoiding_mobs")
-        return applyBoolean(targetMob != nullptr && targetMob->isAvoidingMobs(), value, op);
-
-    if (test == "is_navigating")
-        return applyBoolean(targetMob != nullptr && !targetMob->getNavigation().isDone(), value, op);
-
-    if (test == "inactivity_timer") {
-        const int32_t seconds = targetMob == nullptr ? 0 : targetMob->getInactivityTicks() / TICKS_PER_SECOND;
-        return value != nullptr && compareNumbers(seconds, (int64_t) value->number(0.0), op == "==" ? ">=" : op);
-    }
-
-    if (test == "has_ability") {
-        const bool result = targetPlayer != nullptr && value != nullptr && hasAbility(*targetPlayer, value->string());
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "has_mob_effect") {
-        MobEffectId effect;
-        const bool result = value != nullptr && parseDefinitionMobEffect(value->string(), effect)
-                            && target->hasEffect(effect);
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_color") {
-        const int32_t color = componentValue(*target, "minecraft:color");
-        const bool result = value != nullptr && color >= 0 && color < 16 && value->string() == COLOR_NAMES[color];
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_skin_id")
-        return value != nullptr
-               && compareNumbers(componentValue(*target, "minecraft:skin_id"), (int64_t) value->number(0.0), op);
-
-    if (test == "has_ranged_weapon") {
-        const std::vector<const ItemStack *> hand = equipmentOf(*target, "hand");
-        const std::string held = hand.empty() ? std::string() : itemIdentifier(*hand.front());
-        const bool result = std::find(std::begin(RANGED_WEAPONS), std::end(RANGED_WEAPONS), held)
-                            != std::end(RANGED_WEAPONS);
-        return applyBoolean(result, value, op);
-    }
-
-    if (test == "all_slots_empty") {
-        bool empty = true;
-        for (const ItemStack *item: equipmentOf(*target, equipmentDomain(value)))
-            empty = empty && item->isAir();
-        return isNegation(op) ? !empty : empty;
-    }
-
-    if (test == "has_damaged_equipment") {
-        const std::string expected = value == nullptr ? std::string() : withNamespace(value->string());
-        bool result = false;
-        for (const ItemStack *item: equipmentOf(*target, equipmentDomain(filter.get("domain"))))
-            result = result || (item->mDamage > 0 && (expected.empty() || itemIdentifier(*item) == expected));
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "actor_has_item_with_enchantment_in_slot") {
-        const EnchantmentData *enchantment = value == nullptr ? nullptr : EnchantmentTable::findByName(value->string());
-        bool result = false;
-        if (enchantment != nullptr) {
-            for (const ItemStack *item: equipmentOf(*target, equipmentDomain(filter.get("domain"))))
-                result = result || ItemEnchantments::getLevel(*item, enchantment->mId) > 0;
-        }
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "has_same_equipment_in_slot_as") {
-        const std::string domain = equipmentDomain(filter.get("domain"));
-        const std::vector<const ItemStack *> mine = equipmentOf(self, domain);
-        const std::vector<const ItemStack *> theirs = equipmentOf(*target, domain);
-        const bool result = !mine.empty() && !theirs.empty() && !mine.front()->isAir()
-                            && itemIdentifier(*mine.front()) == itemIdentifier(*theirs.front());
-        return applyBoolean(result, value, op);
-    }
-
-    if (test == "distance_to_nearest_player")
-        return value != nullptr && compareFloats(nearestPlayerDistance(owner, *target), (float) value->number(0.0), op);
-
-    if (test == "in_lava" || test == "in_contact_with_water" || test == "in_water_or_rain") {
-        const LiquidContact contact = LiquidBlocksFetch::at(level, target->getPosition());
-        bool result = test == "in_lava" ? contact.lava : contact.water;
-        if (test != "in_lava")
-            result = result || PrecipitationSystem::isRainingOn(level, position);
-        return applyBoolean(result, value, op);
-    }
-
-    if (test == "in_block") {
-        const std::string expected = value == nullptr ? std::string() : withNamespace(value->string());
-        const bool result = level.getBlockState(position.x, position.y, position.z).mName == expected;
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "on_hot_block") {
-        const bool result = level.getBlockState(position.x, position.y - 1, position.z).mName == HOT_BLOCK;
-        return applyBoolean(result, value, op);
-    }
-
-    if (test == "taking_fire_damage") {
-        const bool burning = target->isOnFire() || LiquidBlocksFetch::at(level, target->getPosition()).lava;
-        return applyBoolean(burning && !target->isFireImmune() && !target->hasEffect(MobEffectId::FireResistance),
-                            value, op);
-    }
-
-    if (test == "is_biome") {
-        LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const int32_t biome = chunk == nullptr
-                                      ? -1
-                                      : (int32_t) chunk->getBiomeAt(position.x & 15, position.y, position.z & 15);
-        const bool result = value != nullptr && BiomeChunkGenDataRegistry::hasTag(biome, value->string());
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "is_temperature_value")
-        return value != nullptr && compareFloats(temperatureAt(level, position), (float) value->number(0.0), op);
-
-    if (test == "weather_at_position") {
-        const std::string weather = value == nullptr ? std::string() : value->string();
-        const bool exposed = position.y >= level.getHeightAt(position.x, position.z);
-        const bool cold = PrecipitationSystem::isCold(level, position);
-        bool result;
-        if (weather == "clear")
-            result = !level.isRaining() || !exposed;
-        else if (weather == "rain")
-            result = PrecipitationSystem::isRainingOn(level, position);
-        else if (weather == "snow")
-            result = level.isRaining() && exposed && cold;
-        else if (weather == "precipitation")
-            result = level.isRaining() && exposed;
-        else if (weather == "thunderstorm")
-            result = level.isThundering() && exposed;
-        else
-            return false;
-        return isNegation(op) ? !result : result;
-    }
-
-    if (test == "redstone_strength_at_position")
-        return value != nullptr
-               && compareNumbers(redstoneStrengthAt(owner, level, position), (int64_t) value->number(0.0), op);
-
-    if (test == "in_caravan")
-        return applyBoolean(FollowCaravanGoal::isInCaravan(target->getUniqueId()), value, op);
-
-    if (test == "is_in_village") {
-        if (target == nullptr)
-            return false;
-        const std::shared_ptr<Village> village = owner.getLevelFor(*target).getVillageManager().getClosestVillage(
-                blockPosition(*target), 0);
-        return applyBoolean(village != nullptr, value, op);
-    }
-
-    if (test == "is_raider" || test == "has_trade_supply" || test == "trusts" || test == "is_leashed_to")
-        return applyBoolean(false, value, op);
-
-    return false;
+// runs for every candidate of every scan: the filter was compiled with its definition
+bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, const ServerActor &self,
+                        const Actor *other) {
+    const std::unordered_map<const json::Value *, FilterNode> &filters = compiledFilters();
+    const auto found = filters.find(&filter);
+    if (found != filters.end())
+        return testNode(found->second, owner, self, other);
+    return testNode(compileNode(filter), owner, self, other);
 }

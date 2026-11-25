@@ -7,6 +7,7 @@
 #include "Protocol/Types/CommandData.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 class Server;
@@ -25,10 +26,20 @@ public:
         return CommandPermission::GameDirectors;
     }
 
+    // op, stop and the like: the level alone is not enough, the origin must manage the server
+    virtual bool managesServer() const {
+        return false;
+    }
+
     virtual std::vector<CommandOverloadData> getOverloads() const;
 
     virtual size_t getRawArgumentIndex() const {
         return (size_t) -1;
+    }
+
+    // its arguments after a "run" token are a command of their own, dispatched again
+    virtual bool chainsCommands() const {
+        return false;
     }
 
     static CommandParamData makePlayerParameter(const std::string &name);
@@ -37,6 +48,9 @@ public:
 
     static CommandParamData makeEnumParameter(const std::string &name, const std::string &enumName,
                                               const std::vector<std::string> &values, bool optional = false);
+
+    // a line the overloads do not accept: the game's syntax error at the token where they stop, else the usage
+    void sendUsageError(CommandOrigin &sender) const;
 
     static std::string joinArguments(const std::vector<std::string> &arguments, size_t first);
 
@@ -50,8 +64,9 @@ public:
 
     static bool parseBlockCoordinate(const std::string &value, int32_t origin, int32_t &out);
 
-    static bool parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3i &origin,
-                                   Vector3i &out);
+    // as parsePosition, floored to a block; ~ counts from the block holding origin
+    static bool parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
+                                   const Vector3f &rotation, Vector3i &out);
 
     const std::string &getName() const {
         return mName;
@@ -67,6 +82,11 @@ public:
 
     const std::vector<std::string> &getAliases() const {
         return mAliases;
+    }
+
+    // the command map's setAliases keeps its lookup in step
+    void setAliases(std::vector<std::string> aliases) {
+        mAliases = std::move(aliases);
     }
 
 protected:

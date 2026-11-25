@@ -378,7 +378,7 @@ void MobEquipment::hurtArmor(ServerNetworkHandler &owner, const MobActor &mob, f
         const BodyArmorData *body = BodyArmor::find(item);
         const char *breakSound = body != nullptr && body->mBreakSound != nullptr ? body->mBreakSound
                                                                                  : LevelSoundEvent::BREAK;
-        if (!ItemDurability::apply(nullptr, item, wear))
+        if (!ItemDurability::apply(nullptr, item, wear, true, &owner.getEventBus()))
             continue;
 
         changed = true;

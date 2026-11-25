@@ -61,7 +61,7 @@ namespace {
     }
 
     bool holdsSpawnPoint(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
-        return player.hasSpawnPoint() && player.getSpawnDimension() == DimensionType::Nether
+        return player.hasSpawnPoint() && player.getSpawnDimension() == player.getDimension()
                && player.getSpawnPoint() == position && player.getSpawnWorld() == owner.getWorldFor(player).getName();
     }
 }
@@ -127,13 +127,30 @@ std::optional<Vector3f> RespawnAnchorBlock::findRespawnPosition(Level &level, co
     return Vector3f((float) standUp->x + 0.5f, (float) standUp->y, (float) standUp->z + 0.5f);
 }
 
-void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 ServerPlayer *player) {
+    double radius = EXPLOSION_RADIUS;
+    bool breaksBlocks = true;
+    double fireChance = 1.0 / 3.0;
+    EventSignal<BlockExplodeBeforeEvent> &blockExplode = owner.getEventBus().before().mBlockExplode;
+    if (blockExplode.hasSubscribers()) {
+        BlockExplodeBeforeEvent event(level, position, player, radius, breaksBlocks, fireChance);
+        blockExplode.emit(event);
+        if (event.isCancelled())
+            return;
+        radius = event.mRadius;
+        breaksBlocks = event.mBreaksBlocks;
+        fireChance = event.mFireChance;
+    }
     level.setBlock(position, BlockState(BlockNames::AIR), true);
 
-    Explosion explosion(owner, level, centerOf(position), EXPLOSION_RADIUS, nullptr, false);
-    explosion.setIncendiary(true);
+    Explosion explosion(owner, level, centerOf(position), radius, nullptr, false);
+    explosion.setFireChance(fireChance);
     explosion.setInWater(isSurroundedByWater(level, position));
-    explosion.explode();
+    if (breaksBlocks)
+        explosion.explode();
+    else
+        explosion.explodeWithoutBlocks();
 }
 
 bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -152,16 +169,26 @@ bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &p
     if (charge <= 0)
         return glowstone;
 
-    if (player.getDimension() != DimensionType::Nether) {
+    enum class Action { Explode, SetSpawn };
+    Action action = player.getDimension() == DimensionType::Nether ? Action::SetSpawn : Action::Explode;
+    EventSignal<RespawnAnchorUseBeforeEvent> &anchorUse = owner.getEventBus().before().mRespawnAnchorUse;
+    if (anchorUse.hasSubscribers()) {
+        RespawnAnchorUseBeforeEvent event(level, player, position, action == Action::SetSpawn);
+        anchorUse.emit(event);
+        if (event.isCancelled())
+            return true;
+        action = event.mSetsSpawn ? Action::SetSpawn : Action::Explode;
+    }
+    if (action == Action::Explode) {
         if (level.getGameRules().getBool("respawnblocksexplode"))
-            explode(owner, level, position);
+            explode(owner, level, position, &player);
         return true;
     }
 
     if (holdsSpawnPoint(owner, player, position))
         return glowstone;
 
-    player.setSpawnPoint(position, player.getSpawnStandPositionHere(), DimensionType::Nether,
+    player.setSpawnPoint(position, player.getSpawnStandPositionHere(), player.getDimension(),
                          owner.getWorldFor(player).getName());
     owner.playLevelSound(level, SOUND_SET_SPAWN, centerOf(position));
     player.sendTranslation("§7%tile.respawn_anchor.respawnSet", {});

@@ -1,11 +1,13 @@
 #include "Falcon/Plugin/PluginManager.h"
 
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/DotnetHost.h"
 #include "Falcon/Plugin/InternalPluginLoader.h"
 #include "Falcon/Plugin/JvmHost.h"
+#include "Falcon/Plugin/PluginBusEvents.h"
 #include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginPackets.h"
 #include "Falcon/Plugin/PluginServerApi.h"
@@ -40,13 +42,14 @@ PluginManager::~PluginManager() {
         mOwner.getNetworkHandler().setOutboundFilter(nullptr);
 
     EventBus &bus = mOwner.getEventBus();
-    bus.after().mPlayerJoin.unsubscribe(mJoinHook);
-    bus.after().mPlayerLeave.unsubscribe(mQuitHook);
+    bus.before().mPlayerJoinMessage.unsubscribe(mJoinHook);
+    bus.before().mPlayerLeaveMessage.unsubscribe(mQuitHook);
     bus.before().mChatSend.unsubscribe(mChatHook);
 
     disableAll();
     mScheduler.shutdown();
     mSubscriptions.clear();
+    _unhookBusEvents();
     mPlugins.clear();
     if (gInstance == this)
         gInstance = nullptr;
@@ -346,15 +349,29 @@ void PluginManager::disableAll() {
 }
 
 void PluginManager::_disable(LoadedPlugin &plugin) {
-    if (plugin.mEnabled && plugin.mCallbacks.onDisable != nullptr) {
+    const bool wasEnabled = plugin.mEnabled;
+    plugin.mEnabled = false;
+
+    // Close windows before onDisable can release the callback's state.
+    const std::vector<uint64_t> windows(plugin.mWindowPlayers.begin(), plugin.mWindowPlayers.end());
+    for (uint64_t id: windows) {
+        if (!plugin.mWindowPlayers.contains(id))
+            continue;
+        if (ServerPlayer *player = MobActor::findPlayer(mOwner, id)) {
+            auto &inventories = player->getInventoryManager();
+            if (inventories.getPluginWindow(inventories.getContainerWindowId()) != nullptr)
+                inventories.onCurrentWindowRemove();
+        }
+    }
+    plugin.mWindowPlayers.clear();
+
+    if (wasEnabled && plugin.mCallbacks.onDisable != nullptr) {
         try {
             plugin.mCallbacks.onDisable(plugin.mCallbacks.userData);
         } catch (...) {
             LOG_ERROR(LogAreaID::Server, "[%s] onDisable threw an exception", plugin.mDescription.mName.c_str());
         }
     }
-
-    plugin.mEnabled = false;
     mScheduler.cancelAll(plugin);
 
     for (const std::string &command: plugin.mCommands)
@@ -366,6 +383,7 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
     _updateSubscribedTypes();
     mPermissions->clearPlugin(plugin);
     mServices.removePlugin(plugin);
+    mOwner.getResourcePacks().replacePluginPacks(plugin.mDescription.mName, {}, false);
 
     if (plugin.mDescription.mRuntime == "internal")
         InternalPluginLoader::unload(plugin);
@@ -378,6 +396,7 @@ void PluginManager::_updateSubscribedTypes() {
             types.set(subscription.mType);
     }
     mSubscribedTypes = types;
+    _updateBusHooks();
 
     if (!mOwner.isTransportReady())
         return;
@@ -485,21 +504,26 @@ void PluginManager::dispatch(PluginEvent &event) {
 void PluginManager::_hookEventBus() {
     EventBus &bus = mOwner.getEventBus();
 
-    mJoinHook = bus.after().mPlayerJoin.subscribe([this](PlayerJoinAfterEvent &source) {
+    // before the join and leave messages go out, so a plugin can replace them
+    mJoinHook = bus.before().mPlayerJoinMessage.subscribe([this](PlayerJoinMessageBeforeEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_JOIN;
         event.mPlayer = &source.mPlayer;
+        event.mMessage = &source.mMessage;
+        event.mMessageDefault = source.mDefault;
         dispatch(event);
+        source.mDefault = event.mMessageDefault;
     });
 
-    mQuitHook = bus.after().mPlayerLeave.subscribe([this](PlayerLeaveAfterEvent &source) {
-        if (source.mPlayer == nullptr)
-            return;
-
+    mQuitHook = bus.before().mPlayerLeaveMessage.subscribe([this](PlayerLeaveMessageBeforeEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_QUIT;
-        event.mPlayer = source.mPlayer;
+        event.mPlayer = &source.mPlayer;
+        event.mMessage = &source.mMessage;
+        event.mMessageDefault = source.mDefault;
+        event.mCause = source.mReason;
         dispatch(event);
+        source.mDefault = event.mMessageDefault;
     });
 
     mChatHook = bus.before().mChatSend.subscribe([this](PlayerChatBeforeEvent &source) {
@@ -516,4 +540,22 @@ void PluginManager::_hookEventBus() {
         dispatch(event);
         source.setCancelled(event.mCancelled);
     });
+}
+
+void PluginManager::_updateBusHooks() {
+    EventBus &bus = mOwner.getEventBus();
+    PluginBusEvents::hookBrewing(*this, bus);
+    PluginBusEvents::hookActor(*this, bus);
+    PluginBusEvents::hookLevel(*this, bus);
+    PluginBusEvents::hookBlock(*this, bus);
+    PluginBusEvents::hookInventory(*this, bus);
+    PluginBusEvents::hookServer(*this, bus);
+    PluginBusEvents::hookPlayer(*this, bus);
+    PluginBusEvents::hookTeleport(*this, bus);
+}
+
+void PluginManager::_unhookBusEvents() {
+    for (auto &[signal, unhook]: mBusHooks)
+        unhook();
+    mBusHooks.clear();
 }

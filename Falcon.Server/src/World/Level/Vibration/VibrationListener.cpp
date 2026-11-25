@@ -1,6 +1,8 @@
 #include "World/Level/Vibration/VibrationListener.h"
 
+#include "Core/Json/Json.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Level.h"
@@ -9,7 +11,11 @@
 
 #include <array>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
 namespace {
     // up first, then down, north, south, west, east
@@ -19,6 +25,7 @@ namespace {
     constexpr float RAY_NUDGE = 0.001f;
     constexpr float BELOW_FEET = 0.2f;
     constexpr float SAME_DISTANCE = 0.005f;
+    constexpr float HEAD_HEIGHT_RATIO = 0.85f;
 
     int32_t floorOf(float value) {
         return (int32_t) std::floor(value);
@@ -37,17 +44,6 @@ namespace {
         return state != nullptr && (VibrationProperties::of(*state) & property) != 0;
     }
 
-    Actor *findActor(ServerNetworkHandler &owner, int64_t uniqueId) {
-        ServerActor *actor = owner.getActor(uniqueId);
-        if (actor != nullptr)
-            return actor;
-        for (auto &entry: owner.getPlayers()) {
-            if (entry.second.getUniqueId() == uniqueId)
-                return &entry.second;
-        }
-        return nullptr;
-    }
-
     // a projectile answers for its shooter
     Actor *responsibleActor(Level &level, Actor &source) {
         const ServerActor *actor = dynamic_cast<const ServerActor *>(&source);
@@ -56,7 +52,30 @@ namespace {
         ServerNetworkHandler *owner = level.getOwner();
         if (owner == nullptr || actor->getOwnerUniqueId() == -1)
             return nullptr;
-        return findActor(*owner, actor->getOwnerUniqueId());
+        return owner->getEntity(actor->getOwnerUniqueId());
+    }
+
+    // minecraft:vibration_damper: what such an actor does makes no vibration, sculk_touch aside
+    struct NameHash {
+        using is_transparent = void;
+
+        size_t operator()(std::string_view name) const {
+            return std::hash<std::string_view>{}(name);
+        }
+    };
+
+    // runs for every listener on every posted event: looked up without copying the name
+    bool isDamper(const Actor &actor) {
+        static std::unordered_map<std::string, bool, NameHash, std::equal_to<>> cache;
+        const std::string_view identifier = actor.getIdentifier();
+        auto found = cache.find(identifier);
+        if (found == cache.end()) {
+            const std::string name(identifier);
+            const json::Value *definition = EntityDefinitions::find(name);
+            const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+            found = cache.emplace(name, components != nullptr && components->get("minecraft:vibration_damper")).first;
+        }
+        return found->second;
     }
 
     // the cells the segment crosses, its start cell included: a hit on the first occluding one
@@ -125,9 +144,20 @@ VibrationInfo VibrationInfo::load(const Tag &data) {
 VibrationListener::VibrationListener(VibrationListenerConfig &config, const Vector3i &blockPosition, uint32_t range)
         : mConfig(config), mBlockPosition(blockPosition), mCenter(centerOf(blockPosition)), mRange(range) {}
 
+VibrationListener::VibrationListener(VibrationListenerConfig &config, const ServerActor &actor, uint32_t range)
+        : mConfig(config), mBlockPosition(), mCenter(), mActor(&actor), mRange(range) {}
+
+Vector3f VibrationListener::_center() const {
+    if (mActor == nullptr)
+        return mCenter;
+    // the game hears from the entity's head attach point; the eyes stand for it here
+    const Vector3f &feet = mActor->getPosition();
+    return Vector3f(feet.x, feet.y + mActor->getSize().mHeight * HEAD_HEIGHT_RATIO, feet.z);
+}
+
 bool VibrationListener::getPosition(Level &level, Vector3f &position) const {
     (void) level;
-    position = mCenter;
+    position = _center();
     return true;
 }
 
@@ -146,6 +176,9 @@ void VibrationListener::handleGameEvent(Level &level, const GameEvent &event, co
             return;
     }
 
+    if (!event.has(GameEvent::IGNORES_DAMPER) && context.mSource != nullptr && isDamper(*context.mSource))
+        return;
+
     if (event.has(GameEvent::DAMPENED_UNDER_SOURCE) && context.mSource != nullptr) {
         // the standing block: 0.2 below the feet, then the feet block
         const Vector3f &feet = context.mSource->getPosition();
@@ -157,12 +190,13 @@ void VibrationListener::handleGameEvent(Level &level, const GameEvent &event, co
     if (!mConfig.shouldListen(level, event, context))
         return;
 
+    const Vector3f center = _center();
     // occluded only when all six nudged rays from the source block centre hit an occluding block
     const Vector3f from = centerOf(blockOf(context.mPosition));
     bool reached = false;
     for (const Vector3f &nudge: RAY_NUDGES) {
         const Vector3f start(from.x + nudge.x * RAY_NUDGE, from.y + nudge.y * RAY_NUDGE, from.z + nudge.z * RAY_NUDGE);
-        if (!rayOccluded(level, start, mCenter)) {
+        if (!rayOccluded(level, start, center)) {
             reached = true;
             break;
         }
@@ -172,19 +206,20 @@ void VibrationListener::handleGameEvent(Level &level, const GameEvent &event, co
 
     ServerNetworkHandler *owner = level.getOwner();
     if (owner != nullptr)
-        _select(owner->getCurrentTick(), event, context);
+        _select(owner->getCurrentTick(), blockOf(center), event, context);
 }
 
 // the candidates of one tick only, the closest wins, a tie goes to
 // the higher frequency
-void VibrationListener::_select(int64_t tick, const GameEvent &event, const GameEventContext &context) {
+void VibrationListener::_select(int64_t tick, const Vector3i &listener, const GameEvent &event,
+                                const GameEventContext &context) {
     if (mSelectorTick != -1 && tick != mSelectorTick)
         return;
 
     const Vector3i position = blockOf(context.mPosition);
-    const int64_t dx = (int64_t) mBlockPosition.x - position.x;
-    const int64_t dy = (int64_t) mBlockPosition.y - position.y;
-    const int64_t dz = (int64_t) mBlockPosition.z - position.z;
+    const int64_t dx = (int64_t) listener.x - position.x;
+    const int64_t dy = (int64_t) listener.y - position.y;
+    const int64_t dz = (int64_t) listener.z - position.z;
     const float distance = (float) (uint64_t) std::sqrt((double) (dx * dx + dy * dy + dz * dz));
     if (mSelectorTick != -1 && mCandidate.has_value()) {
         if (std::fabs(mCandidate->mDistance - distance) < SAME_DISTANCE) {
@@ -209,9 +244,9 @@ void VibrationListener::_select(int64_t tick, const GameEvent &event, const Game
     mCandidate = candidate;
 }
 
-bool VibrationListener::_adjacentChunksTicking(Level &level) const {
-    const int32_t chunkX = mBlockPosition.x >> 4;
-    const int32_t chunkZ = mBlockPosition.z >> 4;
+bool VibrationListener::_adjacentChunksTicking(Level &level, const Vector3i &listener) const {
+    const int32_t chunkX = listener.x >> 4;
+    const int32_t chunkZ = listener.z >> 4;
     for (int32_t x = chunkX - 1; x <= chunkX + 1; ++x) {
         for (int32_t z = chunkZ - 1; z <= chunkZ + 1; ++z) {
             if (!level.isColumnActive(x, z))
@@ -224,6 +259,7 @@ bool VibrationListener::_adjacentChunksTicking(Level &level) const {
 // VibrationListener::tick: a candidate of an earlier tick leaves as a signal, travels a tick a block
 void VibrationListener::tick(Level &level) {
     ServerNetworkHandler *owner = level.getOwner();
+    const Vector3f center = _center();
     if (!mPending.has_value() && owner != nullptr && mSelectorTick != -1 && mSelectorTick != owner->getCurrentTick()) {
         std::optional<VibrationInfo> chosen = std::move(mCandidate);
         mSelectorTick = -1;
@@ -232,20 +268,20 @@ void VibrationListener::tick(Level &level) {
             const float travelSeconds = chosen->mDistance / SIGNAL_SPEED;
             mTravelTicks = (int32_t) (SIGNAL_SPEED * travelSeconds);
             mPending = chosen;
-            level.addParticle(VibrationSignalParticle(chosen->mPosition, mCenter, travelSeconds));
+            level.addParticle(VibrationSignalParticle(chosen->mPosition, center, travelSeconds));
         }
     }
 
     if (!mPending.has_value() || --mTravelTicks > 0)
         return;
-    if (mConfig.requiresAdjacentChunksToBeTicking() && !_adjacentChunksTicking(level))
+    if (mConfig.requiresAdjacentChunksToBeTicking() && !_adjacentChunksTicking(level, blockOf(center)))
         return;
 
     const VibrationInfo arrived = *mPending;
     mLastEvent = arrived.mEvent;
-    Actor *source = owner != nullptr && arrived.mSource.has_value() ? findActor(*owner, *arrived.mSource) : nullptr;
+    Actor *source = owner != nullptr && arrived.mSource.has_value() ? owner->getEntity(*arrived.mSource) : nullptr;
     Actor *projectileOwner = owner != nullptr && arrived.mProjectileOwner.has_value()
-                                     ? findActor(*owner, *arrived.mProjectileOwner)
+                                     ? owner->getEntity(*arrived.mProjectileOwner)
                                      : nullptr;
     mConfig.onSignalReceive(level, arrived.mPosition, *arrived.mEvent, source, arrived.mDistance, mRange,
                             projectileOwner);

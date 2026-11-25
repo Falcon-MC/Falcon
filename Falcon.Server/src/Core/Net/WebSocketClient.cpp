@@ -13,6 +13,7 @@ namespace {
     const char *const ACCEPT_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     const size_t MAX_HEAD_SIZE = 64 * 1024;
     const int POLL_MILLISECONDS = 20;
+    const uint32_t HANDSHAKE_TIMEOUT_SECONDS = 15;
 
     std::string lower(std::string text) {
         for (char &c: text)
@@ -83,8 +84,20 @@ bool WebSocketClient::_handshake(const std::string &url, const HttpsClient::Head
     uri.hostAndPort(host, port);
     if (port.empty())
         port = secure ? "443" : "80";
+    const std::string target = uri.target();
+    const std::string hostValue = HttpsClient::hostField(uri);
+    if (!HttpsClient::isRequestText(target) || !HttpsClient::isRequestText(hostValue)) {
+        failure.mErrorCode = -1;
+        failure.mText = "invalid url";
+        return false;
+    }
+    if (!HttpsClient::isRequestHeaders(headers)) {
+        failure.mErrorCode = -1;
+        failure.mText = "invalid header";
+        return false;
+    }
 
-    if (!mStream.open(host, port, secure, 0)) {
+    if (!mStream.open(host, port, secure, HANDSHAKE_TIMEOUT_SECONDS)) {
         failure.mErrorCode = mStream.getErrorCode();
         failure.mText = mStream.getErrorMessage();
         return false;
@@ -96,12 +109,14 @@ bool WebSocketClient::_handshake(const std::string &url, const HttpsClient::Head
         byte = (unsigned char) device();
     const std::string key = base64(nonce, sizeof(nonce));
 
-    std::string request = "GET " + uri.target() + " HTTP/1.1\r\n";
-    request += "Host: " + uri.mAuthority + "\r\n";
+    std::string request = "GET " + target + " HTTP/1.1\r\n";
+    request += "Host: " + hostValue + "\r\n";
     request += "Upgrade: websocket\r\nConnection: Upgrade\r\n";
     request += "Sec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n";
-    for (const auto &header: headers)
-        request += header.first + ": " + header.second + "\r\n";
+    for (const auto &header: headers) {
+        if (lower(header.first) != "host")
+            request += header.first + ": " + header.second + "\r\n";
+    }
     request += "\r\n";
 
     std::string head;
@@ -132,6 +147,8 @@ bool WebSocketClient::_handshake(const std::string &url, const HttpsClient::Head
         return false;
     }
     mPartial = rest;
+    // the handshake deadline only: an open socket may stay quiet for as long as it likes
+    mStream.clearDeadline();
     return true;
 }
 
@@ -183,17 +200,18 @@ bool WebSocketClient::_readFrames(std::string &buffer) {
             offset = 10;
         }
         const bool masked = (second & 0x80) != 0;
-        unsigned char mask[4] = {0, 0, 0, 0};
-        if (masked) {
-            if (buffer.size() < offset + 4)
-                return true;
-            for (int index = 0; index < 4; ++index)
-                mask[index] = (unsigned char) buffer[offset + index];
-            offset += 4;
-        }
         const uint8_t frameOpcode = first & 0x0F;
-        const uint64_t held = std::min<uint64_t>(mMaxMessageBytes, mMessage.size());
-        if (mMaxMessageBytes != 0 && frameOpcode <= 0x2 && size > mMaxMessageBytes - held) {
+        const bool control = (frameOpcode & 0x8) != 0;
+        // no extension is negotiated: a set RSV bit, a reserved opcode, a masked frame from the server or a
+        // fragmented or long control frame is a protocol error
+        const bool reserved = (frameOpcode > 0x2 && frameOpcode < 0x8) || frameOpcode > 0xA;
+        if ((first & 0x70) != 0 || reserved || masked || (control && (size > 125 || (first & 0x80) == 0))) {
+            // 1002: protocol error
+            _writeFrame(0x8, std::string("\x03\xEA", 2));
+            return false;
+        }
+        const uint64_t held = control ? 0 : std::min<uint64_t>(mMaxMessageBytes, mMessage.size());
+        if (mMaxMessageBytes != 0 && size > mMaxMessageBytes - held) {
             // 1009: message too big
             _writeFrame(0x8, std::string("\x03\xF1", 2));
             mTooLarge = true;
@@ -203,10 +221,6 @@ bool WebSocketClient::_readFrames(std::string &buffer) {
             return true;
 
         std::string payload = buffer.substr(offset, (size_t) size);
-        if (masked) {
-            for (size_t index = 0; index < payload.size(); ++index)
-                payload[index] = (char) (payload[index] ^ mask[index % 4]);
-        }
         buffer.erase(0, offset + (size_t) size);
 
         const uint8_t opcode = first & 0x0F;

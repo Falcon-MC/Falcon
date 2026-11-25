@@ -809,6 +809,28 @@ GameTestRunner::Outcome GameTestRunner::stopAll() {
     return Outcome{true, "", {}};
 }
 
+void GameTestRunner::forgetLevel(const Level &level) {
+    std::vector<std::pair<ScriptApi *, int32_t>> running;
+    for (auto it = mInstances.begin(); it != mInstances.end();) {
+        if (it->second->mLevel != &level) {
+            ++it;
+            continue;
+        }
+        running.emplace_back(it->second->mDescriptor.mApi, it->first);
+        it = mInstances.erase(it);
+    }
+    mBatchRuns.erase(std::remove_if(mBatchRuns.begin(), mBatchRuns.end(),
+                                    [&](const std::unique_ptr<BatchRun> &run) { return run->mLevel == &level; }),
+                     mBatchRuns.end());
+    mLedger.erase(std::remove_if(mLedger.begin(), mLedger.end(),
+                                 [&](const Ledger &entry) { return entry.mLevel == &level; }),
+                  mLedger.end());
+    for (auto &entry: running) {
+        if (entry.first != nullptr)
+            entry.first->gameTestStop(entry.second);
+    }
+}
+
 GameTestRunner::Outcome GameTestRunner::position(Level &level, const Vector3i &target) {
     StructureBlockHit hit;
     if (!_containingStructureBlock(level, target, NEAR_RADIUS, hit)

@@ -3,14 +3,44 @@
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Inventory/PlayerInventory.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <string>
 #include <utility>
 
 namespace {
+    // the head that hides a player from each kind, by the game's exact actor types
+    const char *disguiseHeadFor(const std::string &identifier) {
+        if (identifier == "minecraft:zombie")
+            return "minecraft:zombie_head";
+        if (identifier == "minecraft:skeleton")
+            return "minecraft:skeleton_skull";
+        if (identifier == "minecraft:creeper")
+            return "minecraft:creeper_head";
+        if (identifier == "minecraft:piglin")
+            return "minecraft:piglin_head";
+        return nullptr;
+    }
+
+    // a player wearing the mob's own head is seen from half as far; the target goal leaves the wither skeleton's
+    // skull out
+    float disguiseFactorSquared(const MobActor &mob, const Actor &candidate) {
+        const auto *player = dynamic_cast<const ServerPlayer *>(&candidate);
+        if (player == nullptr)
+            return 1.0f;
+        const char *head = disguiseHeadFor(mob.getIdentifier());
+        if (head == nullptr)
+            return 1.0f;
+        const ItemStack &helmet = player->getInventory().getArmor(PlayerInventory::ARMOR_HEAD);
+        if (helmet.isAir() || helmet.mDefinition == nullptr || std::string(helmet.mDefinition->getIdentifier()) != head)
+            return 1.0f;
+        return 0.25f;
+    }
+
     std::mt19937 &targetScanRandom() {
         static std::mt19937 generator(std::random_device{}());
         return generator;
@@ -99,12 +129,14 @@ bool NearestAttackableTargetGoal::_matches(ServerNetworkHandler &owner, MobActor
     if (distance > mMaxRangeSquared || !mob.canTarget(candidate))
         return false;
 
+    const float disguise = disguiseFactorSquared(mob, candidate);
     if (mEntries.empty())
-        return candidate.isPlayer() && distance <= mRangeSquared && (!mSight.mMustSee || mob.canSee(owner, candidate));
+        return candidate.isPlayer() && distance <= mRangeSquared * disguise
+               && (!mSight.mMustSee || mob.canSee(owner, candidate));
 
     for (const Entry &entry: mEntries) {
         const float limit = entry.mMaxDistance > 0.0f ? entry.mMaxDistance * entry.mMaxDistance : mRangeSquared;
-        if (distance > limit)
+        if (distance > limit * disguise)
             continue;
         if (entry.mFilters != nullptr && !EntityFilter::test(*entry.mFilters, owner, mob, &candidate))
             continue;

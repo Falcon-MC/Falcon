@@ -19,19 +19,24 @@ namespace {
             item.mTag = Tag::ofCompound();
     }
 
-    bool extend(const ItemStack &input, const CartographyRecipes::Maps &maps, ItemStack &result) {
+    bool extend(const ItemStack &input, const CartographyRecipes::Maps &maps, ItemStack &result,
+                CartographyExpansion &expansion) {
         if (input.mDamage > (int32_t) MapItemType::Locator)
             return false;
 
-        const MapItemSavedData *data = maps.mGetMap(MapItem::getMapId(input));
+        const int64_t mapId = MapItem::getMapId(input);
+        const MapItemSavedData *data = maps.mGetMap(mapId);
         if (data == nullptr || data->isLocked() || data->getScale() >= MapItemSavedData::MAX_SCALE)
             return false;
 
         result = input;
         result.mCount = 1;
         ensureTag(result);
-        const bool scaled = result.mTag.getByte(MapItem::TAG_IS_INIT, 0) != 0;
-        result.mTag.putLong(MapItem::TAG_MAP_ID, maps.mExpand(MapItem::getMapId(input), scaled));
+        // the parent id expanding gives, without recentring it: a request may still be rejected
+        const MapItemSavedData *parent = maps.mGetMap(data->getParentMapId());
+        expansion.mMapId = mapId;
+        expansion.mScaled = result.mTag.getByte(MapItem::TAG_IS_INIT, 0) != 0;
+        result.mTag.putLong(MapItem::TAG_MAP_ID, parent == nullptr ? mapId : parent->getMapId());
         result.mTag.putByte(MapItem::TAG_IS_INIT, 1);
         return true;
     }
@@ -114,7 +119,7 @@ CartographyResult CartographyRecipes::createResult(const ItemStack &input, const
     bool crafted = false;
     if (!additional.isAir()) {
         if (filledMap && is(additional, PAPER))
-            crafted = extend(input, maps, result.mResult);
+            crafted = extend(input, maps, result.mResult, result.mExpansion);
         else if (filledMap && is(additional, EmptyMapItem::IDENTIFIER)) {
             // one copy per slot holding empty maps, on top of the original
             result.mResult = input;
@@ -154,4 +159,18 @@ bool CartographyRecipes::isLocking(const ItemStack &input, const ItemStack &addi
     return originalId != MapItemSavedData::INVALID_ID && MapItem::isFilledMap(input)
            && MapItem::getMapId(input) == originalId && input.mDamage != (int32_t) MapItemType::Locked
            && is(additional, GLASS_PANE);
+}
+
+bool CartographyRecipes::extendMap(const ItemStack &input, const Maps &maps, ItemStack &result,
+                                   CartographyExpansion &expansion) {
+    return MapItem::isFilledMap(input) && extend(input, maps, result, expansion);
+}
+
+void CartographyRecipes::applyExpansion(const CartographyExpansion &expansion, const Maps &maps) {
+    if (expansion.mMapId != MapItemSavedData::INVALID_ID && maps.mExpand)
+        maps.mExpand(expansion.mMapId, expansion.mScaled);
+}
+
+bool CartographyRecipes::upgradeMap(const ItemStack &input, ItemStack &result) {
+    return upgrade(input, result);
 }

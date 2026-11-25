@@ -7,8 +7,6 @@
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 
-#include <utility>
-
 std::string PluginPackets::encode(uint32_t header, const std::string &payload) {
     BinaryStream stream;
     stream.putUnsignedVarInt(header);

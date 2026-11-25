@@ -7,6 +7,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "World/Level/Vibration/MovementGameEvents.h"
 #include "Protocol/Types/ItemStack.h"
 
 #include <cstdint>
@@ -16,10 +17,20 @@
 #include <vector>
 
 enum class Difficulty : int;
+class EventBus;
+class ServerNetworkHandler;
 class Level;
 
 // the EntityHealCause values
 enum class HealCause { Heal, Regeneration, SelfHeal, TotemOfUndying };
+
+// the game's empty tag components for actor kinds, one bit each: a kind is checked without a cast
+enum class ActorTypeFlag : uint8_t {
+    PlayerComponent = 1 << 0,
+    ItemActorFlagComponent = 1 << 1,
+    MobFlagComponent = 1 << 2,
+    PaintingFlagComponent = 1 << 3
+};
 
 class Actor {
 public:
@@ -35,6 +46,10 @@ public:
         return false;
     }
 
+    bool hasTypeFlag(ActorTypeFlag flag) const {
+        return (mTypeFlags & (uint8_t) flag) != 0;
+    }
+
     // falling blocks and actors with can_stand_on_powder_snow or leather boots
     virtual bool canStandOnPowderSnow() const {
         return false;
@@ -45,12 +60,12 @@ public:
         return 0.0f;
     }
 
-    // item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
+    // item entities and projectiles meet a snow layer at its look
     virtual bool collidesAtSnowLayerLook() const {
         return false;
     }
 
-    // ActorType bit 0x80000: every minecart, the actors detector rails sense
+    // every minecart: the actors detector rails sense
     virtual bool isMinecart() const {
         return false;
     }
@@ -108,6 +123,11 @@ public:
 
     // dimension and world change together
     void moveToLevel(const Level &level);
+
+    // the bus of the server whose level the actor was last moved into; null before that
+    EventBus *getEventBus() const {
+        return mEventBus;
+    }
 
     bool isIn(const Level &level) const;
 
@@ -311,6 +331,12 @@ public:
         return false;
     }
 
+    // instant effects included: a refused effect is neither added nor applied
+    virtual bool canBeAffected(MobEffectId id) const {
+        (void) id;
+        return true;
+    }
+
     void markInFreezingBlock(int64_t tick) {
         mFreezingBlockTick = tick;
     }
@@ -360,7 +386,44 @@ public:
 
     void tickCombat(int tickDiff = 1);
 
+    // a sculk catalyst handles each death once
+    bool isHandledBySculkCatalyst() const {
+        return mHandledBySculkCatalyst;
+    }
+
+    void setHandledBySculkCatalyst() {
+        mHandledBySculkCatalyst = true;
+    }
+
+    MovementGameEventState &getMovementGameEventState() {
+        return mMovementGameEventState;
+    }
+
+    // the experience this death drops, taken: it is not dropped any more; 0 when there is none to take
+    virtual int32_t takeDeathExperience(ServerNetworkHandler &owner) {
+        (void) owner;
+        return 0;
+    }
+
     void knockBack(float x, float z, float force = 0.4f, float verticalLimit = 0.4f);
+
+    // the push a plugin set for the hit being dealt: the next knockback this tick uses it in place of its own, the
+    // others of that hit are skipped; tickCombat forgets it
+    void setKnockbackOverride(float horizontal, float vertical) {
+        mKnockbackOverride = true;
+        mKnockbackOverrideUsed = false;
+        mKnockbackHorizontal = horizontal;
+        mKnockbackVertical = vertical;
+    }
+
+    void clearKnockbackOverride() {
+        mKnockbackOverride = false;
+        mKnockbackOverrideUsed = false;
+    }
+
+    // the game's knockback with its own powers, as minecraft:apply_knockback_rules sets them; (x, z) points away
+    // from the attacker
+    void knockBack(float x, float z, float horizontalPower, float verticalPower, float verticalCap, float slowdownScale);
 
     float getFood() const;
 
@@ -426,7 +489,10 @@ public:
 
     void kill();
 
+    // takes the amount as is: resistance belongs to the caller, see resistDamage
     float reduceHealth(float amount);
+
+    float resistDamage(float amount) const;
 
     float heal(float amount, HealCause cause = HealCause::Heal);
 
@@ -509,6 +575,8 @@ public:
     float computeFallDamage(float distance) const;
 
 protected:
+    bool mHandledBySculkCatalyst = false;
+    MovementGameEventState mMovementGameEventState;
     void _changeFood(float food);
 
     static inline HealFilter sHealFilter;
@@ -524,6 +592,12 @@ protected:
     static const float FALL_DAMAGE_THRESHOLD;
     static const int FOOD_TICK_PERIOD = 80;
 
+    // set by the constructor of each kind
+    void addTypeFlag(ActorTypeFlag flag) {
+        mTypeFlags |= (uint8_t) flag;
+    }
+
+    uint8_t mTypeFlags = 0;
     uint64_t mRuntimeId;
     int64_t mUniqueId;
     int64_t mVehicleId = 0;
@@ -531,6 +605,7 @@ protected:
     Vector3f mPosition;
     DimensionType mDimension = DimensionType::Overworld;
     uint32_t mWorldId = 0;
+    EventBus *mEventBus = nullptr;
     int32_t mPortalCooldown = 0;
     int32_t mPortalTicks = 0;
     int64_t mLastPortalTick = -1;
@@ -552,6 +627,8 @@ protected:
     ExperienceManager mExperience;
     MobEffectManager mEffects;
     int mFoodTickTimer = 0;
+    // never reset: the peaceful food and health cadence
+    int mHungerTicks = 0;
     bool mHungerEnabled = true;
     int mDifficulty = 2;
     bool mPendingStarveDamage = false;
@@ -561,4 +638,8 @@ protected:
     int mSpawnInvulnerabilityTicks = 0;
     int mAttackTime = 0;
     float mLastDamageAmount = 0.0f;
+    bool mKnockbackOverride = false;
+    bool mKnockbackOverrideUsed = false;
+    float mKnockbackHorizontal = 0.0f;
+    float mKnockbackVertical = 0.0f;
 };

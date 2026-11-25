@@ -79,3 +79,16 @@ void SculkSensorBlockActor::onSignalReceive(Level &level, const Vector3i &positi
     const int32_t power = std::max(1, 15 - (int32_t) std::floor(distance / (float) range * 15.0f));
     SculkSensorBlock::activate(*owner, level, mPosition, source, power, event.getFrequency());
 }
+
+// a powered input lets only the vibrations of that frequency through
+bool CalibratedSculkSensorBlockActor::shouldListen(Level &level, const GameEvent &event,
+                                                   const GameEventContext &context) {
+    ServerNetworkHandler *owner = level.getOwner();
+    const BlockState *state = level.peekBlockPtr(mPosition.x, mPosition.y, mPosition.z);
+    if (owner != nullptr && state != nullptr) {
+        const int input = CalibratedSculkSensorBlock::inputSignal(*owner, level, mPosition, *state);
+        if (input != 0 && event.getFrequency() != input)
+            return false;
+    }
+    return SculkSensorBlockActor::shouldListen(level, event, context);
+}

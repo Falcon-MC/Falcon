@@ -41,6 +41,9 @@ private:
 
     Actor *findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &player) const;
 
+    // how fast the holder closes in on the target along its look, in blocks a second
+    float closingSpeedOf(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &target) const;
+
     void applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &attacker, Actor &target, float damage) const;
 
     std::string mTierName;

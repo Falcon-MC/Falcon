@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 
 #include <cstdint>
@@ -32,7 +33,7 @@ private:
     float mSpeed;
     float mSearchRange;
     float mStopDistance;
-    std::shared_ptr<json::Value> mFilters;
+    CompiledEntityFilter mFilters;
     int64_t mLeaderId = 0;
     int32_t mTicksUntilRepath = 0;
 };

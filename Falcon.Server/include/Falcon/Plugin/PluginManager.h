@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Event/EventSignal.h"
 #include "Falcon/Plugin/LoadedPlugin.h"
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginPermissions.h"
@@ -11,8 +12,11 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 class ServerNetworkHandler;
@@ -77,6 +81,22 @@ public:
         return type < MAX_EVENT_TYPES && mSubscribedTypes.test(type);
     }
 
+    // translates a bus signal into plugin events only while listening: the world skips a signal nobody hooks
+    template <typename T, typename Handler>
+    void hookBus(bool listening, EventSignal<T> &signal, Handler handler) {
+        const auto found = mBusHooks.find(&signal);
+        if (listening == (found != mBusHooks.end()))
+            return;
+
+        if (!listening) {
+            found->second();
+            mBusHooks.erase(found);
+            return;
+        }
+        const uint32_t id = signal.subscribe(std::move(handler));
+        mBusHooks.emplace(&signal, [&signal, id] { signal.unsubscribe(id); });
+    }
+
 private:
     struct Subscription {
         uint64_t mId;
@@ -97,6 +117,10 @@ private:
 
     void _hookEventBus();
 
+    void _updateBusHooks();
+
+    void _unhookBusEvents();
+
     void _disable(LoadedPlugin &plugin);
 
     void _updateSubscribedTypes();
@@ -112,4 +136,6 @@ private:
     uint32_t mJoinHook = 0;
     uint32_t mQuitHook = 0;
     uint32_t mChatHook = 0;
+    // each hooked signal, with what unhooks it
+    std::unordered_map<const void *, std::function<void()>> mBusHooks;
 };

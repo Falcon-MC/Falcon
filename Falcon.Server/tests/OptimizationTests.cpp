@@ -7,9 +7,11 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
+#include "Protocol/Packets/SetActorMotionPacket.h"
 #include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/LightStorage.h"
+#include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
@@ -24,6 +26,7 @@
 #include <random>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 class LevelPersistenceProbe {
 public:
@@ -296,6 +299,36 @@ namespace {
         std::mutex mMutex;
         std::vector<std::pair<NetworkIdentifier, std::shared_ptr<NetworkPeer>>> mJoining;
         std::vector<NetworkIdentifier> mClosed;
+    };
+
+    // splits every batch it is sent back into packets, in the order the connection got them
+    class OrderPeer : public FakePeer {
+    public:
+        void sendPacket(const std::string &data, Reliability reliability, Compressibility compressibility) override {
+            FakePeer::sendPacket(data, reliability, compressibility);
+            std::lock_guard<std::mutex> lock(mPacketsMutex);
+            size_t cursor = 0;
+            while (cursor < data.size()) {
+                uint32_t length = 0;
+                for (unsigned shift = 0; cursor < data.size(); shift += 7) {
+                    const auto byte = (unsigned char) data[cursor++];
+                    length |= uint32_t(byte & 0x7f) << shift;
+                    if ((byte & 0x80) == 0)
+                        break;
+                }
+                mPackets.push_back(data.substr(cursor, length));
+                cursor += length;
+            }
+        }
+
+        std::vector<std::string> packets() {
+            std::lock_guard<std::mutex> lock(mPacketsMutex);
+            return mPackets;
+        }
+
+    private:
+        std::mutex mPacketsMutex;
+        std::vector<std::string> mPackets;
     };
 
     class RecordingListener : public NetworkHandler::Listener {
@@ -583,7 +616,8 @@ int main() {
             host.tick(true);
             player.setPosition(Vector3f(0, 140, 0));
             state.mLastLoaderChunk = ChunkStreamHandler::packChunk(0, 0);
-            for (int32_t x = 0; x < 17; ++x) {
+            const size_t budget = ChunkStreamHandler::getSendsPerTick(handler);
+            for (int32_t x = 0; x < (int32_t) budget + 1; ++x) {
                 level.getChunk(x, 0);
                 const int64_t hash = ChunkStreamHandler::packChunk(x, 0);
                 state.mInRadius.insert(hash);
@@ -593,11 +627,11 @@ int main() {
             const size_t before = player.getSentChunkCount();
             ChunkStreamHandler::tick(handler, player);
             ChunkStreamHandler::tick(handler, player);
-            require(player.getSentChunkCount() - before == 16, "Repeated calls exceeded send budget");
+            require(player.getSentChunkCount() - before == budget, "Repeated calls exceeded send budget");
             host.tick(true);
             const size_t after = player.getSentChunkCount() - before;
-            require(after > 16, "Paused network tick did not renew send budget");
-            require(after <= 32, "Paused network tick exceeded send budget after terrain invalidation");
+            require(after > budget, "Paused network tick did not renew send budget");
+            require(after <= budget * 2, "Paused network tick exceeded send budget after terrain invalidation");
             state = ChunkStreamState();
             level.unregisterAllChunkLoaders(player.getRuntimeId());
             player.resetChunkStreaming();
@@ -1132,6 +1166,39 @@ int main() {
             const std::vector<std::string> expected = {"open", "data:first", "refused"};
             require(listener.mEvents == expected, "Close was not reported once after the connection's data");
             require(network.getConnectionCount() == 0, "Closed connection still counted");
+        });
+        check("a connection keeps its packet order across cork, broadcasts and batched sends", [&]() {
+            FakeConnector *connector = new FakeConnector();
+            NetworkHandler network{std::unique_ptr<Connector>(connector)};
+            RecordingListener listener;
+            network.addListener(&listener);
+            network.startIoThread();
+            const NetworkIdentifier client("order", 1);
+            std::shared_ptr<OrderPeer> peer = std::make_shared<OrderPeer>();
+            connector->join(client, peer);
+            pumpUntil(network, [&]() { return !listener.mEvents.empty(); }, "Connection never opened");
+
+            SetActorMotionPacket motion;
+            motion.mRuntimeActorId = 7;
+            BinaryStream stream;
+            motion.writeWithHeader(stream, handler.getCodecContext());
+            const std::string encoded = stream.getBuffer();
+
+            network.send(client, std::string("spawn"));
+            network.cork();
+            network.send(client, std::string("move"));
+            network.sendToAll(std::string("chat"));
+            network.sendToMany({client}, motion, handler.getCodecContext());
+            network.send(client, motion, handler.getCodecContext());
+            network.uncork();
+            network.sendToAll(std::string("tick"));
+            network.send(client, std::string("disconnect"));
+            const std::vector<std::string> expected = {"spawn", "move", "chat", encoded, encoded, "tick",
+                                                       "disconnect"};
+            pumpUntil(network, [&]() { return peer->packets().size() >= expected.size(); },
+                      "Packets never reached the connection");
+            network.stopIoThread();
+            require(peer->packets() == expected, "Packets reached the connection out of order");
         });
         handler.getPlayers().clear();
         host.stop();

@@ -56,7 +56,7 @@ void MoveTowardsClosestSpaceSystem::tick(PlayerMovementContext &context) {
         return;
 
     auto &state = context.state;
-    const AxisAlignedBB body = boxAt(state.start, context.pose.mHeight);
+    const AxisAlignedBB body = boxAt(state.start, context.pose.mHeight, context.pose.mWidth);
     const AxisAlignedBB area(body.mMinX - 1.0f, body.mMinY, body.mMinZ - 1.0f, body.mMaxX + 1.0f, body.mMaxY,
                              body.mMaxZ + 1.0f);
     const std::vector<AxisAlignedBB> boxes = context.level.getCollisionBoxes(area, &context.player);

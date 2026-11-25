@@ -57,7 +57,7 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Misc/ItemActor.h"
-#include "World/Actor/Vehicle/ChestVehicleActor.h"
+#include "World/Actor/Vehicle/MinecartActor.h"
 #include "World/Inventory/InventoryManager.h"
 #include "Protocol/Packets/ContainerOpenPacket.h"
 #include "Network/Handler/ItemActorHandler.h"
@@ -424,6 +424,8 @@ system.runTimeout(() => {
         + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 0, ignoreBlockCollision: true }).length
         + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 20, excludeTypes: ["minecraft:player"],
                                                     ignoreBlockCollision: true }).length;
+    // either fixture cow can be listed first, and the one at x 0.5 faces the fence: look up, where no block is
+    cow.setRotation({ x: -90, y: 0 });
     r.blockRay = cow.getBlockFromViewDirection() === undefined;
     player.setRotation({ x: 0, y: 0 });
     const fence = player.getBlockFromViewDirection();
@@ -2320,6 +2322,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         owner.setSpawnCause("Born");
         ServerActor *calf = owner.spawnActor(world.getOverworld(), "minecraft:cow", Vector3f(4.5f, 100.0f, 4.5f));
         require(calf != nullptr, "no fixture calf");
+        const int64_t cowId = cow->getUniqueId();
+        const int64_t calfId = calf->getUniqueId();
         ServerActor *wolf = owner.spawnActor(world.getOverworld(), "minecraft:wolf", Vector3f(8.5f, 100.0f, 8.5f));
         MobActor *wolfMob = dynamic_cast<MobActor *>(wolf);
         require(wolfMob != nullptr, "no fixture wolf");
@@ -2381,7 +2385,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 for (const auto &entry: owner.getActors()) {
                     ServerActor &actor = *entry.second;
                     if (std::string(actor.getIdentifier()) == identifier
-                        && actor.getOwnerUniqueId() == (int64_t) player.getRuntimeId()
+                        && actor.getOwnerUniqueId() == player.getUniqueId()
                         && std::find(existing.begin(), existing.end(), actor.getUniqueId()) == existing.end()
                         && actor.getProjectileData().mCritical == critical)
                         ++count;
@@ -2425,7 +2429,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 for (const auto &entry: owner.getActors()) {
                     ServerActor &actor = *entry.second;
                     if (std::string(actor.getIdentifier()) == "minecraft:arrow"
-                        && actor.getOwnerUniqueId() == (int64_t) player.getRuntimeId()
+                        && actor.getOwnerUniqueId() == player.getUniqueId()
                         && std::find(existing.begin(), existing.end(), actor.getUniqueId()) == existing.end()
                         && !actor.getProjectileData().mPickupCreativeOnly)
                         ++count;
@@ -3100,14 +3104,20 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                         && std::fabs(local.y - 1.0f) < 0.001f,
                 "^ ^1 ^ did not move up");
         require(!Command::parsePosition({"^", "~", "^"}, 0, Vector3f(), Vector3f(), local), "^ mixed with ~ parsed");
-        ScriptCommandOrigin fromCow(world.getOverworld(), cow);
+        // the script above kills whichever fixture cow its query lists first, and that order follows the actor map,
+        // which differs between standard libraries: the survivor runs the commands
+        ServerActor *selfCow = owner.getActor(cowId);
+        if (selfCow == nullptr || selfCow->isDead())
+            selfCow = owner.getActor(calfId);
+        require(selfCow != nullptr && !selfCow->isDead(), "no cow left to run commands from");
+        ScriptCommandOrigin fromCow(world.getOverworld(), selfCow);
         const std::vector<ServerActor *> selfTargets = owner.resolveActorTargets(fromCow, "@s");
-        require(selfTargets.size() == 1 && selfTargets[0] == cow, "@s of a cow did not resolve to it");
+        require(selfTargets.size() == 1 && selfTargets[0] == selfCow, "@s of a cow did not resolve to it");
         require(owner.resolveActorTargets(fromCow, "@s[type=minecraft:pig]").empty(), "@s ignored its type filter");
-        ExecuteCommandOrigin executedFromCow(fromCow, nullptr, cow->getPosition(), cow->getRotation(),
+        ExecuteCommandOrigin executedFromCow(fromCow, nullptr, selfCow->getPosition(), selfCow->getRotation(),
                                              &world.getOverworld());
         const std::vector<ServerActor *> executedTargets = owner.resolveActorTargets(executedFromCow, "@s");
-        require(executedTargets.size() == 1 && executedTargets[0] == cow, "execute lost the cow running it");
+        require(executedTargets.size() == 1 && executedTargets[0] == selfCow, "execute lost the cow running it");
         require(commands.dispatch(playerOrigin, "beta:toggle off"), "an enumName parameter did not parse");
         player.setOp(wasOp);
 
@@ -3150,7 +3160,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(chestItems != nullptr && chestItems->getList().size() == 1
                         && chestItems->getList().front().getByte("Slot") == 4,
                 "the minecart items were not saved as ChestItems");
-        ChestVehicleActor reloaded(9999, "minecraft:chest_minecart", ActorSize{0.98f, 0.7f}, true);
+        MinecartActor reloaded(9999, "minecraft:chest_minecart");
         Tag legacy = Tag::ofCompound();
         legacy.put("Items", *chestItems);
         reloaded.loadEquipment(legacy, owner.getCodecContext());

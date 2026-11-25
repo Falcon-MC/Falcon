@@ -41,6 +41,8 @@ namespace BlockMaterial {
     inline constexpr uint8_t FLAG_LIQUID = 2;
     // the flag the top solid block search stops on
     inline constexpr uint8_t FLAG_SOLID = 4;
+    // what a cake needs of the material under it: off for air, liquids, plants, fire, powder snow and portals
+    inline constexpr uint8_t FLAG_SUPPORTS_CAKE = 0x10;
 
     // false for a name the game does not register: custom blocks have no entry
     bool find(const BlockState &state, BlockMaterialType &type);
@@ -50,7 +52,7 @@ namespace BlockMaterial {
     // 0 for a name the game does not register
     uint8_t flagsOf(const BlockState &state);
 
-    // bit 0x40000 of the block's properties (BlockLegacy +304): set by the base constructor, cleared by most
-    // classes with their own shape; false for a name the game does not register
+    // a property every block starts with and most blocks with their own shape drop; false for a name the
+    // game does not register
     bool hasDefaultProperty(const BlockState &state);
 }

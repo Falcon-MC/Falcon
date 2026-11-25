@@ -19,6 +19,9 @@
 !/Falcon.Protocol/**
 !/Falcon.Server
 !/Falcon.Server/**
+/Falcon.Server/allowlist.json
+/Falcon.Server/banned-ips.json
+/Falcon.Server/banned-players.json
 /Falcon.Server/benchmarks/
 /Falcon.Server/docs/
 __pycache__/

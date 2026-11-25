@@ -72,7 +72,17 @@ void CoralBlock::dieWithoutWater(Level &level, const Vector3i &position, const B
     if (BlockDataTable::find(dead.c_str()) == nullptr)
         return;
 
-    BlockChangeSystem::change(level, position, CopperSystem::transform(current, dead), BlockChangeCause::Fade, true);
+    BlockState next = CopperSystem::transform(current, dead);
+    if (ServerNetworkHandler *owner = level.getOwner(); owner != nullptr) {
+        EventSignal<BlockDeathBeforeEvent> &blockDeath = owner->getEventBus().before().mBlockDeath;
+        if (blockDeath.hasSubscribers()) {
+            BlockDeathBeforeEvent event(level, position, current, next);
+            blockDeath.emit(event);
+            if (event.isCancelled())
+                return;
+        }
+    }
+    BlockChangeSystem::change(level, position, next, BlockChangeCause::Fade, true);
 }
 
 void CoralBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

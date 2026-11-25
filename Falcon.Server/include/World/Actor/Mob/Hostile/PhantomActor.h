@@ -19,4 +19,9 @@ public:
     bool hasGravity() const override {
         return false;
     }
+
+    // the game's insomnia: the spot only counts near a player under open sky who has not slept for days; the
+    // phantom then goes up above that player
+    bool placeNaturalSpawn(ServerNetworkHandler &owner, Level &level, Vector3f &position,
+                           std::mt19937 &random) const override;
 };

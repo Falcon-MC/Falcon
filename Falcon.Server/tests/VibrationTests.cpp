@@ -1,14 +1,23 @@
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelEventGenericPacket.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/SculkSensorBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/OpenableBlock.h"
 #include "World/Level/Block/SculkSensorBlock.h"
+#include "World/Level/Block/Systems/BlockContactSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Block/TntBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
+#include "World/Level/Vibration/MovementGameEvents.h"
 #include "World/Level/Vibration/VibrationListener.h"
 #include "World/Level/Vibration/VibrationProperties.h"
 #include "World/Level/World.h"
@@ -350,6 +359,227 @@ namespace {
             ServerTickProbe::tick(owner, level);
         require(phase() == SculkSensorBlock::PHASE_INACTIVE, "a vibration heard while cooling down activated it");
     }
+
+    void calibratedSensorFilters() {
+        ServerNetworkHandler owner("Calibrated", "", 1);
+        Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        level.setOwner(&owner);
+        std::vector<int64_t> columns;
+        for (int32_t chunkX = -1; chunkX <= 1; ++chunkX) {
+            for (int32_t chunkZ = -1; chunkZ <= 1; ++chunkZ) {
+                level.getChunk(chunkX, chunkZ);
+                columns.push_back(((int64_t) chunkX << 32) | (uint32_t) chunkZ);
+            }
+        }
+        level.setActiveColumns(columns);
+        for (int x = 0; x < 16; ++x) {
+            for (int z = 0; z < 16; ++z) {
+                for (int y = 60; y <= 72; ++y)
+                    level.setBlockState(x, y, z, BlockState(BlockNames::AIR));
+                level.setBlockState(x, 63, z, VanillaBlocks::STONE().toBlockState());
+            }
+        }
+
+        // facing south: the input is the block north of it
+        const BlockState base = VanillaBlocks::CALIBRATED_SCULK_SENSOR().toBlockState();
+        Tag states = base.mStates;
+        states.putString("minecraft:cardinal_direction", "south");
+        const BlockState sensor(base.mName, states);
+        require(CalibratedSculkSensorBlock::inputFace(sensor) == RedstoneFace::NORTH,
+                "a sensor facing south does not take its input from the north");
+        level.setBlockState(LISTENER.x, LISTENER.y, LISTENER.z, sensor);
+        level.onBlockPlaced(LISTENER, sensor);
+        require(level.getBlockActors().find<CalibratedSculkSensorBlockActor>(LISTENER) != nullptr,
+                "a placed calibrated sensor has no block actor of its own");
+
+        const auto phase = [&level]() {
+            return SculkSensorBlock::phaseOf(level.getBlockState(LISTENER.x, LISTENER.y, LISTENER.z));
+        };
+        const auto ticksUntilActive = [&owner, &level, &phase](int limit) {
+            for (int ticks = 1; ticks <= limit; ++ticks) {
+                ServerTickProbe::tick(owner, level);
+                if (phase() == SculkSensorBlock::PHASE_ACTIVE)
+                    return ticks;
+            }
+            return 0;
+        };
+
+        level.setBlockState(LISTENER.x, LISTENER.y, LISTENER.z - 1, VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        require(CalibratedSculkSensorBlock::inputSignal(owner, level, LISTENER, sensor) == 15,
+                "the redstone block at the input does not read 15");
+        level.postGameEvent(GameEvents::BLOCK_CHANGE, Vector3f(12.5f, 64.5f, 8.5f));
+        require(ticksUntilActive(10) == 0, "an input of 15 let block_change (11) through");
+        level.postGameEvent(GameEvents::ENTITY_DIE, Vector3f(12.5f, 64.5f, 8.5f));
+        require(ticksUntilActive(10) == 4, "an input of 15 kept entity_die (15) out");
+
+        const BlockState active = level.getBlockState(LISTENER.x, LISTENER.y, LISTENER.z);
+        const Block *block = VanillaBlocks::fromState(active);
+        require(block != nullptr && block->getEmittedSignal(level, LISTENER, active, RedstoneFace::SOUTH, false) == 0
+                        && block->getEmittedSignal(level, LISTENER, active, RedstoneFace::NORTH, false) > 0,
+                "the calibrated sensor powers its own input side");
+
+        for (int i = 0; i < 60 && phase() != SculkSensorBlock::PHASE_INACTIVE; ++i)
+            ServerTickProbe::tick(owner, level);
+        level.setBlockState(LISTENER.x, LISTENER.y, LISTENER.z - 1, BlockState(BlockNames::AIR));
+        level.postGameEvent(GameEvents::BLOCK_CHANGE, Vector3f(12.5f, 64.5f, 8.5f));
+        require(ticksUntilActive(10) == 4, "with no input the calibrated sensor did not hear every frequency");
+    }
+
+    void dampersMakeNoVibration() {
+        VibrationFixture fixture;
+        ServerActor *warden = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:warden", Vector3f(11.5f, 64.0f, 8.5f));
+        require(warden != nullptr, "no fixture warden");
+        fixture.post(GameEvents::ENTITY_MOVE, Vector3i(11, 64, 8), warden);
+        fixture.post(GameEvents::BLOCK_CHANGE, Vector3i(11, 64, 8), warden);
+        require(fixture.ticksUntilReceived(10) == 0, "a warden's own vibration was heard");
+        fixture.post(GameEvents::SCULK_TOUCH, Vector3i(11, 64, 8), warden);
+        require(fixture.ticksUntilReceived(10) == 3, "sculk_touch ignores the damper but was not heard");
+    }
+
+    void movementSteps() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(11.5f, 64.0f, 8.5f));
+        require(cow != nullptr, "no fixture cow");
+        cow->setOnGround(true);
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 0, "standing still made a step");
+
+        cow->setPosition(Vector3f(11.0f, 64.0f, 8.5f));
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 3, "a step on the ground made no entity_move");
+        require(fixture.mProbe->mReceived.front().mEvent == &GameEvents::ENTITY_MOVE, "the step was not entity_move");
+        require(cow->getMovementGameEventState().mDistance == 1.5f, "half a block did not add up to 1.5");
+        // the default offset of 1: the next step is due at 2, a tenth of a block later is not one
+        fixture.mProbe->mReceived.clear();
+        cow->setPosition(Vector3f(10.9f, 64.0f, 8.5f));
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 0, "moving on right after a step made another one");
+
+        fixture.mProbe->mReceived.clear();
+        cow->setOnGround(false);
+        cow->setPosition(Vector3f(11.0f, 66.0f, 8.5f));
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 0, "a cow in the air made a vibration");
+
+        ServerActor *chicken =
+                fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:chicken", Vector3f(10.5f, 66.0f, 8.5f));
+        require(chicken != nullptr, "no fixture chicken");
+        chicken->setOnGround(false);
+        MovementGameEvents::track(fixture.mOwner, *chicken);
+        MovementGameEvents::track(fixture.mOwner, *chicken);
+        require(fixture.ticksUntilReceived(5) > 0 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::FLAP,
+                "a chicken in the air did not flap");
+    }
+
+    void landingAndSculkTouch() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(11.5f, 64.0f, 8.5f));
+        require(cow != nullptr, "no fixture cow");
+        BlockContactSystem::land(fixture.mOwner, *cow, 0.0f);
+        require(fixture.ticksUntilReceived(5) == 0, "landing without a fall made hit_ground");
+        BlockContactSystem::land(fixture.mOwner, *cow, 2.0f);
+        require(fixture.ticksUntilReceived(5) == 3 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::HIT_GROUND,
+                "a fall did not make hit_ground");
+
+        fixture.mProbe->mReceived.clear();
+        const Vector3i sensor(10, 64, 8);
+        const BlockState state = VanillaBlocks::SCULK_SENSOR().toBlockState();
+        fixture.place(sensor, state);
+        const Block *block = VanillaBlocks::fromState(state);
+        require(block != nullptr, "no sculk sensor block");
+        ServerActor *warden = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:warden", Vector3f(10.5f, 65.0f, 8.5f));
+        require(warden != nullptr, "no fixture warden");
+        block->onStepOn(fixture.mOwner, *warden, sensor, state);
+        require(fixture.ticksUntilReceived(5) == 0, "a warden touched the sculk");
+        block->onStepOn(fixture.mOwner, *cow, sensor, state);
+        require(fixture.ticksUntilReceived(5) == 2 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::SCULK_TOUCH,
+                "stepping on a sensor made no sculk_touch");
+    }
+
+    void playerBreaksBlock() {
+        VibrationFixture fixture;
+        NetworkIdentifier id;
+        ServerPlayer &player = fixture.mOwner.getPlayers().try_emplace(id, id, 4001).first->second;
+        player.setPosition(Vector3f(12.5f, 64.0f, 10.5f));
+        fixture.place(Vector3i(12, 64, 8), VanillaBlocks::STONE().toBlockState());
+        BlockActionHandler::breakBlock(fixture.mOwner, player, Vector3i(12, 64, 8));
+        require(fixture.ticksUntilReceived(10) == 4 && fixture.mProbe->mReceived.front().mEvent == &GameEvents::BLOCK_DESTROY,
+                "breaking a block made no block_destroy");
+
+        fixture.mProbe->mReceived.clear();
+        fixture.place(Vector3i(12, 64, 8), VanillaBlocks::WHITE_WOOL().toBlockState());
+        BlockActionHandler::breakBlock(fixture.mOwner, player, Vector3i(12, 64, 8));
+        require(fixture.ticksUntilReceived(10) == 0, "breaking wool made a vibration");
+    }
+
+    const GameEvent *receivedWithin(VibrationFixture &fixture, int limit) {
+        fixture.mProbe->mReceived.clear();
+        return fixture.ticksUntilReceived(limit) == 0 ? nullptr : fixture.mProbe->mReceived.front().mEvent;
+    }
+
+    void mechanisms() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(14.5f, 64.0f, 14.5f));
+        require(cow != nullptr, "no fixture cow");
+
+        const Vector3i trapdoor(11, 64, 8);
+        fixture.place(trapdoor, VanillaBlocks::TRAPDOOR().toBlockState());
+        OpenableBlock::toggle(fixture.mOwner, fixture.mLevel, trapdoor,
+                              fixture.mLevel.getBlockState(trapdoor.x, trapdoor.y, trapdoor.z), cow);
+        require(receivedWithin(fixture, 5) == &GameEvents::BLOCK_OPEN, "opening a trapdoor made no block_open");
+        OpenableBlock::toggle(fixture.mOwner, fixture.mLevel, trapdoor,
+                              fixture.mLevel.getBlockState(trapdoor.x, trapdoor.y, trapdoor.z), cow);
+        require(receivedWithin(fixture, 5) == &GameEvents::BLOCK_CLOSE, "closing a trapdoor made no block_close");
+
+        const Vector3i button(10, 64, 8);
+        fixture.place(button, VanillaBlocks::STONE_BUTTON().toBlockState());
+        RedstoneSystem::onButtonActivated(fixture.mOwner, fixture.mLevel, button,
+                                          fixture.mLevel.getBlockState(button.x, button.y, button.z), cow);
+        require(receivedWithin(fixture, 5) == &GameEvents::BLOCK_ACTIVATE, "pressing a button made no block_activate");
+
+        const Vector3i tnt(12, 64, 8);
+        fixture.place(tnt, VanillaBlocks::TNT().toBlockState());
+        TntBlock::primeByExplosion(fixture.mOwner, fixture.mLevel, tnt, 80);
+        require(receivedWithin(fixture, 6) == nullptr, "TNT set off by an explosion made prime_fuse");
+        fixture.place(tnt, VanillaBlocks::TNT().toBlockState());
+        TntBlock::prime(fixture.mOwner, fixture.mLevel, tnt, 80, cow);
+        require(receivedWithin(fixture, 6) == &GameEvents::PRIME_FUSE, "lighting TNT made no prime_fuse");
+    }
+
+    void strikesShotsAndBlasts() {
+        VibrationFixture fixture;
+        fixture.mOwner.strikeLightning(fixture.mLevel, Vector3f(11.5f, 65.0f, 8.5f));
+        require(receivedWithin(fixture, 6) == &GameEvents::LIGHTNING_STRIKE, "lightning made no lightning_strike");
+        require(fixture.mProbe->mReceived.front().mPosition == Vector3i(11, 64, 8),
+                "lightning did not strike the block under it");
+
+        ServerActor *arrow = fixture.mOwner.spawnDispensedProjectile(fixture.mLevel, "minecraft:arrow",
+                                                                     Vector3f(12.5f, 64.5f, 8.5f),
+                                                                     Vector3f(1.0f, 0.0f, 0.0f));
+        require(arrow != nullptr, "no fixture arrow");
+        require(receivedWithin(fixture, 6) == &GameEvents::PROJECTILE_SHOOT, "shooting made no projectile_shoot");
+
+        // apart: the blast would hurt the arrow, and its closer entity_damage would win the tick
+        VibrationFixture blast;
+        Explosion explosion(blast.mOwner, blast.mLevel, Vector3f(13.5f, 64.5f, 8.5f), 1.0, nullptr, false);
+        explosion.explodeWithoutBlocks();
+        require(receivedWithin(blast, 7) == &GameEvents::EXPLODE, "an explosion made no explode");
+    }
+
+    void hurtsAndRides() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(11.5f, 64.0f, 8.5f));
+        ServerActor *pig = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:pig", Vector3f(10.5f, 64.0f, 8.5f));
+        require(cow != nullptr && pig != nullptr, "no fixture cow or pig");
+        fixture.mOwner.damageActor(*cow, 1.0f, nullptr);
+        require(receivedWithin(fixture, 5) == &GameEvents::ENTITY_DAMAGE, "a hurt cow made no entity_damage");
+
+        require(RideSystem::mount(fixture.mOwner, *cow, *pig, true), "the cow did not mount the pig");
+        require(receivedWithin(fixture, 5) == &GameEvents::ENTITY_MOUNT, "mounting made no entity_mount");
+        RideSystem::dismount(fixture.mOwner, *cow, true);
+        require(receivedWithin(fixture, 5) == &GameEvents::ENTITY_DISMOUNT, "dismounting made no entity_dismount");
+    }
 }
 
 int main() {
@@ -363,7 +593,15 @@ int main() {
         sourceRules();
         closestThenFrequency();
         savesTheSignalInFlight();
+        dampersMakeNoVibration();
+        movementSteps();
+        landingAndSculkTouch();
+        playerBreaksBlock();
+        mechanisms();
+        strikesShotsAndBlasts();
+        hurtsAndRides();
         sculkSensorActivates();
+        calibratedSensorFilters();
         std::cout << "vibration checks passed\n";
         return 0;
     } catch (const std::exception &error) {

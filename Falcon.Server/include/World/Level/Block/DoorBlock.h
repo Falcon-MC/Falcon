@@ -5,6 +5,7 @@
 
 #include <string>
 
+class Actor;
 class Level;
 class ServerNetworkHandler;
 
@@ -24,7 +25,8 @@ public:
     static bool setOpen(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
                         bool open);
 
-    static bool toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state);
+    static bool toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                       Actor *source = nullptr);
 
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);

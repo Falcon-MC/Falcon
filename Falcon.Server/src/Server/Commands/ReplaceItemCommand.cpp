@@ -154,20 +154,9 @@ namespace {
         return slots == nullptr || !slots->isArray() ? 0 : (int) slots->mArray.size();
     }
 
-    // a mount without its chest has none; a strength gives its own count, as the llama's
+    // a mount without its chest has none; the capacity already follows a llama's strength
     int chestSlotCount(const MobActor &mob, int capacity, int equippable) {
-        if (mob.getComponent("minecraft:is_chested") == nullptr)
-            return 0;
-
-        const json::Value *strength = mob.getComponent("minecraft:strength");
-        const json::Value *value = strength == nullptr ? nullptr : strength->get("value");
-        const int strengthValue = value == nullptr ? 0 : value->integer(0);
-        if (strengthValue <= 0)
-            return capacity - equippable;
-
-        const json::Value *inventory = mob.getComponent("minecraft:inventory");
-        const json::Value *perStrength = inventory == nullptr ? nullptr : inventory->get("additional_slots_per_strength");
-        return (perStrength == nullptr ? 0 : perStrength->integer(0)) * strengthValue;
+        return mob.getComponent("minecraft:is_chested") == nullptr ? 0 : std::max(0, capacity - equippable);
     }
 
     Outcome replaceMainhand(ServerNetworkHandler &owner, ServerPlayer *player, MobActor *mob, const Request &request) {
@@ -512,11 +501,12 @@ std::vector<CommandOverloadData> ReplaceItemCommand::getOverloads() const {
 bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     const std::string line = arguments.empty() ? std::string() : arguments[0];
     std::vector<size_t> starts;
-    const std::vector<std::string> tokens = CommandMap::tokenize(line, &starts);
+    std::vector<std::string> tokens = CommandMap::tokenize(line, &starts);
+    CommandMap::splitRelativeCoordinates(tokens, &starts);
 
     const bool entity = !tokens.empty() && tokens[0] == "entity";
     if (!entity && (tokens.empty() || tokens[0] != "block")) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -524,7 +514,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
     size_t index = entity ? 3 : 5;
     Request request;
     if (tokens.size() < index + 2 || !parseInteger(tokens[index], request.mSlotId)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     index++;
@@ -534,7 +524,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
         index++;
     }
     if (tokens.size() <= index) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -543,7 +533,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
     int data = 0;
     if ((tokens.size() > index + 1 && !parseInteger(tokens[index + 1], request.mAmount))
         || (tokens.size() > index + 2 && !parseInteger(tokens[index + 2], data))) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     const bool hasComponents = tokens.size() > index + 3;
@@ -557,7 +547,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
     if (entity) {
         const auto found = std::find(SLOT_NAMES.begin(), SLOT_NAMES.end(), slotName);
         if (found == SLOT_NAMES.end()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         slotType = (int) (found - SLOT_NAMES.begin());
@@ -570,11 +560,10 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
         }
     } else {
         const Vector3f origin = sender.getPosition();
-        const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                                   (int32_t) std::floor(origin.z));
+        const Vector3f rotation = sender.getRotation();
         Level *level = sender.getLevel();
-        if (slotName != BLOCK_SLOT || level == nullptr || !parseBlockPosition(tokens, 1, originBlock, position)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+        if (slotName != BLOCK_SLOT || level == nullptr || !parseBlockPosition(tokens, 1, origin, rotation, position)) {
+            sendUsageError(sender);
             return false;
         }
 

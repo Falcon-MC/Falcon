@@ -64,8 +64,6 @@ const std::string *ScriptPackConfig::findSecret(const std::string &name) const {
 }
 
 bool ScriptPackConfig::allowsModule(const std::string &module) const {
-    if (!mHasPermissions)
-        return true;
     // the name itself or a lone "*"
     for (const std::string &allowed: mAllowedModules) {
         if (allowed == module || allowed == "*")
@@ -164,15 +162,20 @@ void ScriptPackConfigurationManager::load(const std::string &root) {
     if (!std::filesystem::is_directory(folder, error))
         return;
 
+    _loadFolder(defaults.parent_path().string(), mDefault);
     for (const std::filesystem::directory_entry &entry: std::filesystem::directory_iterator(folder, error)) {
         if (!entry.is_directory(error))
             continue;
         const std::string name = entry.path().filename().string();
-        if (name == "default") {
-            _loadFolder(entry.path().string(), mDefault);
+        if (name == "default")
             continue;
+        ScriptPackConfig &pack = mPacks[StringUtil::toLowerCase(name)];
+        _loadFolder(entry.path().string(), pack);
+        if (!pack.mHasPermissions) {
+            pack.mAllowedModules = mDefault.mAllowedModules;
+            for (const auto &[module, rules]: mDefault.mModulePermissions)
+                pack.mModulePermissions[module] = rules->clone();
         }
-        _loadFolder(entry.path().string(), mPacks[StringUtil::toLowerCase(name)]);
     }
 }
 

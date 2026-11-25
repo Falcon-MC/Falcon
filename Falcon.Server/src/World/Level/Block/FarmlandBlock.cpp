@@ -30,6 +30,20 @@ namespace {
     const float TRAMPLE_FALL_OFFSET = 0.5f;
     const float TRAMPLE_MIN_VOLUME = 0.512f;
 
+    void changeMoisture(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                        int oldMoisture, int moisture) {
+        EventSignal<FarmlandHydrationChangeBeforeEvent> &hydration =
+                owner.getEventBus().before().mFarmlandHydrationChange;
+        if (hydration.hasSubscribers()) {
+            FarmlandHydrationChangeBeforeEvent event(level, position, oldMoisture, moisture);
+            hydration.emit(event);
+            if (event.isCancelled())
+                return;
+            moisture = event.mMoisture;
+        }
+        level.setBlock(position, DecorationSupport::withState(state, MOISTURE_STATE, moisture), false);
+    }
+
     bool isWater(const BlockState &state) {
         return state.mName == BlockNames::WATER || state.mName == "minecraft:flowing_water";
     }
@@ -59,18 +73,16 @@ bool FarmlandBlock::matches(const std::string &identifier) {
 
 void FarmlandBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state) const {
-    (void) owner;
-
     const int32_t moisture = state.mStates.getInt(MOISTURE_STATE, 0);
 
     if (isHydrated(level, position)) {
         if (moisture < MAX_MOISTURE)
-            level.setBlock(position, DecorationSupport::withState(state, MOISTURE_STATE, MAX_MOISTURE), false);
+            changeMoisture(owner, level, position, state, moisture, MAX_MOISTURE);
         return;
     }
 
     if (moisture > 0) {
-        level.setBlock(position, DecorationSupport::withState(state, MOISTURE_STATE, moisture - 1), false);
+        changeMoisture(owner, level, position, state, moisture, moisture - 1);
         return;
     }
 
@@ -95,6 +107,13 @@ void FarmlandBlock::onFallOn(ServerNetworkHandler &owner, Actor &actor, const Ve
     if (nextFloat() >= fallDistance - TRAMPLE_FALL_OFFSET || !canTrample(level, actor))
         return;
 
+    EventSignal<FarmlandTrampleBeforeEvent> &trample = owner.getEventBus().before().mFarmlandTrample;
+    if (trample.hasSubscribers()) {
+        FarmlandTrampleBeforeEvent event(level, actor, position);
+        trample.emit(event);
+        if (event.isCancelled())
+            return;
+    }
     turnToDirt(level, position);
 }
 

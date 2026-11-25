@@ -9,6 +9,18 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# the tests share one library of the server, and every static library it takes in must allow that
+if(FALCON_BUILD_EMBEDDED_TESTS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+# the windows server is shipped as a single exe, so zlib and openssl go inside it rather than beside it as dlls.
+# set before libdatachannel looks openssl up, the first lookup decides for the whole build
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(ZLIB_USE_STATIC_LIBS ON)
+    set(OPENSSL_USE_STATIC_LIBS ON)
+endif()
+
 include(FetchContent)
 
 set(LEVELDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -68,23 +80,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libdatachannel)
 
-FetchContent_Declare(
-    falcon_protocol
-    GIT_REPOSITORY https://github.com/Falcon-MC/Protocol.git
-    GIT_TAG 26.70
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-)
-FetchContent_MakeAvailable(falcon_protocol)
-
-FetchContent_Declare(
-    falcon_network
-    GIT_REPOSITORY https://github.com/Falcon-MC/Network.git
-    GIT_TAG main
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-)
-FetchContent_MakeAvailable(falcon_network)
+add_subdirectory(Falcon.Protocol)
+add_subdirectory(Falcon.Network)
 
 FetchContent_Declare(
     falcon_block_state_updater
@@ -118,7 +115,7 @@ set(FALCON_PLUGIN_API_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     falcon_plugin_api
     GIT_REPOSITORY https://github.com/Falcon-MC/PluginAPI.git
-    GIT_TAG bdd2fc133956f4115ac07d3b1fa2821028e62010
+    GIT_TAG 929f4165a593678a8ef39464acff709cf6a283dc
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(falcon_plugin_api)

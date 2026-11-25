@@ -59,7 +59,7 @@ std::vector<CommandOverloadData> FillCommand::getOverloads() const {
 
 bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 7 || arguments.size() > 8) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -70,13 +70,13 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     }
 
     const Vector3f origin = sender.getPosition();
-    const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                               (int32_t) std::floor(origin.z));
+    const Vector3f rotation = sender.getRotation();
 
     Vector3i from;
     Vector3i to;
-    if (!parseBlockPosition(arguments, 0, originBlock, from) || !parseBlockPosition(arguments, 3, originBlock, to)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+    if (!parseBlockPosition(arguments, 0, origin, rotation, from)
+        || !parseBlockPosition(arguments, 3, origin, rotation, to)) {
+        sendUsageError(sender);
         return false;
     }
 
@@ -88,7 +88,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
     const std::string mode = arguments.size() == 8 ? arguments[7] : "replace";
     if (std::find(MODES.begin(), MODES.end(), mode) == MODES.end()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -129,8 +129,10 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
                         continue;
 
                     const BlockState &target = mode == "hollow" && !shell ? air : state;
-                    // an unchanged block neither counts nor updates its neighbours
-                    if (level->getBlockState(x, y, z) == target)
+                    // an unchanged block neither counts nor updates its neighbours; peek: a chunk not loaded
+                    // is not placed into, and reading it would load or generate it
+                    const BlockState *current = level->peekBlockPtr(x, y, z);
+                    if (current == nullptr || *current == target)
                         continue;
                     const Block *block = VanillaBlocks::fromIdentifier(target.mName);
                     const bool randomTick = block != nullptr && block->hasRandomTick();

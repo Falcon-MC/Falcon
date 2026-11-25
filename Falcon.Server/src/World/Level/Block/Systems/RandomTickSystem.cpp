@@ -71,6 +71,11 @@ int RandomTickSystem::nextInt(int bound) {
     return distribution(generator());
 }
 
+float RandomTickSystem::nextFloat() {
+    std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+    return distribution(generator());
+}
+
 int RandomTickSystem::getFullLight(Level &level, const Vector3i &position) {
     if (position.y < level.getMinY() || position.y > level.getMaxY())
         return 0;

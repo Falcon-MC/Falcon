@@ -78,14 +78,7 @@ void WorkGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (!isReached())
         return;
 
-    if (mSoundTicks > mSoundDelay) {
-        mSoundDelay = _nextSoundDelay();
-        mSoundTicks = 0;
-        if (LevelSoundEventIds::fromName(mSound) != LevelSoundEventIds::UNDEFINED)
-            owner.playLevelSound(owner.getLevelFor(mob), mSound,
-                                 Vector3f((float) site.x, (float) site.y, (float) site.z));
-    }
-    ++mSoundTicks;
+    useWorkstation(owner, mob);
 
     if (mWorkedTicks % WORK_RECORD_INTERVAL == 0) {
         const MobDweller &dweller = mob.getDweller();
@@ -99,6 +92,22 @@ void WorkGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         mArrived = true;
         EntityEvents::fireTrigger(owner, mob, mSettings.mOnArrival.get());
     }
+}
+
+void WorkGoal::useWorkstation(ServerNetworkHandler &owner, MobActor &mob) {
+    if (mSoundTicks > mSoundDelay) {
+        mSoundDelay = _nextSoundDelay();
+        mSoundTicks = 0;
+        playWorkSound(owner, mob);
+    }
+    ++mSoundTicks;
+}
+
+void WorkGoal::playWorkSound(ServerNetworkHandler &owner, MobActor &mob) const {
+    if (LevelSoundEventIds::fromName(mSound) == LevelSoundEventIds::UNDEFINED)
+        return;
+    const Vector3i &site = getTargetBlock();
+    owner.playLevelSound(owner.getLevelFor(mob), mSound, Vector3f((float) site.x, (float) site.y, (float) site.z));
 }
 
 bool WorkGoal::_isRainingOnSite(ServerNetworkHandler &owner, const MobActor &mob) const {

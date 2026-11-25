@@ -28,9 +28,13 @@ void BambooSaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level,
     if (RandomTickSystem::getFullLight(level, top) < BAMBOO_MIN_LIGHT || RandomTickSystem::nextInt(3) != 0)
         return;
 
-    BlockChangeSystem::change(
-            level, top, DecorationSupport::withState(VanillaBlocks::BAMBOO().toBlockState(), LEAF_SIZE, "small_leaves"),
-            BlockChangeCause::Grow, true);
+    const BlockState grown = DecorationSupport::withState(VanillaBlocks::BAMBOO().toBlockState(), LEAF_SIZE,
+                                                            "small_leaves");
+    if (!BlockChangeSystem::allows(level, top, grown, BlockChangeCause::Grow))
+        return;
+    BlockChangeSystem::StructureBlocks blocks{{top, grown}};
+    if (BlockChangeSystem::prepareStructure(level, position, blocks))
+        BlockChangeSystem::applyStructure(level, blocks, true);
 }
 
 void BambooSaplingBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

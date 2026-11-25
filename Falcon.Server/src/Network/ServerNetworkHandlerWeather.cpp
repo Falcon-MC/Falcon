@@ -3,13 +3,14 @@
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/ScriptEngine.h"
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <random>
@@ -35,18 +36,27 @@ namespace {
         return distribution(weatherRandom()) + minimum;
     }
 
-    bool allowsWeatherChange(Level &level, FalconEventType type, bool state) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(type);
-        if (plugins == nullptr)
+    bool allowsWeatherChange(EventSignal<WeatherChangeBeforeEvent> &signal, Level &level, bool state) {
+        if (!signal.hasSubscribers())
             return true;
 
-        PluginEvent event;
-        event.mType = type;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mState = state;
-        plugins->dispatch(event);
-        return !event.mCancelled;
+        WeatherChangeBeforeEvent event(level, state);
+        signal.emit(event);
+        return !event.isCancelled();
+    }
+
+    // the block under the bolt, or the block a lightning rod there is attached to
+    Vector3f lightningStrikeCenter(Level &level, const Vector3f &position) {
+        const Vector3i at((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                          (int32_t) std::floor(position.z));
+        Vector3i struck = RedstoneFace::relative(at, RedstoneFace::DOWN);
+        const BlockState *rod = level.peekBlockPtr(at.x, at.y, at.z);
+        if (rod != nullptr && LightningRodBlock::matches(rod->mName)) {
+            const int facing = std::clamp((int) rod->mStates.getInt("facing_direction", RedstoneFace::UP), 0,
+                                          RedstoneFace::COUNT - 1);
+            struck = RedstoneFace::relative(at, RedstoneFace::opposite(facing));
+        }
+        return Vector3f((float) struck.x + 0.5f, (float) struck.y + 0.5f, (float) struck.z + 0.5f);
     }
 
     const char *weatherName(bool raining, bool thundering) {
@@ -102,7 +112,7 @@ void ServerNetworkHandler::broadcastWeather(World &world) {
 
 void ServerNetworkHandler::setRaining(World &world, bool raining) {
     Level &level = world.getOverworld();
-    if (raining != level.isRaining() && !allowsWeatherChange(level, FALCON_EVENT_WEATHER_CHANGE, raining))
+    if (raining != level.isRaining() && !allowsWeatherChange(mEventBus.before().mRainChange, level, raining))
         raining = level.isRaining();
 
     const std::string previous = weatherName(level.isRaining(), level.isThundering());
@@ -129,7 +139,8 @@ void ServerNetworkHandler::setRaining(World &world, bool raining) {
 
 void ServerNetworkHandler::setThundering(World &world, bool thundering) {
     Level &level = world.getOverworld();
-    if (thundering != level.isThundering() && !allowsWeatherChange(level, FALCON_EVENT_THUNDER_CHANGE, thundering))
+    if (thundering != level.isThundering()
+        && !allowsWeatherChange(mEventBus.before().mThunderChange, level, thundering))
         thundering = level.isThundering();
 
     if (thundering && !level.isRaining())
@@ -166,6 +177,7 @@ void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &positio
 
     playLevelSound(level, LevelSoundEvent::THUNDER, position);
     playLevelSound(level, LevelSoundEvent::EXPLODE, position);
+    level.postGameEvent(GameEvents::LIGHTNING_STRIKE, lightningStrikeCenter(level, position), bolt);
 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;

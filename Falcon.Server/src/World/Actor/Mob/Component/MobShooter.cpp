@@ -4,6 +4,7 @@
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
+#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "World/Item/PotionEffects.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
@@ -15,7 +16,6 @@
 namespace {
     const char *const SHOOTER_COMPONENT = "minecraft:shooter";
     const char *const PROJECTILE_COMPONENT = "minecraft:projectile";
-    const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const float EYE_HEIGHT_RATIO = 0.85f;
     const float PLAYER_HEIGHT = 1.8f;
     const float DEGREES_TO_RADIANS = 0.017453292f;
@@ -80,30 +80,6 @@ namespace {
         settings.mImpact = onHit == nullptr ? nullptr : onHit->get("impact_damage");
     }
 
-    // the projectile's own spawn event picks its group from the shooter: arrow.json mob_arrow, mob_crossbow_arrow
-    const json::Value *spawnedGroup(ServerNetworkHandler &owner, const MobActor &mob, const json::Value &definition) {
-        const json::Value *events = definition.get("events");
-        const json::Value *spawned = events == nullptr ? nullptr : events->get(SPAWNED_EVENT);
-        const json::Value *choices = spawned == nullptr ? nullptr : spawned->get("first_valid");
-        const json::Value *groups = definition.get("component_groups");
-        if (choices == nullptr || !choices->isArray() || groups == nullptr)
-            return nullptr;
-
-        for (const std::unique_ptr<json::Value> &choice: choices->mArray) {
-            const json::Value *filters = choice->get("filters");
-            if (filters != nullptr && !EntityFilter::test(*filters, owner, mob, &mob))
-                continue;
-
-            const json::Value *add = choice->get("add");
-            const json::Value *names = add == nullptr ? nullptr : add->get("component_groups");
-            if (names == nullptr || !names->isArray() || names->mArray.empty())
-                return nullptr;
-
-            return groups->get(names->mArray.front()->string());
-        }
-        return nullptr;
-    }
-
     // a group replaces the whole component, as component groups do
     ProjectileSettings projectileSettings(ServerNetworkHandler &owner, const MobActor &mob,
                                           const std::string &identifier) {
@@ -117,7 +93,8 @@ namespace {
         if (base != nullptr)
             readProjectile(*base, settings);
 
-        const json::Value *group = spawnedGroup(owner, mob, *definition);
+        // the projectile's own spawn event picks its group from the shooter: arrow.json mob_arrow, mob_crossbow_arrow
+        const json::Value *group = ProjectileComponent::spawnedGroup(owner, *definition, mob, mob);
         const json::Value *override = group == nullptr ? nullptr : group->get(PROJECTILE_COMPONENT);
         if (override != nullptr) {
             settings = ProjectileSettings();
@@ -243,12 +220,16 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
 
     // spawned a block ahead of the anchor, toward the target
     const Vector3f spawn(origin.x + dx / horizontal, origin.y, origin.z + dz / horizontal);
-    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, spawn);
+    const Vector3f motion(direction.x * power, direction.y * power, direction.z * power);
+    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, spawn, [&](ServerActor &actor) {
+        actor.setMotion(motion);
+        ServerNetworkHandler::faceMotion(actor, motion);
+    });
     if (projectile == nullptr)
         return false;
 
     projectile->setProjectile(true);
-    projectile->setOwnerUniqueId((int64_t) mob.getRuntimeId());
+    projectile->setOwnerUniqueId(mob.getUniqueId());
     if (settings.mImpact != nullptr) {
         ProjectileData &data = projectile->getProjectileData();
         data.mImpactDamage = impactDamage(*settings.mImpact, shooterRandom());
@@ -256,7 +237,8 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
             data.mBaseDamage = numberOf(*settings.mImpact, "power_multiplier", data.mBaseDamage);
     }
 
-    projectile->setMotion(Vector3f(direction.x * power, direction.y * power, direction.z * power));
+    if (auto *homing = dynamic_cast<DefinitionProjectileActor *>(projectile))
+        homing->launchAt(owner, mob, target);
     if (!owner.allowProjectileLaunch(*projectile, &mob))
         return false;
 
@@ -269,6 +251,39 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
     if (shot.mLoseTarget)
         mob.clearTarget();
     return true;
+}
+
+ServerActor *MobShooter::shootFrom(ServerNetworkHandler &owner, MobActor &mob, const std::string &identifier,
+                                   const Vector3f &origin, const Vector3f &direction) {
+    const ProjectileSettings settings = projectileSettings(owner, mob, identifier);
+    const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+    if (!settings.mFound || length < 0.0000001f)
+        return nullptr;
+
+    const float spread = SPREAD_PER_UNCERTAINTY
+                         * uncertainty(settings.mUncertaintyBase, settings.mUncertaintyMultiplier,
+                                       (int32_t) owner.getProperties().getDifficulty());
+    std::normal_distribution<float> gaussian(0.0f, 1.0f);
+    const Vector3f aim(direction.x / length + gaussian(shooterRandom()) * spread,
+                       direction.y / length + gaussian(shooterRandom()) * spread,
+                       direction.z / length + gaussian(shooterRandom()) * spread);
+
+    const Vector3f motion(aim.x * settings.mPower, aim.y * settings.mPower, aim.z * settings.mPower);
+    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, origin, [&](ServerActor &actor) {
+        actor.setMotion(motion);
+        ServerNetworkHandler::faceMotion(actor, motion);
+    });
+    if (projectile == nullptr)
+        return nullptr;
+    projectile->setProjectile(true);
+    projectile->setOwnerUniqueId(mob.getUniqueId());
+    if (settings.mImpact != nullptr) {
+        ProjectileData &data = projectile->getProjectileData();
+        data.mImpactDamage = impactDamage(*settings.mImpact, shooterRandom());
+        if (data.mImpactDamage < 0)
+            data.mBaseDamage = numberOf(*settings.mImpact, "power_multiplier", data.mBaseDamage);
+    }
+    return owner.allowProjectileLaunch(*projectile, &mob) ? projectile : nullptr;
 }
 
 float MobShooter::aimPitch(float horizontal, float height, float power, float gravity) {

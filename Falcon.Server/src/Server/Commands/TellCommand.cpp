@@ -26,13 +26,13 @@ std::vector<CommandOverloadData> TellCommand::getOverloads() const {
 
 bool TellCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
     const std::string message = joinArguments(arguments, 1);
     if (message.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

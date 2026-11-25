@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3f.h"
 
@@ -14,7 +15,7 @@ public:
         float mChanceToStart = 0.0f;
         int32_t mDurationTicks = 0;
         Vector3f mSearchArea;
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
     };
 
     explicit OfferFlowerGoal(Settings settings);

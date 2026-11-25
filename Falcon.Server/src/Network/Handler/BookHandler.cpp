@@ -4,12 +4,27 @@
 #include "Protocol/Packets/BookEditPacket.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace {
     // the page limit of every edit
     const int32_t MAX_PAGES = 50;
+    // not verified against the game: picked to bound what a book stores and sends
+    const size_t MAX_PAGE_CHARACTERS = 256;
+    const size_t MAX_PHOTO_NAME_CHARACTERS = 256;
+    const size_t MAX_TITLE_CHARACTERS = 16;
+
+    // code points, not bytes: continuation bytes are skipped
+    bool fits(const std::string &text, size_t limit) {
+        size_t characters = 0;
+        for (const char byte: text) {
+            if (((unsigned char) byte & 0xC0) != 0x80 && ++characters > limit)
+                return false;
+        }
+        return true;
+    }
 
     Tag page(const std::string &text, const std::string &photo) {
         Tag entry = Tag::ofCompound();
@@ -38,6 +53,10 @@ void BookHandler::handleEdit(ServerNetworkHandler &owner, ServerPlayer &player, 
         return;
     const ItemStack &held = player.getInventory().getItem(slot);
     if (held.isAir() || held.mDefinition == nullptr || held.mDefinition->getIdentifier() != "minecraft:writable_book")
+        return;
+
+    if (!fits(packet.mText, MAX_PAGE_CHARACTERS) || !fits(packet.mPhotoName, MAX_PHOTO_NAME_CHARACTERS)
+        || !fits(packet.mTitle, MAX_TITLE_CHARACTERS))
         return;
 
     std::vector<Tag> pages = pagesOf(held);
@@ -80,7 +99,8 @@ void BookHandler::handleEdit(ServerNetworkHandler &owner, ServerPlayer &player, 
             return;
         // the signed fields next to the pages
         edited.mTag = held.mTag.isCompound() ? held.mTag : Tag::ofCompound();
-        edited.mTag.putString("author", packet.mAuthor);
+        // the packet's author is client-chosen: sign with the player's own name
+        edited.mTag.putString("author", player.getName());
         edited.mTag.putString("xuid", player.getXuid());
         edited.mTag.putString("title", packet.mTitle);
         edited.mTag.putInt("generation", 0);
@@ -88,6 +108,19 @@ void BookHandler::handleEdit(ServerNetworkHandler &owner, ServerPlayer &player, 
         edited.mTag = Tag::ofCompound();
     }
     edited.mTag.put("pages", Tag::ofList(Tag::Type::Compound, std::move(pages)));
+
+    EventSignal<PlayerEditBookBeforeEvent> &editBook = owner.getEventBus().before().mPlayerEditBook;
+    if (editBook.hasSubscribers()) {
+        PlayerEditBookBeforeEvent event(player, held, edited, packet.mAction, first, second);
+        editBook.emit(event);
+        if (event.isCancelled()) {
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+            return;
+        }
+        if (edited.isAir() || (edited.mDefinition->getIdentifier() != "minecraft:writable_book"
+                               && edited.mDefinition->getIdentifier() != "minecraft:written_book"))
+            return;
+    }
 
     player.getInventory().setItem(slot, std::move(edited));
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);

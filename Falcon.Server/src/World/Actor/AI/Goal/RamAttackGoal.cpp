@@ -116,7 +116,7 @@ void RamAttackGoal::_tickPrepare(MobActor &mob, const Actor &target) {
 
 void RamAttackGoal::_tickCharge(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
     if (MobAttack::isTouching(mob, target, 0.0f)) {
-        MobAttack::hit(owner, mob, target, mob.getAttackDamage(owner.getProperties().getDifficulty()));
+        MobAttack::hit(owner, mob, target, mob.getAttackDamage());
         owner.knockBack(target, mRamDirection.x, mRamDirection.z, mSettings.mKnockbackForce,
                         mSettings.mKnockbackHeight);
         playSound(owner, mob, mSettings.mRamImpactSound);

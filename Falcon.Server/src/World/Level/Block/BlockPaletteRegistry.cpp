@@ -2,6 +2,7 @@
 
 #include "BlockPaletteNbt.h"
 #include "Core/Archive/Gzip.h"
+#include "Core/Threading/CpuCount.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
@@ -207,8 +208,8 @@ void BlockPaletteRegistry::initialize() {
             offsets[(size_t) count] = cursor.mOffset;
 
             // tag building dominates startup: ranges parse on their own threads, merged below in file order
-            const size_t hardware = std::max<unsigned>(1, std::thread::hardware_concurrency());
-            const size_t parts = std::max<size_t>(1, std::min({MAX_PARSE_THREADS, hardware, (size_t) count}));
+            const size_t parts =
+                    std::max<size_t>(1, std::min({MAX_PARSE_THREADS, (size_t) CpuCount::usable(), (size_t) count}));
             std::vector<std::future<std::vector<BlockRun>>> ranges;
             for (size_t part = 0; part < parts; ++part) {
                 const size_t first = (size_t) count * part / parts;

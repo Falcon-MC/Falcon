@@ -190,7 +190,7 @@ std::vector<CommandOverloadData> CameraCommand::getOverloads() const {
 
 bool CameraCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -216,7 +216,7 @@ bool CameraCommand::execute(CommandOrigin &sender, const std::vector<std::string
     if (mode == "fade") {
         CameraFadeInstruction fade;
         if (!buildFadeInstruction(arguments, 2, fade)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         CameraInstructionPacket packet;
@@ -234,7 +234,7 @@ bool CameraCommand::execute(CommandOrigin &sender, const std::vector<std::string
         for (ServerPlayer *target: targets) {
             CameraSetInstruction set;
             if (!buildSetInstruction(arguments, *target, set)) {
-                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                sendUsageError(sender);
                 return false;
             }
             CameraInstructionPacket packet;
@@ -247,6 +247,6 @@ bool CameraCommand::execute(CommandOrigin &sender, const std::vector<std::string
         return sentAny;
     }
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }

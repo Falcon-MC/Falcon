@@ -129,6 +129,18 @@ std::shared_ptr<const LevelChunk> TerrainCache::_get(int32_t chunkX, int32_t chu
                     break;
                 }
             }
+            const auto warm = mPrewarmed.find(key);
+            if (warm != mPrewarmed.end()) {
+                std::shared_ptr<const LevelChunk> terrain = std::move(warm->second);
+                mPrewarmed.erase(warm);
+                Entry &entry = _entry(key);
+                if (entry.mTerrain == nullptr)
+                    entry.mTerrain = std::move(terrain);
+                cached = decorated && entry.mDecorated != nullptr ? entry.mDecorated : entry.mTerrain;
+                if (created != nullptr)
+                    *created = entry.mCreated;
+                break;
+            }
             if (mGenerating.count(key) == 0)
                 break;
 
@@ -156,6 +168,30 @@ std::shared_ptr<const LevelChunk> TerrainCache::_get(int32_t chunkX, int32_t chu
             *created = entry.mCreated;
     }
     return shared;
+}
+
+void TerrainCache::prewarm(int32_t chunkX, int32_t chunkZ) {
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        const auto found = mChunks.find(key);
+        if ((found != mChunks.end() && (found->second.mTerrain != nullptr || found->second.mDecorated != nullptr))
+            || mGenerating.count(key) != 0 || mPrewarmed.count(key) != 0)
+            return;
+        // left by a chunk that came from storage instead
+        if (mPrewarmed.size() >= MAX_PREWARMED_CHUNKS)
+            mPrewarmed.erase(mPrewarmed.begin());
+        mGenerating.insert(key);
+    }
+
+    const GenerationClaim claim{*this, key};
+    LevelChunk chunk(chunkX, chunkZ);
+    chunk.setDimension(mGenerator.getDimensionType());
+    mGenerator.generate(chunk);
+    std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(std::move(chunk));
+
+    std::lock_guard<std::mutex> lock(mMutex);
+    mPrewarmed.emplace(key, std::move(shared));
 }
 
 void TerrainCache::put(LevelChunk chunk) {
@@ -263,8 +299,17 @@ GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension
     mScratch.setTerrainCache(&cache);
 }
 
+// the terrain of the 3x3 is built before the lock: neighbours waiting on it then only wait for the decoration
+void GeneratorChunkSource::prewarmArea(int32_t chunkX, int32_t chunkZ) {
+    for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
+        for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++)
+            mCache.prewarm(chunkX + offsetX, chunkZ + offsetZ);
+    }
+}
+
 uint64_t GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
                                         std::vector<Tag> &blockActors, std::vector<Tag> &entities) {
+    prewarmArea(chunk.getX(), chunk.getZ());
     const std::unique_ptr<TerrainCache::DecorationArea> area = mCache.lockArea(chunk.getX(), chunk.getZ());
     return _decorate(chunk, area->getSequence(), overflow, blockActors, entities);
 }
@@ -275,6 +320,7 @@ uint64_t GeneratorChunkSource::populateGenerated(LevelChunk &chunk, const std::v
                                                  uint64_t &base) {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
+    prewarmArea(chunkX, chunkZ);
     const std::unique_ptr<TerrainCache::DecorationArea> area = mCache.lockArea(chunkX, chunkZ);
 
     uint64_t created = 0;

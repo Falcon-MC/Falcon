@@ -45,6 +45,12 @@ public:
 
     int32_t extraCost(int32_t x, int32_t feetY, int32_t z);
 
+    // minecraft:preferred_path's jump cost; 0 without it
+    int32_t jumpCost() const;
+
+    // one block of walk in the search's cost units
+    static constexpr int32_t BLOCK_COST = 10;
+
     bool hasBarrier(const Vector3f &from, const Vector3f &to);
 
 private:
@@ -77,6 +83,9 @@ private:
     bool _isForbidden(uint16_t flags) const;
 
     bool _isSampleOpen(const Vector3f &position);
+
+    // minecraft:preferred_path's cost of the block under the feet
+    int32_t _groundCost(int32_t x, int32_t feetY, int32_t z) const;
 
     Level *mLevel = nullptr;
     const Actor *mActor = nullptr;

@@ -6,6 +6,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
+#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <functional>
@@ -112,7 +113,7 @@ namespace {
 
     class QueuedPeer : public NetworkPeer {
     public:
-        explicit QueuedPeer(std::vector<std::string> packets) {
+        explicit QueuedPeer(std::vector<std::string> packets, bool gameCipher = true) : mGameCipher(gameCipher) {
             for (const std::string &packet: packets) {
                 std::string batch(1, (char) packet.size());
                 mIncoming.push_back(batch + packet);
@@ -131,6 +132,11 @@ namespace {
             return DataStatus::HasData;
         }
 
+        size_t remaining() {
+            std::lock_guard<std::mutex> lock(mMutex);
+            return mIncoming.size();
+        }
+
         NetworkStatus getNetworkStatus() const override {
             return NetworkStatus();
         }
@@ -139,15 +145,26 @@ namespace {
             return false;
         }
 
+        bool encryptsGamePackets() const override {
+            return mGameCipher;
+        }
+
     private:
+        bool mGameCipher;
         std::mutex mMutex;
         std::deque<std::string> mIncoming;
     };
 
     class AnnouncingConnector : public Connector {
     public:
-        AnnouncingConnector(NetworkIdentifier first, NetworkIdentifier second)
-                : mFirst(std::move(first)), mSecond(std::move(second)) {}
+        AnnouncingConnector(NetworkIdentifier first, NetworkIdentifier second,
+                            std::vector<std::string> secondPackets = {"move"})
+                : mFirst(std::move(first)), mSecond(std::move(second)),
+                  mPlayingPeer(std::make_shared<QueuedPeer>(std::move(secondPackets), false)) {}
+
+        std::shared_ptr<QueuedPeer> playingPeer() const {
+            return mPlayingPeer;
+        }
 
         bool host(const ConnectionDefinition &) override {
             return true;
@@ -162,8 +179,7 @@ namespace {
             mAnnounced = true;
             mCallbacks->onNewIncomingConnection(
                     mFirst, std::make_shared<QueuedPeer>(std::vector<std::string>{"login", "handshake"}));
-            mCallbacks->onNewIncomingConnection(mSecond,
-                                                std::make_shared<QueuedPeer>(std::vector<std::string>{"move"}));
+            mCallbacks->onNewIncomingConnection(mSecond, mPlayingPeer);
         }
 
         std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &) override {
@@ -185,6 +201,7 @@ namespace {
     private:
         NetworkIdentifier mFirst;
         NetworkIdentifier mSecond;
+        std::shared_ptr<QueuedPeer> mPlayingPeer;
         bool mAnnounced = false;
     };
 
@@ -196,6 +213,10 @@ namespace {
 
         void onDataReceived(const NetworkIdentifier &id, const std::string &data) override {
             mEvents.push_back(id.toString() + " " + data);
+        }
+
+        void onEncryptionEnabled(const NetworkIdentifier &id, bool usesAccountKey) override {
+            mEvents.push_back(id.toString() + (usesAccountKey ? " account key" : " transport"));
         }
 
         std::vector<std::string> mEvents;
@@ -228,8 +249,62 @@ namespace {
         all.push_back(playing.toString() + " move");
         require(listener.mEvents == all, "held events lost their order");
 
+        network.enableEncryption(joining, EncryptionKey{});
+        network.enableEncryption(playing, EncryptionKey{});
+        const auto switchedBy = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (listener.mEvents.size() < all.size() + 2 && std::chrono::steady_clock::now() < switchedBy) {
+            network.runEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        require(listener.mEvents.size() == all.size() + 2, "both transitions must follow earlier data");
+        const std::vector<std::string> transitions(listener.mEvents.begin() + all.size(), listener.mEvents.end());
+        require(std::find(transitions.begin(), transitions.end(), joining.toString() + " account key")
+                        != transitions.end()
+                        && std::find(transitions.begin(), transitions.end(), playing.toString() + " transport")
+                                   != transitions.end(),
+                "transport protection and account-key protection were confused");
+
         network.stopIoThread();
         network.removeListener(&listener);
+    }
+
+    void deferredPacketsKeepTheirBudget() {
+        const NetworkIdentifier joining("1", 1);
+        const NetworkIdentifier playing("2", 2);
+        std::vector<std::string> packets;
+        for (int index = 0; index < 1200; ++index)
+            packets.push_back(std::to_string(index));
+        auto connector = std::make_unique<AnnouncingConnector>(joining, playing, packets);
+        auto peer = connector->playingPeer();
+        NetworkHandler network(std::move(connector));
+        RecordingListener listener;
+        network.addListener(&listener);
+        network.startIoThread();
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (peer->remaining() > 176 && std::chrono::steady_clock::now() < deadline) {
+            network.runEventsFor([](const NetworkIdentifier &) { return false; });
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        network.runEventsFor([](const NetworkIdentifier &) { return false; });
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        require(peer->remaining() == 176, "deferred packets released their admission budget early");
+
+        const auto resumedBy = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (listener.mEvents.size() < packets.size() + 4 && std::chrono::steady_clock::now() < resumedBy) {
+            network.runEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        network.stopIoThread();
+        network.removeListener(&listener);
+        std::vector<std::string> actual;
+        for (const std::string &event: listener.mEvents) {
+            if (event.starts_with(playing.toString() + " "))
+                actual.push_back(event);
+        }
+        require(actual.size() == packets.size() + 1, "resuming the transport lost queued packets");
+        for (size_t i = 0; i < packets.size(); ++i)
+            require(actual[i + 1] == playing.toString() + " " + packets[i], "resumed packets changed order");
     }
 }
 
@@ -253,6 +328,7 @@ int main() {
     check("chunk packet dropped on a new revision", cacheDropsStaleRevision);
     check("chunk packet expiry", cacheExpires);
     check("login events run between ticks in order", loginEventsRunFirst);
+    check("deferred packets retain their admission budget", deferredPacketsKeepTheirBudget);
 
     BedrockLog::flush();
     return failures == 0 ? 0 : 1;

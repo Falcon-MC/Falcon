@@ -14,4 +14,7 @@ public:
 
     bool onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                       const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const override;
+
+    // fills from a full hive in front, the honey bottle kept in the dispenser when it fits
+    bool dispense(const DispenseSource &source) const override;
 };

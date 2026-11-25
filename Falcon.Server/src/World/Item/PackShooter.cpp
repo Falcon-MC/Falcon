@@ -1,12 +1,10 @@
 #include "World/Item/PackShooter.h"
 
-#include "Core/Math/MathConstants.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
-#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Inventory/ItemStackNbt.h"
 #include "World/Item/EnchantmentData.h"
@@ -15,7 +13,6 @@
 #include "World/Item/RangedWeaponHelpers.h"
 
 #include <algorithm>
-#include <cmath>
 #include <string>
 
 using namespace RangedWeaponHelpers;
@@ -172,12 +169,8 @@ namespace {
 
     // speed is the entity's own projectile power times the launch power
     ServerActor *launch(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &entity, float power,
-                        float minimumCriticalPower, float verticalOffset) {
-        ProjectileComponent component;
-        const bool found = ProjectileComponent::find(
-                entity, CustomContentRegistry::getInstance().getActorDefinition(entity), component);
-        ServerActor *projectile = owner.spawnProjectile(player, entity, found ? component.mPower * power : 0.0f,
-                                                        verticalOffset);
+                        float minimumCriticalPower, float verticalOffset, float yawOffset = 0.0f) {
+        ServerActor *projectile = owner.spawnProjectile(player, entity, power, verticalOffset, nullptr, yawOffset);
         if (projectile != nullptr)
             projectile->getProjectileData().mCritical = minimumCriticalPower >= 0.0f && power >= minimumCriticalPower;
         return projectile;
@@ -191,17 +184,6 @@ namespace {
         data.mPiercingLevel = ItemEnchantments::getLevel(weapon, EnchantmentIds::PIERCING);
         if (ItemEnchantments::getLevel(weapon, EnchantmentIds::FLAME) > 0)
             data.mFlameTicks = std::max(data.mFlameTicks, FLAME_FIRE_TICKS);
-    }
-
-    void turnMotion(ServerNetworkHandler &owner, ServerActor &projectile, float degrees) {
-        const float radians = degrees * MathConstants::DEGREES_TO_RADIANS_F;
-        Vector3f motion = projectile.getMotion();
-        const float x = motion.x * std::cos(radians) - motion.z * std::sin(radians);
-        const float z = motion.x * std::sin(radians) + motion.z * std::cos(radians);
-        motion.x = x;
-        motion.z = z;
-        projectile.setMotion(motion);
-        owner.sendActorMotion(projectile);
     }
 
     // multishot fires three at -10, 0 and 10 degrees for one ammunition; the weapon wears by one
@@ -231,12 +213,11 @@ namespace {
         const bool unpaid = infinity && !ammo.mOffhand
                             && !(identifierOf(ammo.mStack) == ARROW_IDENTIFIER && ammo.mStack.mDamage > 0);
         for (int32_t index = 0; index < shots; ++index) {
-            ServerActor *projectile = launch(owner, player, source.mEntity, power, source.mMinimumCriticalPower, 0.0f);
+            const float spread = multishot ? (float) index * MULTISHOT_SPREAD_DEGREES - MULTISHOT_SPREAD_DEGREES : 0.0f;
+            ServerActor *projectile = launch(owner, player, source.mEntity, power, source.mMinimumCriticalPower, 0.0f,
+                                             spread);
             if (projectile == nullptr)
                 continue;
-
-            if (multishot)
-                turnMotion(owner, *projectile, (float) index * MULTISHOT_SPREAD_DEGREES - MULTISHOT_SPREAD_DEGREES);
 
             ProjectileData &data = projectile->getProjectileData();
             if (dynamic_cast<ArrowActor *>(projectile) != nullptr) {

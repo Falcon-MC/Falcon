@@ -11,6 +11,9 @@ FALCON_REGISTER_ITEM_CUSTOM(
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/FireStarterHelpers.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/CakeBlock.h"
+#include "World/Level/Block/CandleBlock.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -39,6 +42,17 @@ bool FireChargeItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
 
     Level &level = owner.getLevelFor(player);
     const Vector3i placement = relativeToFace(blockPosition, face);
+    // a candle or a candle cake facing open air is lit instead of setting a fire, and nothing else happens if it can't
+    const BlockState clicked = level.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+    const bool candle = CandleBlock::matches(clicked.mName) || CandleCakeBlock::matches(clicked.mName);
+    if (candle && level.getBlockState(placement.x, placement.y, placement.z).mName == BlockNames::AIR) {
+        if (!CandleBlock::light(owner, level, blockPosition, clicked, &player))
+            return false;
+        owner.broadcastLevelEvent(level, LevelEventPacket::SoundGhastFireball, centerOf(placement), 0);
+        player.consumeOneHeldItem();
+        return true;
+    }
+
     if (!canIgniteAgainst(level, blockPosition, placement))
         return false;
 

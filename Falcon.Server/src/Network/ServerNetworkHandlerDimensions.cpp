@@ -8,7 +8,6 @@
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/MapHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ChangeDimensionPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
@@ -251,40 +250,24 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     const bool otherWorld = player.getWorldId() != destinationLevel.getWorldId();
 
     Vector3f destination = position;
-    if (!sameDimension) {
-        PluginEvent dimensionEvent;
-        dimensionEvent.mType = FALCON_EVENT_PLAYER_CHANGE_DIMENSION;
-        dimensionEvent.mCancellable = true;
-        dimensionEvent.mPlayer = &player;
-        dimensionEvent.mLevel = &destinationLevel;
-        dimensionEvent.mDimension = (uint32_t) Dimension::toId(dimension);
-        dimensionEvent.mPreviousDimension = (uint32_t) Dimension::toId(player.getDimension());
-        dimensionEvent.mFrom = player.getPosition();
-        dimensionEvent.mTo = position;
-        mPluginManager->dispatch(dimensionEvent);
-        if (dimensionEvent.mCancelled)
+    EventSignal<PlayerLevelChangeBeforeEvent> &changeDimension = mEventBus.before().mPlayerChangeDimension;
+    if (!sameDimension && changeDimension.hasSubscribers()) {
+        PlayerLevelChangeBeforeEvent event(player, destinationLevel, position);
+        changeDimension.emit(event);
+        if (event.isCancelled())
             return;
 
-        if (dimensionEvent.mToChanged)
-            destination = dimensionEvent.mTo;
+        destination = event.mPosition;
     }
 
-    if (otherWorld) {
-        PluginEvent worldEvent;
-        worldEvent.mType = FALCON_EVENT_PLAYER_CHANGE_WORLD;
-        worldEvent.mCancellable = true;
-        worldEvent.mPlayer = &player;
-        worldEvent.mLevel = &destinationLevel;
-        worldEvent.mWorldName = getWorldOf(destinationLevel).getName();
-        worldEvent.mPreviousWorldName = getWorldFor(player).getName();
-        worldEvent.mFrom = player.getPosition();
-        worldEvent.mTo = destination;
-        mPluginManager->dispatch(worldEvent);
-        if (worldEvent.mCancelled)
+    EventSignal<PlayerLevelChangeBeforeEvent> &changeWorld = mEventBus.before().mPlayerChangeWorld;
+    if (otherWorld && changeWorld.hasSubscribers()) {
+        PlayerLevelChangeBeforeEvent event(player, destinationLevel, destination);
+        changeWorld.emit(event);
+        if (event.isCancelled())
             return;
 
-        if (worldEvent.mToChanged)
-            destination = worldEvent.mTo;
+        destination = event.mPosition;
     }
 
     Level &previous = getLevelFor(player);

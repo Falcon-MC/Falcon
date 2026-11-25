@@ -150,17 +150,27 @@ bool CampfireBlockActor::tick(ServerNetworkHandler &owner) {
             continue;
 
         std::shared_ptr<ItemDefinition> output = owner.getItemDefinitions().getDefinition(recipe->mOutputItemId);
+        ItemStack cooked = ItemStack::air();
+        if (output != nullptr) {
+            cooked.mDefinition = std::move(output);
+            cooked.mBlockDefinition = owner.getBlockDefinitions().getDefinition(recipe->mOutputItemId);
+            cooked.mDamage = 0;
+            cooked.mCount = item.mCount;
+        }
+
+        EventSignal<CampfireCookBeforeEvent> &campfireCook = owner.getEventBus().before().mCampfireCook;
+        if (campfireCook.hasSubscribers()) {
+            CampfireCookBeforeEvent event(*mLevel, mPosition, slot, item, cooked);
+            campfireCook.emit(event);
+            if (event.isCancelled())
+                continue;
+        }
         mInventory.setContainerItem(slot, ItemStack::air());
         mCookTimes[slot] = 0;
         changed = true;
-        if (output == nullptr)
+        if (cooked.isAir())
             continue;
 
-        ItemStack cooked = ItemStack::air();
-        cooked.mDefinition = std::move(output);
-        cooked.mBlockDefinition = owner.getBlockDefinitions().getDefinition(recipe->mOutputItemId);
-        cooked.mDamage = 0;
-        cooked.mCount = item.mCount;
         ItemActorHandler::dropItem(owner, *mLevel, dropPositionOf(mPosition), cooked,
                                    ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
     }

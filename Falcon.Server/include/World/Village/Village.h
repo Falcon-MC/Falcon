@@ -93,6 +93,10 @@ public:
 
     std::vector<std::shared_ptr<PoiInstance>> getPois() const;
 
+    // the breeding check of make_love: past the saved MTick, and more beds than inhabitants, one bed counting
+    // as none
+    bool hasRoomForBaby() const;
+
     // nullptr when the inhabitant holds none of that type
     std::shared_ptr<PoiInstance> getClaimedPoi(int64_t id, PoiType type) const;
 
@@ -200,8 +204,9 @@ private:
     // inhabitant unique id, tick it last worked
     std::vector<std::pair<int64_t, int64_t>> mWorkers;
     std::string mId;
-    // saved and restored for the game: no rule of the server reads them
+    // no breeding before this tick; the game only ever loads it
     int64_t mMTick = 0;
+    // saved and restored for the game: no rule of the server reads them
     int64_t mPDTick = 0;
     int64_t mNextNegativeDecayTick = 0;
     int64_t mNextPositiveDecayTick = 0;

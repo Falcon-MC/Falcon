@@ -11,6 +11,7 @@
 class ChunkGenerator;
 class Level;
 class LevelChunk;
+class TerrainBeard;
 
 /**
  * The pieces of a stronghold, laid from a staircase in its start chunk: each piece opens doors its children are
@@ -63,6 +64,9 @@ public:
     static std::shared_ptr<const Layout> cachedPlan(int64_t seed, int32_t chunkX, int32_t chunkZ);
 
     static const char *nameOf(Type type);
+
+    // the game fills the caves near every piece: the stronghold stays buried
+    static void addBeard(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ, TerrainBeard &beard);
 
     // every stronghold piece reaching the chunk, built with the chunk's post process random
     static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);

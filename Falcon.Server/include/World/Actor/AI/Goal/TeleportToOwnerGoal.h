@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3f.h"
 
@@ -22,5 +23,5 @@ public:
 private:
     static bool _isSafe(Level &level, int32_t x, int32_t y, int32_t z);
 
-    std::shared_ptr<json::Value> mFilters;
+    CompiledEntityFilter mFilters;
 };

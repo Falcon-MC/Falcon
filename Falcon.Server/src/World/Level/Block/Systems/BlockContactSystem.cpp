@@ -6,6 +6,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/BlockNames.h"
@@ -35,6 +36,8 @@ void BlockContactSystem::land(ServerNetworkHandler &owner, Actor &actor, float f
     Vector3i below;
     const BlockState *state = nullptr;
     Level &level = owner.getLevelFor(actor);
+    // the game posts it from the feet as the landing block takes the fall
+    level.postGameEvent(GameEvents::HIT_GROUND, actor.getPosition(), &actor);
     const Block *block = blockBelow(level, actor.getPosition(), below, state);
     if (block == nullptr) {
         if (state != nullptr)

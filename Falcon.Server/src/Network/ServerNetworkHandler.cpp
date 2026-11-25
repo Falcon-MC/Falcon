@@ -1,6 +1,8 @@
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Threading/CpuCount.h"
 #include "World/Level/Block/SignEditing.h"
+#include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
 
 #include "Core/Text/StringUtil.h"
@@ -46,7 +48,6 @@
 #include "Network/Handler/MovementHandler.h"
 #include "Network/Handler/SubChunkRequestHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
-#include "Falcon/Plugin/PluginPackets.h"
 #include "Server/ServerPaths.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
@@ -437,6 +438,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
           mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
           mIpBanList(ServerPaths::file("banned-ips.json")) {
     mPlayerMovementRegistry = std::make_unique<PlayerMovementRegistry>();
+    _reserveSimulatedSpawns();
     mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
 
     configureNetherNetSctp();
@@ -468,6 +470,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
 
     AuthKeyProvider::getInstance().start();
     mPluginManager = std::make_unique<PluginManager>(*this);
+    mFunctions.setPermissions(&mPluginManager->getPermissions());
 }
 
 PlayerMovementRegistry &ServerNetworkHandler::getPlayerMovementRegistry() {
@@ -533,22 +536,15 @@ unsigned short ServerNetworkHandler::getExtraSignalingPort() const {
 }
 
 int ServerNetworkHandler::_getServerViewDistance() const {
-    int distance = mProperties.getViewDistance();
-
-    if (distance < 1)
-        distance = 1;
-    if (distance > MAX_VIEW_DISTANCE)
-        distance = MAX_VIEW_DISTANCE;
-
-    return distance;
+    return std::max(mProperties.getViewDistance(), MIN_VIEW_DISTANCE);
 }
 
 size_t ServerNetworkHandler::_getChunkWorkerThreadCount() const {
     int configured = mProperties.getMaxThreads();
 
     if (configured <= 0) {
-        const unsigned hardware = std::thread::hardware_concurrency();
-        configured = hardware == 0 ? 2 : (int) (hardware > 3 ? hardware - 2 : 1);
+        const unsigned cores = CpuCount::usable();
+        configured = (int) (cores > 3 ? cores - 2 : 1);
     }
 
     if (configured < 1)
@@ -590,8 +586,11 @@ std::string ServerNetworkHandler::getMotd() const {
 }
 
 void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::string &gameVersion) {
-    mAnnouncement.mProtocolVersion = protocolVersion;
-    mAnnouncement.mGameVersion = gameVersion;
+    {
+        std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+        mAnnouncement.mProtocolVersion = protocolVersion;
+        mAnnouncement.mGameVersion = gameVersion;
+    }
 
     if (mIsListening)
         _updateServerAnnouncement();
@@ -599,6 +598,7 @@ void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::st
 
 void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mProperties = properties;
+    _updateDiscoveryProperties();
     mPlayerIdleTimeoutTicks = (int64_t) mProperties.getPlayerIdleTimeout() * TICKS_PER_MINUTE;
 
     // encryption is what proves a client holds the key in its token: without it a login seen once replays
@@ -624,14 +624,14 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
                 std::lock_guard<std::mutex> lock(mAnnouncementMutex);
                 data.mServerName = mAnnouncement.mServerName;
                 data.mMaxPlayerCount = mAnnouncement.mMaxPlayers;
+                data.mProtocol = mAnnouncement.mProtocolVersion;
+                data.mGameVersion = mAnnouncement.mGameVersion;
+                data.mLevelName = mDiscoveryProperties.mLevelName;
+                data.mGameType = (int32_t) mDiscoveryProperties.mGameType;
+                data.mAcceptsOnlineAuth = mDiscoveryProperties.mOnlineMode;
+                data.mAcceptsSelfSignedAuth = !mDiscoveryProperties.mOnlineMode;
             }
-            data.mProtocol = mAnnouncement.mProtocolVersion;
-            data.mGameVersion = mAnnouncement.mGameVersion;
-            data.mLevelName = mProperties.getLevelName();
-            data.mGameType = (int32_t) mProperties.getGameType();
             data.mPlayerCount = getActivePlayerCount();
-            data.mAcceptsOnlineAuth = mProperties.getOnlineMode();
-            data.mAcceptsSelfSignedAuth = !mProperties.getOnlineMode();
             return data;
         });
 
@@ -677,12 +677,13 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
-    _openWorld(properties.getLevelName(), levelSeed);
+    mStartingWorlds.clear();
+    _openWorld(properties.getLevelName(), levelSeed, true);
     loadScoreboard();
 
     for (const std::string &name: properties.getAutoloadWorlds()) {
         if (mWorlds.find(name) == nullptr && WorldManager::isValidName(name))
-            _openWorld(name, randomSeed());
+            _openWorld(name, randomSeed(), true);
     }
 
     _logPackStack();
@@ -737,6 +738,7 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         mPluginManager->loadAll(ServerPaths::file("plugins"));
     CustomContentRegistry::getInstance().freeze();
     mPluginManager->enableAll();
+    CustomContentRegistry::getInstance().freezeItems();
 
     if (!mNetworkHandler->host(definition)) {
         LOG_ERROR(LogAreaID::Network, "Failed to bind UDP port %u", definition.mPort);
@@ -750,6 +752,12 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         mAnnouncement.mMaxPlayers = mMaxPlayers;
     }
     mIsListening = true;
+
+    // the startup worlds already exist when plugins register their listeners
+    for (const auto &[id, created]: std::exchange(mStartingWorlds, {})) {
+        if (World *world = mWorlds.find(id))
+            _dispatchWorldOpen(*world, created);
+    }
 
     _updateServerAnnouncement();
     _queueSpawnWarmup();
@@ -787,6 +795,12 @@ void ServerNetworkHandler::_loadScripts() {
 
     mScriptEngine.loadPacks(mBehaviorPacks.getPacks());
     mScriptEngine.startup();
+    // after the startup: a function may run a command a script registered there
+    mFunctions.load(mBehaviorPacks.getPacks(), mCommands);
+}
+
+int ServerNetworkHandler::getCommandChainLimit() {
+    return getLevel().getGameRules().getInt("maxcommandchainlength");
 }
 
 void ServerNetworkHandler::stopServerListening() {
@@ -921,6 +935,7 @@ void ServerNetworkHandler::tick(bool paused) {
             }
             player.getAcknowledgements().flush(*this, entry.first);
         }
+        _loadDeferredChunks();
         return;
     }
 
@@ -988,15 +1003,17 @@ void ServerNetworkHandler::tick(bool paused) {
     mProfiler.endSection(ProfilerSection::ConsoleCommands);
 
     mPluginManager->tick();
-    if (mPluginManager->hasSubscribers(FALCON_EVENT_SERVER_TICK)) {
-        PluginEvent tickEvent;
-        tickEvent.mType = FALCON_EVENT_SERVER_TICK;
-        tickEvent.mTick = (uint64_t) mCurrentTick;
-        mPluginManager->dispatch(tickEvent);
+    EventSignal<ServerTickAfterEvent> &serverTick = mEventBus.after().mServerTick;
+    if (serverTick.hasSubscribers()) {
+        ServerTickAfterEvent tickEvent((uint64_t) mCurrentTick);
+        serverTick.emit(tickEvent);
     }
 
+    mNetworkHandler->cork();
     mNetworkHandler->runEvents();
+    mNetworkHandler->uncork();
     _removeSimulatedPlayers();
+    _reserveSimulatedSpawns();
     mPlayerIndexDirty = true;
 
     for (World *world: mWorlds.getWorlds())
@@ -1004,12 +1021,18 @@ void ServerNetworkHandler::tick(bool paused) {
     _tickSpawnWarmup();
 
     mProfiler.beginSection(ProfilerSection::Players);
+    mNetworkHandler->cork();
     for (auto &entry: mPlayers) {
         if (entry.second.isSimulated())
             _tickSimulatedPlayer(entry.second);
         _tickPlayer(entry.second);
     }
+    mNetworkHandler->uncork();
     mProfiler.endSection(ProfilerSection::Players);
+
+    mProfiler.beginSection(ProfilerSection::ChunkStreaming);
+    _loadDeferredChunks();
+    mProfiler.endSection(ProfilerSection::ChunkStreaming);
 
     mProfiler.beginSection(ProfilerSection::BlockActors);
     for (Level *level: getLevels())
@@ -1023,10 +1046,12 @@ void ServerNetworkHandler::tick(bool paused) {
     tickActors();
     runQueuedActorCommands();
     updateActorVisibility();
+    mNetworkHandler->cork();
     updatePlayerVisibility();
 
     for (auto &entry: mPlayers)
         broadcastPlayerMove(entry.second);
+    mNetworkHandler->uncork();
 
     for (World *world: mWorlds.getWorlds()) {
         _processChunkUnloads(world->getOverworld());
@@ -1064,7 +1089,15 @@ void ServerNetworkHandler::tick(bool paused) {
     _updateServerAnnouncement();
     mProfiler.endSection(ProfilerSection::Announcement);
 
+    if (!mFunctions.getTickFunctions().empty()) {
+        // pack content: game director level, never the console's
+        ServerCommandOrigin server(this, CommandPermission::GameDirectors);
+        mFunctions.tick(server, mCommands, getCommandChainLimit());
+    }
+
+    mNetworkHandler->cork();
     mScriptEngine.tick(mCurrentTick);
+    mNetworkHandler->uncork();
 
     std::vector<std::pair<NetworkIdentifier, std::string>> timedOut;
     std::vector<NetworkIdentifier> idle;
@@ -1151,13 +1184,26 @@ void ServerNetworkHandler::tick(bool paused) {
 void ServerNetworkHandler::_updateJoinBurst() {
     // bounded in time: a client stalling before its spawn must not slow the others for good
     mJoinBurst = false;
+    mAwaitingTerrain = false;
     for (const auto &entry: mPlayers) {
         const ServerPlayer &player = entry.second;
+        if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition()
+            && !player.hasSpawnChunksReady())
+            mAwaitingTerrain = true;
         if (player.getLoginState() >= ServerPlayer::LoginState::LoggedIn && !player.hasSpawnChunksReady()
-            && mCurrentTick - player.getLoggedInTick() < JOIN_BURST_TICKS) {
+            && mCurrentTick - player.getLoggedInTick() < JOIN_BURST_TICKS)
             mJoinBurst = true;
-            return;
-        }
+    }
+}
+
+void ServerNetworkHandler::_loadDeferredChunks() {
+    if (!mAwaitingTerrain)
+        return;
+
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition())
+            ChunkStreamHandler::loadDeferred(*this, player);
     }
 }
 
@@ -1214,6 +1260,13 @@ void ServerNetworkHandler::_updateServerAnnouncement() {
     mAnnouncement.mCurrentPlayers = getActivePlayerCount();
 }
 
+void ServerNetworkHandler::_updateDiscoveryProperties() {
+    std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+    mDiscoveryProperties.mLevelName = mProperties.getLevelName();
+    mDiscoveryProperties.mGameType = mProperties.getGameType();
+    mDiscoveryProperties.mOnlineMode = mProperties.getOnlineMode();
+}
+
 bool ServerNetworkHandler::onValidateIncomingConnection(const NetworkIdentifier &id) {
     (void) id;
     return true;
@@ -1235,17 +1288,11 @@ bool ServerNetworkHandler::isServerFull(const NetworkIdentifier &joining) const 
 void ServerNetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id, uint16_t mtuSize) {
     LOG_INFO(LogAreaID::Network, "Player connected: %s", id.toString().c_str());
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_CONNECTION_OPEN)) {
-        const bool rakNet = id.getType() == NetworkIdentifier::Type::RakNet;
-        PluginEvent open;
-        open.mType = FALCON_EVENT_CONNECTION_OPEN;
-        open.mCancellable = true;
-        open.mAddress = id.getAddress();
-        open.mTransport = rakNet ? "raknet" : "nethernet";
-        open.mClientGuid = rakNet ? id.getGuid().g : 0;
-        open.mMtuSize = mtuSize;
-        plugins->dispatch(open);
-        if (open.mCancelled) {
+    EventSignal<ConnectionOpenBeforeEvent> &connectionOpen = mEventBus.before().mConnectionOpen;
+    if (connectionOpen.hasSubscribers()) {
+        ConnectionOpenBeforeEvent open(id, mtuSize);
+        connectionOpen.emit(open);
+        if (open.isCancelled()) {
             LOG_INFO(LogAreaID::Network, "Connection from %s was refused by a plugin", id.getAddress().c_str());
             mNetworkHandler->closeConnection(id);
         }
@@ -1254,16 +1301,27 @@ void ServerNetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id, 
 
 void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
                                               const std::string &message) {
-    (void) message;
-
     mRateLimiters.erase(id);
     mClientProbes.forget(id);
+    std::string leaveReason = message.empty() ? std::string("Client disconnect") : message;
+    if (const auto kicked = mLeaveReasons.find(id); kicked != mLeaveReasons.end()) {
+        leaveReason = kicked->second;
+        mLeaveReasons.erase(kicked);
+    }
     for (size_t index = 0; index < mPendingRemovals.size();) {
         if (mPendingRemovals[index].mId == id)
             mPendingRemovals.erase(mPendingRemovals.begin() + (long) index);
         else
             index++;
     }
+    // a reconnect from the same address and port must not log in with this login
+    for (auto it = mLoginsAwaitingKeys.begin(); it != mLoginsAwaitingKeys.end();) {
+        if (it->mId == id)
+            it = mLoginsAwaitingKeys.erase(it);
+        else
+            ++it;
+    }
+    mScriptEngine.forgetPlayerJoins(id);
 
     ServerPlayer *player = _getPlayer(id);
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
@@ -1287,7 +1345,13 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         EnderChestInventoryStore::getInstance().remove(player->getUniqueId());
 
         if (player->isSpawned()) {
-            broadcastTranslation("multiplayer.player.left", {player->getName()});
+            PlayerLeaveMessageBeforeEvent leaveMessage(*player, "§e" + player->getName() + " left the game",
+                                                       leaveReason);
+            mEventBus.before().mPlayerLeaveMessage.emit(leaveMessage);
+            if (leaveMessage.mDefault)
+                broadcastTranslation("multiplayer.player.left", {player->getName()});
+            else if (!leaveMessage.mMessage.empty())
+                broadcastSystemMessage(leaveMessage.mMessage);
             _removeFromPlayerList(*player);
 
             PlayerLeaveAfterEvent leaveEvent(player->getName(), player);
@@ -1379,6 +1443,11 @@ void ServerNetworkHandler::closeAllForms(ServerPlayer &player) {
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
 
     // no form id closes every data-driven screen; each comes back as ProgrammaticCloseAll
+    auto playerScreens = mDataDrivenScreens.find(player.getNetworkIdentifier());
+    if (playerScreens != mDataDrivenScreens.end()) {
+        for (auto &entry: playerScreens->second)
+            entry.second.mCloseRequested = true;
+    }
     ClientboundDataDrivenUICloseScreenPacket closeScreens;
     mNetworkHandler->send(player.getNetworkIdentifier(), closeScreens, mCodecContext);
 }
@@ -1396,9 +1465,12 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
     try {
         std::string received;
         const std::string *source = &data;
-        if (mPluginManager->hasSubscribers(FALCON_EVENT_DATA_PACKET_RECEIVE)) {
+        EventSignal<DataPacketReceiveBeforeEvent> &packetReceive = mEventBus.before().mDataPacketReceive;
+        if (packetReceive.hasSubscribers()) {
             received = data;
-            if (!PluginPackets::onReceive(*mPluginManager, id, received))
+            DataPacketReceiveBeforeEvent receiveEvent(id, received);
+            packetReceive.emit(receiveEvent);
+            if (receiveEvent.isCancelled())
                 return;
             source = &received;
         }
@@ -1489,6 +1561,10 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
         rates[(size_t) RateLimitedPacket::FormResponse] = mProperties.getMaxFormResponsesPerSecond();
         rates[(size_t) RateLimitedPacket::Movement] = mProperties.getMaxMovementPacketsPerSecond();
         rates[(size_t) RateLimitedPacket::ViolationWarning] = 1;
+        // relayed to every viewer: one a tick covers a held swing; an emote plays for seconds
+        rates[(size_t) RateLimitedPacket::Sound] = 20;
+        rates[(size_t) RateLimitedPacket::Animate] = 20;
+        rates[(size_t) RateLimitedPacket::Emote] = 2;
         limiter = mRateLimiters.emplace(id, PacketRateLimiter(rates)).first;
     }
 
@@ -1660,6 +1736,9 @@ ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
 void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectReason reason,
                                        const std::string &message) {
     ServerPlayer *simulated = _getPlayer(id);
+    // what the leave event gives as the reason, once the connection closes
+    if (!message.empty() && simulated != nullptr)
+        mLeaveReasons[id] = message;
     if (simulated != nullptr && simulated->isSimulated()) {
         removeSimulatedPlayer(id);
         return;
@@ -1762,8 +1841,13 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ClientToSer
     LoginHandler::handleClientToServerHandshake(*this, id, *player);
 }
 
+void ServerNetworkHandler::onEncryptionEnabled(const NetworkIdentifier &id, bool usesAccountKey) {
+    if (ServerPlayer *player = _getPlayer(id))
+        LoginHandler::encryptionEnabled(*player, usesAccountKey);
+}
+
 void ServerNetworkHandler::onConnectionFailed(const NetworkIdentifier &id) {
-    LOG_WARN(LogAreaID::Network, "%s sent a batch with an invalid encryption checksum", id.getAddress().c_str());
+    LOG_WARN(LogAreaID::Network, "Closing %s after a packet transport failure", id.getAddress().c_str());
     _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
 }
 
@@ -1797,8 +1881,39 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     mNetworkHandler->sendToMany(recipients, entityData, mCodecContext);
 }
 
+void ServerNetworkHandler::updatePlayerNameTag(ServerPlayer &player, std::string nameTag) {
+    player.setPluginNameTag(std::move(nameTag));
+    if (isTransportReady() && player.isSpawned())
+        _sendEntityData(player);
+}
+
 EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     EntityDataMap metadata;
+
+    if (player.hasScaleOverride()) {
+        constexpr int32_t BOUNDING_BOX_WIDTH = 53;
+        constexpr int32_t BOUNDING_BOX_HEIGHT = 54;
+        const std::pair<int32_t, float> dimensions[] = {
+            {ActorFlags::SCALE_DATA_ID, player.getScale()},
+            {BOUNDING_BOX_WIDTH, player.getBodyWidth()},
+            {BOUNDING_BOX_HEIGHT, player.getBodyHeight()},
+        };
+        for (const auto &[id, value]: dimensions) {
+            EntityDataEntry entry;
+            entry.mId = id;
+            entry.mFormat = EntityDataFormat::Float;
+            entry.mFloatValue = value;
+            metadata.mEntries.push_back(entry);
+        }
+    }
+
+    if (const auto &nameTag = player.getPluginNameTag()) {
+        EntityDataEntry name;
+        name.mId = 4;
+        name.mFormat = EntityDataFormat::String;
+        name.mStringValue = *nameTag;
+        metadata.mEntries.push_back(std::move(name));
+    }
 
     EntityDataEntry flags;
     flags.mId = ActorFlags::FLAGS_DATA_ID;
@@ -1917,15 +2032,15 @@ void ServerNetworkHandler::queueConsoleCommand(const std::string &commandLine) {
 }
 
 void ServerNetworkHandler::executeConsoleCommand(std::string commandLine) {
-    PluginEvent event;
-    event.mType = FALCON_EVENT_SERVER_COMMAND;
-    event.mCancellable = true;
-    event.mMessage = &commandLine;
-    mPluginManager->dispatch(event);
-    if (!event.mCancelled) {
-        ServerCommandOrigin sender(this);
-        mCommands.dispatch(sender, commandLine);
+    EventSignal<ServerCommandBeforeEvent> &serverCommand = mEventBus.before().mServerCommand;
+    if (serverCommand.hasSubscribers()) {
+        ServerCommandBeforeEvent event(commandLine);
+        serverCommand.emit(event);
+        if (event.isCancelled())
+            return;
     }
+    ServerCommandOrigin sender(this);
+    mCommands.dispatch(sender, commandLine);
 }
 
 void ServerNetworkHandler::postToMainThread(std::function<void()> task) {
@@ -1991,10 +2106,7 @@ void ServerNetworkHandler::_broadcastEntityEvent(const Actor &entity, uint8_t ev
     event.mEventData = eventData;
     event.mHasFirePosition = false;
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.second.getNetworkIdentifier(), event, mCodecContext);
-    }
+    sendToActorViewers(entity, event, true);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActionPacket &packet) {
@@ -2043,9 +2155,15 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
         case PlayerActionType::StopSleep:
             stopSleep(*player);
             return;
-        case PlayerActionType::StartItemUseOn:
-            mScriptEngine.onItemStartUseOn(*player, packet.mBlockPosition, packet.mFace);
+        case PlayerActionType::StartItemUseOn: {
+            // scripts read the block: one in reach and loaded, peeked so a far position loads nothing
+            const Vector3i &position = packet.mBlockPosition;
+            if (!BlockActionHandler::canInteractWithBlock(*player, position)
+                || getLevelFor(*player).peekBlockPtr(position.x, position.y, position.z) == nullptr)
+                return;
+            mScriptEngine.onItemStartUseOn(*player, position, packet.mFace);
             return;
+        }
         case PlayerActionType::StopItemUseOn:
             mScriptEngine.onItemStopUseOn(*player, packet.mBlockPosition);
             return;
@@ -2085,24 +2203,22 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetPlayerGa
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId()
-        || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
+        || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256 || !_allowPacket(id, RateLimitedPacket::Emote))
         return;
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EMOTE)) {
-        std::string emoteId = packet.mEmoteId;
-        PluginEvent emoteEvent;
-        emoteEvent.mType = FALCON_EVENT_PLAYER_EMOTE;
-        emoteEvent.mCancellable = true;
-        emoteEvent.mPlayer = player;
-        emoteEvent.mMessage = &emoteId;
-        plugins->dispatch(emoteEvent);
-        if (emoteEvent.mCancelled)
+    std::string emoteId = packet.mEmoteId;
+    EventSignal<PlayerEmoteBeforeEvent> &playerEmote = mEventBus.before().mPlayerEmote;
+    if (playerEmote.hasSubscribers()) {
+        PlayerEmoteBeforeEvent emoteEvent(*player, emoteId);
+        playerEmote.emit(emoteEvent);
+        if (emoteEvent.isCancelled() || emoteId.empty() || emoteId.size() > 256)
             return;
     }
 
-    mScriptEngine.onPlayerEmote(*player, packet.mEmoteId);
+    mScriptEngine.onPlayerEmote(*player, emoteId);
 
     EmotePacket emote = packet;
+    emote.mEmoteId = std::move(emoteId);
     emote.mRuntimeActorId = player->getRuntimeId();
     emote.mXuid = player->getXuid();
 
@@ -2122,19 +2238,50 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const AnimatePack
         return;
     if (packet.mAction != AnimatePacket::Action::SwingArm && !player->isRiding())
         return;
+    if (!_allowPacket(id, RateLimitedPacket::Animate))
+        return;
 
     const Vector3f &position = player->getPosition();
     BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), position, packet, player);
+}
+
+namespace {
+    // a Falcon choice, not a game value: a little past the creative block reach
+    const float SOUND_RELAY_RADIUS = 16.0f;
+
+    // a position the client named, pulled back onto the sphere around the origin; a non-finite one is the origin
+    Vector3f clampToRadius(const Vector3f &position, const Vector3f &origin, float radius) {
+        const float dx = position.x - origin.x;
+        const float dy = position.y - origin.y;
+        const float dz = position.z - origin.z;
+        const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (!std::isfinite(distance))
+            return origin;
+        if (distance <= radius)
+            return position;
+        const float scale = radius / distance;
+        return Vector3f(origin.x + dx * scale, origin.y + dy * scale, origin.z + dz * scale);
+    }
 }
 
 // sounds the client plays itself (attacks, swimming, eating...) reach the players around it
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LevelSoundEventPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned() || packet.mSound.empty() || packet.mSound.size() > 256
-        || packet.mActorType.size() > 256)
+        || packet.mActorType.size() > 256 || !_allowPacket(id, RateLimitedPacket::Sound))
         return;
+
+    // a client only makes sounds near itself, as itself; others hear them at their usual falloff
+    const Vector3f &origin = player->getPosition();
+    LevelSoundEventPacket sound = packet;
+    sound.mPosition = clampToRadius(packet.mPosition, origin, SOUND_RELAY_RADIUS);
+    if (sound.mHasFirePosition)
+        sound.mFirePosition = clampToRadius(packet.mFirePosition, origin, SOUND_RELAY_RADIUS);
+    if (sound.mActorUniqueId != -1)
+        sound.mActorUniqueId = player->getUniqueId();
+    sound.mDisableRelativeVolume = false;
     // sent to whoever views the sender, not the position it names: a client cannot reach far players with it
-    BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), player->getPosition(), packet, player);
+    BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), origin, sound, player);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetDefaultGameTypePacket &packet) {
@@ -2292,6 +2439,13 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinP
         && currentSkin.mSkinData.mData == skin.mSkinData.mData)
         return;
 
+    EventSignal<PlayerSkinChangeBeforeEvent> &skinChange = mEventBus.before().mPlayerSkinChange;
+    if (skinChange.hasSubscribers()) {
+        PlayerSkinChangeBeforeEvent event(*player, currentSkin, skin);
+        skinChange.emit(event);
+        if (event.isCancelled())
+            return;
+    }
     player->setSkin(skin);
     player->markSkinChanged();
 
@@ -2429,7 +2583,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     Tag incoming = sanitizedSignData(packet.mData, packet.mBlockPosition,
                                      statePtr->mName.find("hanging") != std::string::npos);
     bool cancelled = false;
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_SIGN_CHANGE)) {
+    EventSignal<SignChangeBeforeEvent> &signChange = mEventBus.before().mSignChange;
+    if (signChange.hasSubscribers()) {
         const char *const sides[] = {"FrontText", "BackText"};
         for (const char *side: sides) {
             Tag *sideData = incoming.get(side);
@@ -2437,16 +2592,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
                 continue;
 
             std::string text = sideData->getString("Text");
-            PluginEvent signEvent;
-            signEvent.mType = FALCON_EVENT_SIGN_CHANGE;
-            signEvent.mCancellable = true;
-            signEvent.mPlayer = player;
-            signEvent.mLevel = &level;
-            signEvent.mBlockPosition = packet.mBlockPosition;
-            signEvent.mState = side == sides[0];
-            signEvent.mMessage = &text;
-            plugins->dispatch(signEvent);
-            if (signEvent.mCancelled) {
+            SignChangeBeforeEvent signEvent(*player, level, packet.mBlockPosition, side == sides[0], text);
+            signChange.emit(signEvent);
+            if (signEvent.isCancelled()) {
                 cancelled = true;
                 break;
             }
@@ -2495,7 +2643,13 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     if (statePtr == nullptr)
         return;
     const BlockState state = *statePtr;
-    const std::string pickIdentifier = BlockPickItem::identifierFor(state.mName);
+    std::string pickIdentifier = BlockPickItem::identifierFor(state.mName);
+    const BlockActor *blockActor = level.getBlockActors().find(packet.mBlockPosition);
+    // the game's flower pot gives its plant, and a pot only when empty
+    const auto *pot = dynamic_cast<const FlowerPotBlockActor *>(blockActor);
+    const bool pickedPlant = pot != nullptr && pot->hasPlant();
+    if (pickedPlant)
+        pickIdentifier = BlockPickItem::identifierFor(pot->getPlant().mName);
     if (pickIdentifier.empty())
         return;
 
@@ -2509,13 +2663,19 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     picked.mBlockDefinition = std::move(blockDefinition);
     picked.mCount = 1;
 
-    const BlockActor *blockActor = level.getBlockActors().find(packet.mBlockPosition);
-    if (blockActor != nullptr) {
+    if (blockActor != nullptr && !pickedPlant) {
         BlockPickItem::applyActorItemData(picked, *blockActor);
         if (packet.mAddUserData)
             BlockPickItem::attachBlockData(picked, *blockActor);
     }
 
+    EventSignal<PlayerBlockPickBeforeEvent> &blockPick = mEventBus.before().mPlayerBlockPick;
+    if (blockPick.hasSubscribers()) {
+        PlayerBlockPickBeforeEvent event(*player, level, packet.mBlockPosition, picked);
+        blockPick.emit(event);
+        if (event.isCancelled())
+            return;
+    }
     putPickedItem(*player, std::move(picked), packet.mHotbarSlot);
 }
 
@@ -2524,35 +2684,55 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
     if (player == nullptr || !player->isSpawned() || player->isDead())
         return;
 
+    Actor *target = nullptr;
+    ItemStack picked;
     for (const std::unique_ptr<ItemActor> &actor: mItemEntities) {
-        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId || !actor->sharesLevelWith(*player))
+        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId)
             continue;
-
-        const Vector3f position = player->getPosition();
-        const Vector3f entityPosition = actor->getPosition();
-        const float dx = position.x - entityPosition.x;
-        const float dy = position.y - entityPosition.y;
-        const float dz = position.z - entityPosition.z;
-        if (dx * dx + dy * dy + dz * dz > 10000.0f)
-            return;
-
-        putPickedItem(*player, actor->getItem(), packet.mHotbarSlot);
-        return;
+        target = actor.get();
+        picked = actor->getItem();
+        break;
     }
+    if (target == nullptr) {
+        ServerActor *actor = getActorByRuntimeId(packet.mRuntimeActorId);
+        if (actor == nullptr || actor->isDead())
+            return;
+        target = actor;
+        picked = createItemStack(actor->getPickItem(), 1);
+    }
+    if (picked.isAir() || !target->sharesLevelWith(*player))
+        return;
+
+    const Vector3f position = player->getPosition();
+    const Vector3f entityPosition = target->getPosition();
+    const float dx = position.x - entityPosition.x;
+    const float dy = position.y - entityPosition.y;
+    const float dz = position.z - entityPosition.z;
+    if (dx * dx + dy * dy + dz * dz > 10000.0f)
+        return;
+
+    EventSignal<PlayerEntityPickBeforeEvent> &entityPick = mEventBus.before().mPlayerEntityPick;
+    if (entityPick.hasSubscribers()) {
+        PlayerEntityPickBeforeEvent event(*player, *target, picked);
+        entityPick.emit(event);
+        if (event.isCancelled())
+            return;
+    }
+    putPickedItem(*player, std::move(picked), packet.mHotbarSlot);
 }
 
 ItemActor *ServerNetworkHandler::dropItem(Level &level, const Vector3f &position, const ItemStack &item,
                                           const Vector3f &motion, int pickupDelay) {
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_SPAWN)) {
-        ItemStack spawned = item;
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ITEM_SPAWN;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mItem = &spawned;
-        event.mPosition = position;
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    if (mDropCapture != nullptr) {
+        if (!item.isAir() && item.mCount > 0)
+            mDropCapture->mItems.push_back(item);
+        return nullptr;
+    }
+    EventSignal<ItemSpawnBeforeEvent> &itemSpawn = mEventBus.before().mItemSpawn;
+    if (itemSpawn.hasSubscribers()) {
+        ItemSpawnBeforeEvent event(level, position, item);
+        itemSpawn.emit(event);
+        if (event.isCancelled())
             return nullptr;
     }
     return ItemActorHandler::dropItem(*this, level, position, item, motion, pickupDelay);
@@ -2665,6 +2845,7 @@ void ServerNetworkHandler::setDefaultGameType(GameType gameType) {
     static const char *const NAMES[] = {"survival", "creative", "adventure"};
     const int index = (int) gameType;
     mProperties.setProperty("gamemode", index >= 0 && index < 3 ? NAMES[index] : "spectator");
+    _updateDiscoveryProperties();
 }
 
 void ServerNetworkHandler::setDifficulty(const std::string &difficulty) {
@@ -2684,6 +2865,16 @@ void ServerNetworkHandler::setCommandsEnabled(bool enabled) {
 
 void ServerNetworkHandler::changeDifficulty(Difficulty difficulty) {
     static const char *const NAMES[] = {"peaceful", "easy", "normal", "hard"};
+    const Difficulty previous = mProperties.getDifficulty();
+    EventSignal<DifficultyChangeAfterEvent> &difficultyChange = mEventBus.after().mDifficultyChange;
+    if (difficultyChange.hasSubscribers()) {
+        for (World *world: mWorlds.getWorlds()) {
+            for (Level *level: world->getLevels()) {
+                DifficultyChangeAfterEvent event(*level, previous, difficulty);
+                difficultyChange.emit(event);
+            }
+        }
+    }
     setDifficulty(NAMES[(size_t) difficulty]);
 
     SetDifficultyPacket packet;
@@ -2695,8 +2886,14 @@ void ServerNetworkHandler::changeDifficulty(Difficulty difficulty) {
 }
 
 void ServerNetworkHandler::changeWorldSpawn(Level &level, const Vector3i &spawn) {
+    const Vector3i previous = level.getSpawnPosition();
     level.setSpawnPosition(spawn);
     level.saveLevelDat();
+    EventSignal<WorldSpawnChangeAfterEvent> &spawnChange = mEventBus.after().mWorldSpawnChange;
+    if (spawnChange.hasSubscribers()) {
+        WorldSpawnChangeAfterEvent event(level, previous);
+        spawnChange.emit(event);
+    }
 
     SetSpawnPositionPacket packet;
     packet.mSpawnType = SetSpawnPositionPacket::Type::WorldSpawn;
@@ -2792,8 +2989,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
 
     if (granted > maximum)
         granted = maximum;
-    if (granted < 1)
-        granted = 1;
+    if (granted < MIN_VIEW_DISTANCE)
+        granted = MIN_VIEW_DISTANCE;
 
     ChunkRadiusUpdatedPacket radius;
     radius.mRadius = granted;
@@ -2809,7 +3006,16 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
     }
     player->setServerBuildRatio(ratio);
 
+    const int oldDistance = player->getChunkStreamState().mRadius;
     player->getChunkStreamState().mRadius = granted;
+    if (oldDistance != granted) {
+        EventSignal<PlayerViewDistanceChangeAfterEvent> &viewDistanceChange =
+                mEventBus.after().mPlayerViewDistanceChange;
+        if (viewDistanceChange.hasSubscribers()) {
+            PlayerViewDistanceChangeAfterEvent event(*player, oldDistance, granted);
+            viewDistanceChange.emit(event);
+        }
+    }
     ChunkStreamHandler::handleViewDistanceChange(*this, *player);
     _sendChunks(*player);
     _checkTerrainReady(*player);
@@ -2992,17 +3198,17 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
              StringUtil::printable(packet.mCommand, 512).c_str());
 
     std::string commandLine = packet.mCommand;
-    PluginEvent commandEvent;
-    commandEvent.mType = FALCON_EVENT_PLAYER_COMMAND;
-    commandEvent.mCancellable = true;
-    commandEvent.mPlayer = player;
-    commandEvent.mMessage = &commandLine;
-    mPluginManager->dispatch(commandEvent);
-    if (commandEvent.mCancelled)
-        return;
+    EventSignal<PlayerCommandBeforeEvent> &playerCommand = mEventBus.before().mPlayerCommand;
+    if (playerCommand.hasSubscribers()) {
+        PlayerCommandBeforeEvent commandEvent(*player, commandLine);
+        playerCommand.emit(commandEvent);
+        if (commandEvent.isCancelled())
+            return;
+    }
 
     PlayerCommandOrigin sender(*this, *player, packet.mOrigin);
-    mCommands.dispatch(sender, commandLine);
+    sender.collectOutput();
+    sender.sendCollectedOutput(mCommands.dispatch(sender, commandLine));
 }
 
 void ServerNetworkHandler::onReceiveIPSupport(RakPeerHelper::IPSupport support) {

@@ -1,5 +1,6 @@
 #include "Server/Commands/CommandOrigin.h"
 
+#include "Server/Commands/Command.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Localization.h"
 
@@ -35,4 +36,10 @@ bool CommandOrigin::getSourceBlock(Level *&, Vector3i &) {
 
 void CommandOrigin::sendError(const std::string &message) {
     sendMessage(message);
+}
+
+bool CommandOrigin::canExecuteCommand(const Command &command) const {
+    if (command.managesServer() && !canManageServer())
+        return false;
+    return getCommandPermission() >= command.getRequiredPermission();
 }

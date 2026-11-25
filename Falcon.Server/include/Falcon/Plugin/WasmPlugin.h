@@ -29,6 +29,7 @@ public:
         BlockBreak,
         EntityTick,
         EntityInteract,
+        WindowClose,
         Count
     };
 
@@ -46,6 +47,15 @@ public:
         std::string mName;
         std::string mResponse;
     };
+
+    struct WindowClose {
+        WasmPlugin &mPlugin;
+        uint32_t mHandler;
+    };
+
+    std::shared_ptr<WindowClose> addWindowClose(uint32_t handler);
+
+    std::shared_ptr<WindowClose> takeWindowClose(WindowClose *close);
 
     WasmPlugin(LoadedPlugin &plugin, wasmtime_store_t *store, uint64_t fuel, uint64_t diskLimit = 0);
 
@@ -207,6 +217,7 @@ private:
     FalconEvent *mEvent = nullptr;
     FalconCommandSender *mSender = nullptr;
 
+    std::unordered_map<WindowClose *, std::shared_ptr<WindowClose>> mWindowCloses;
     std::vector<std::unique_ptr<Binding>> mBindings;
     std::unordered_map<uint64_t, std::unique_ptr<Binding>> mTasks;
 

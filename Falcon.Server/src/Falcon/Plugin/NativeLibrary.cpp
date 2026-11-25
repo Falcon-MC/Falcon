@@ -1,5 +1,7 @@
 #include "Falcon/Plugin/NativeLibrary.h"
 
+#include <filesystem>
+
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -16,7 +18,12 @@ bool NativeLibrary::open(const std::string &path, std::string &error) {
     close();
 
 #if defined(_WIN32)
-    mHandle = (void *) LoadLibraryA(path.c_str());
+    // the dlls a library needs are looked for in its own folder first, which only works from a full path
+    std::error_code failure;
+    std::filesystem::path file = std::filesystem::absolute(path, failure);
+    if (failure)
+        file = path;
+    mHandle = (void *) LoadLibraryExW(file.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (mHandle == nullptr) {
         error = "LoadLibrary failed with error " + std::to_string(GetLastError());
         return false;

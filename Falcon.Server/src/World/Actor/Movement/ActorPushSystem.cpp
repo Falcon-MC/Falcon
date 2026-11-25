@@ -1,6 +1,7 @@
 #include "World/Actor/Movement/ActorPushSystem.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Misc/PaintingActor.h"
 #include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -9,6 +10,7 @@
 
 #include <cmath>
 #include <limits>
+#include <vector>
 
 namespace {
     const float PLAYER_WIDTH = 0.6f;
@@ -27,20 +29,30 @@ namespace {
 }
 
 AxisAlignedBB ActorPushSystem::boundingBoxOf(const ServerActor &actor) {
+    if (actor.hasTypeFlag(ActorTypeFlag::PaintingFlagComponent))
+        return static_cast<const PaintingActor &>(actor).getPaintingBounds();
     const ActorSize size = actor.getSize();
-    return boxAround(actor.getPosition(), size.mWidth, size.mHeight);
+    const float scale = actor.getCollisionScale();
+    if (scale == 1.0f)
+        return boxAround(actor.getPosition(), size.mWidth, size.mHeight);
+    // scaled around the middle: the feet rise by what the height loses on each side
+    Vector3f feet = actor.getPosition();
+    feet.y += size.mHeight * (1.0f - scale) * 0.5f;
+    return boxAround(feet, size.mWidth * scale, size.mHeight * scale);
 }
 
 AxisAlignedBB ActorPushSystem::boundingBoxOf(const Actor &actor) {
-    if (const ServerActor *serverActor = dynamic_cast<const ServerActor *>(&actor))
-        return boundingBoxOf(*serverActor);
+    // players and item actors are the only actors that are not server actors
+    if (actor.hasTypeFlag(ActorTypeFlag::PlayerComponent) || actor.hasTypeFlag(ActorTypeFlag::ItemActorFlagComponent))
+        return boxAround(actor.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
 
-    return boxAround(actor.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
+    return boundingBoxOf(static_cast<const ServerActor &>(actor));
 }
 
 Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &actor, const Vector3f &motion) {
     const AxisAlignedBB self = boundingBoxOf(actor).offset(motion.x, motion.y, motion.z);
-    const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+    const MobActor *mob = actor.hasTypeFlag(ActorTypeFlag::MobFlagComponent) ? &static_cast<const MobActor &>(actor)
+                                                                              : nullptr;
     const PushableByEntityPresets *presets = mob == nullptr ? nullptr : &mob->getPushPresets();
     if (presets != nullptr && presets->mPresets.empty())
         presets = nullptr;
@@ -52,6 +64,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
     float negativeZ = UNSET;
     bool touched = false;
     Vector3f kick(0.0f, 0.0f, 0.0f);
+    std::vector<int64_t> pushers;
 
     // the box or the ball reach first: the presets' filters only run for a pusher in contact
     const auto inContact = [&](const Actor &pusher, const AxisAlignedBB &box, float width) {
@@ -93,6 +106,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
 
         _accumulate(self, box, positiveX, negativeX, positiveZ, negativeZ);
         touched = true;
+        pushers.push_back(pusher.getUniqueId());
     };
 
     // box test before the virtual checks: getPhysics() on a mob resolves several definition components,
@@ -128,6 +142,9 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
         pushBy(player, box, PLAYER_WIDTH, player.getMotion());
     });
 
+    // told after the walk: a reaction may add or remove actors
+    for (const int64_t pusher: pushers)
+        actor.onPushedBy(owner, pusher);
     if (!touched)
         return kick;
 
