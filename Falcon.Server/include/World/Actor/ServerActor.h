@@ -195,6 +195,9 @@ public:
         (void) context;
     }
 
+    // the item a pick block on this actor gives; by default its spawn egg, which may not exist
+    virtual std::string getPickItem() const;
+
     // the minecraft:inventory a player can open: chest vehicles, chested and tamed mounts
     virtual Container *getEntityContainer() {
         return nullptr;

@@ -21,6 +21,10 @@ public:
 
     ArmorStandActor(uint64_t runtimeId, const std::string &identifier);
 
+    std::string getPickItem() const override {
+        return IDENTIFIER;
+    }
+
     ActorSize getSize() const override {
         return ActorSize{0.5f, 1.975f};
     }

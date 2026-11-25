@@ -155,7 +155,6 @@
 #include "World/Item/VanillaItems.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ChorusFruitItem.h"
-#include "World/Item/SpawnEggItem.h"
 #include "Core/NBT/NbtIo.h"
 
 #include <cmath>
@@ -2689,8 +2688,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
         if (actor == nullptr || actor->isDead())
             return;
         target = actor;
-        // a mob gives its spawn egg; an actor without one gives nothing
-        picked = createItemStack(SpawnEggItem::eggOf(actor->getIdentifier()), 1);
+        picked = createItemStack(actor->getPickItem(), 1);
     }
     if (picked.isAir() || !target->sharesLevelWith(*player))
         return;
