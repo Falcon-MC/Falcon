@@ -30,14 +30,13 @@ bool GoatHornItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
     player.startItemCooldown(item, owner.getCurrentTick());
     // the game holds the horn as an item use while it toots
     if (!player.getFlags().get(ActorFlag::UsingItem))
-        owner.startItemUse(player, item, getUseDuration());
+        owner.startItemUse(player, item, getUseDuration(item));
     return true;
 }
 
 // the game ends the use when its duration runs out, held or not
 void GoatHornItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                                int32_t elapsedTicks) const {
-    (void) item;
-    if (elapsedTicks >= getUseDuration())
+    if (elapsedTicks >= getUseDuration(item))
         owner.stopItemUse(player);
 }

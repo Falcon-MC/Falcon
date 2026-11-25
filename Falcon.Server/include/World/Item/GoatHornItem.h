@@ -18,7 +18,8 @@ public:
                      int32_t elapsedTicks) const override;
 
     // the toot is held for a second, the cooldown runs longer
-    int32_t getUseDuration() const override {
+    int32_t getUseDuration(const ItemStack &item) const override {
+        (void) item;
         return 20;
     }
 };
