@@ -23,10 +23,20 @@ void ChatHandler::broadcastChat(ServerNetworkHandler &owner, ServerPlayer &playe
     chat.mSourceName = style.mNamePrefix + player.getName() + style.mNameSuffix;
     chat.mMessage = style.mMessagePrefix + finalMessage;
 
+    const bool individualHooks = owner.getNetworkHandler().hasSendHook();
+    std::vector<NetworkIdentifier> recipients;
+    if (!individualHooks)
+        recipients.reserve(owner.getPlayers().size());
     for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned())
+        if (!entry.second.isSpawned())
+            continue;
+        if (individualHooks)
             owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), chat, owner.getCodecContext());
+        else
+            recipients.push_back(entry.second.getNetworkIdentifier());
     }
+    if (!individualHooks)
+        owner.getNetworkHandler().sendToMany(recipients, chat, owner.getCodecContext());
 
     PlayerChatAfterEvent after(player, finalMessage);
     owner.getEventBus().after().mChatSend.emit(after);

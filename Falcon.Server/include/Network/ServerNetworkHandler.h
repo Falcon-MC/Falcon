@@ -339,6 +339,8 @@ public:
     // to the players who have this one on screen: what a player wears or holds means nothing to the others
     void sendToPlayerViewers(const ServerPlayer &player, const Packet &packet, bool includeSelf);
 
+    void sendToActorViewers(const Actor &actor, const Packet &packet, bool includeSelf);
+
     // the few actors others stand on, from the index of the tick
     template <typename Visitor>
     void forEachCollidableActor(Visitor &&visit) {
@@ -975,6 +977,8 @@ public:
 
     void _sendPlayerRemove(ServerPlayer &viewer, const ServerPlayer &target);
 
+    void _invalidatePlayerVisibility(const ServerPlayer &viewer);
+
     void _broadcastEntityEvent(const Actor &entity, uint8_t eventId);
 
     void _broadcastEntityEvent(const Actor &entity, uint8_t eventId, int32_t eventData);
@@ -1366,6 +1370,21 @@ private:
     std::vector<ServerActor *> mCollidableActors;
     std::unordered_map<int64_t, std::vector<ServerPlayer *>> mPlayerIndex;
     std::unordered_map<uint64_t, ServerPlayer *> mPlayersByRuntimeId;
+    struct PlayerVisibilityState {
+        ServerPlayer *mPlayer = nullptr;
+        uint32_t mWorld = 0;
+        DimensionType mDimension = DimensionType::Overworld;
+        int32_t mChunkX = 0;
+        int32_t mChunkZ = 0;
+        bool mSpawned = false;
+        bool mPopulated = false;
+        bool mRefresh = false;
+        bool mDirty = false;
+        bool mSeen = false;
+        std::string mUuid;
+        size_t mVisibleCount = 0;
+    };
+    std::unordered_map<uint64_t, PlayerVisibilityState> mPlayerVisibility;
     bool mPlayerIndexDirty = true;
     int32_t mPlayerIndexWalks = 0;
     uint64_t mActorSetSerial = 0;

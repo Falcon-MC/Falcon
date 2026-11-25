@@ -1067,7 +1067,9 @@ void ServerNetworkHandler::tick(bool paused) {
         mPluginManager->dispatch(tickEvent);
     }
 
+    mNetworkHandler->cork();
     mNetworkHandler->runEvents();
+    mNetworkHandler->uncork();
     _removeSimulatedPlayers();
     _reserveSimulatedSpawns();
     mPlayerIndexDirty = true;
@@ -1077,11 +1079,13 @@ void ServerNetworkHandler::tick(bool paused) {
     _tickSpawnWarmup();
 
     mProfiler.beginSection(ProfilerSection::Players);
+    mNetworkHandler->cork();
     for (auto &entry: mPlayers) {
         if (entry.second.isSimulated())
             _tickSimulatedPlayer(entry.second);
         _tickPlayer(entry.second);
     }
+    mNetworkHandler->uncork();
     mProfiler.endSection(ProfilerSection::Players);
 
     mProfiler.beginSection(ProfilerSection::ChunkStreaming);
@@ -1100,10 +1104,12 @@ void ServerNetworkHandler::tick(bool paused) {
     tickActors();
     runQueuedActorCommands();
     updateActorVisibility();
+    mNetworkHandler->cork();
     updatePlayerVisibility();
 
     for (auto &entry: mPlayers)
         broadcastPlayerMove(entry.second);
+    mNetworkHandler->uncork();
 
     for (World *world: mWorlds.getWorlds()) {
         _processChunkUnloads(world->getOverworld());
@@ -1147,7 +1153,9 @@ void ServerNetworkHandler::tick(bool paused) {
         mFunctions.tick(server, mCommands, getCommandChainLimit());
     }
 
+    mNetworkHandler->cork();
     mScriptEngine.tick(mCurrentTick);
+    mNetworkHandler->uncork();
 
     std::vector<std::pair<NetworkIdentifier, std::string>> timedOut;
     std::vector<NetworkIdentifier> idle;
@@ -2158,10 +2166,7 @@ void ServerNetworkHandler::_broadcastEntityEvent(const Actor &entity, uint8_t ev
     event.mEventData = eventData;
     event.mHasFirePosition = false;
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.second.getNetworkIdentifier(), event, mCodecContext);
-    }
+    sendToActorViewers(entity, event, true);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActionPacket &packet) {
