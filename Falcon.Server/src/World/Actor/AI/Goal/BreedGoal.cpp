@@ -78,6 +78,11 @@ bool BreedGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (!mob.isInLove())
         return false;
 
+    const json::Value *breedable = mob.getComponent("minecraft:breedable");
+    const json::Value *allowSitting = breedable == nullptr ? nullptr : breedable->get("allow_sitting");
+    if (mob.isSitting() && (allowSitting == nullptr || !allowSitting->boolean(false)))
+        return false;
+
     const MobActor *partner = _findPartner(owner, mob);
     if (partner == nullptr)
         return false;
@@ -141,7 +146,10 @@ void BreedGoal::_breed(ServerNetworkHandler &owner, MobActor &mob, MobActor &par
     ServerActor *child = owner.spawnBabyActor(level, babyType, mob.getPosition(), BABY_SCALE);
     if (MobActor *childMob = dynamic_cast<MobActor *>(child)) {
         childMob->setParent(mob.getRuntimeId());
+        childMob->inheritOwner(owner, mob, partner);
         childMob->inheritVariant(mob, partner);
+        childMob->startDefinition(owner);
+        childMob->inheritColor(owner, mob, partner);
     }
     const int experience = mob.getBreedingExperience();
     owner.spawnExperienceOrbs(level, mob.getPosition(),

@@ -355,6 +355,19 @@ public:
 
     void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
 
+    // minecraft:color only says whether the mob has a color: the value is the one its last color group or dye gave
+    bool hasColor() const;
+
+    int32_t getColor() const;
+
+    void setColor(ServerNetworkHandler &owner, int32_t color);
+
+    // minecraft:offspring combine_parent_colors, once the baby's born event gave it a color of its own
+    void inheritColor(ServerNetworkHandler &owner, const MobActor &firstParent, const MobActor &secondParent);
+
+    // minecraft:breedable inherit_tamed, before the baby's definition starts: its born event tests is_tamed
+    void inheritOwner(ServerNetworkHandler &owner, const MobActor &firstParent, const MobActor &secondParent);
+
     bool isTamed() const {
         return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty() || mOwnerless;
     }
@@ -796,6 +809,12 @@ private:
 
     bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    bool _tryDye(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    int32_t _mixColors(int32_t first, int32_t second);
+
     bool _tryInteract(ServerNetworkHandler &owner, ServerPlayer &player);
 
     bool _tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
@@ -860,6 +879,7 @@ private:
     bool mOwnerless = false;
     int64_t mSyncedOwnerId = NO_OWNER;
     bool mSitting = false;
+    std::optional<int32_t> mColor;
     bool mHeardBell = false;
     bool mGoalsRegistered = false;
     bool mGoalsDirty = false;
