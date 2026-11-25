@@ -11,6 +11,12 @@
 
 #include <utility>
 
+namespace {
+    // power and angle_offset of the splash and lingering potion projectiles
+    constexpr float THROW_FORCE = 0.5f;
+    constexpr float THROW_ANGLE_OFFSET = -20.0f;
+}
+
 FALCON_REGISTER_ITEM_CUSTOM(
         ThrownPotionItem, 70,
         [](const std::string &identifier) {
@@ -21,11 +27,12 @@ FALCON_REGISTER_ITEM_CUSTOM(
         });
 
 ThrownPotionItem::ThrownPotionItem(const Item &base, std::string entityIdentifier)
-        : ThrowableItem(base, std::move(entityIdentifier), 1.5f, 0, DispenseMode::Shoot) {}
+        : ThrowableItem(base, std::move(entityIdentifier), THROW_FORCE, 0, DispenseMode::Shoot) {}
 
 bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     ServerActor *projectile = owner.spawnProjectile(player, mEntityIdentifier, mThrowForce,
-                                                    ServerNetworkHandler::THROWN_PROJECTILE_DROP);
+                                                    ServerNetworkHandler::THROWN_PROJECTILE_DROP, nullptr,
+                                                    THROW_ANGLE_OFFSET);
     if (projectile == nullptr)
         return false;
 

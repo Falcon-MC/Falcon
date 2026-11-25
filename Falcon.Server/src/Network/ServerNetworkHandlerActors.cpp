@@ -465,9 +465,9 @@ namespace {
 }
 
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
-                                                   float verticalOffset, const ItemStack *weapon) {
+                                                   float verticalOffset, const ItemStack *weapon, float angleOffset) {
     const Vector3f &rotation = player.getRotation();
-    const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
+    const float pitch = (rotation.x + angleOffset) * MathConstants::DEGREES_TO_RADIANS_F;
     const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
 
     const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));

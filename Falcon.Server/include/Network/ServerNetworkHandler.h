@@ -398,8 +398,10 @@ public:
     // bows fire from eye level; thrown items leave the hand slightly lower
     static constexpr float THROWN_PROJECTILE_DROP = -0.3f;
 
+    // angleOffset: degrees added to the shooter's pitch, negative aims higher
     ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
-                                 float verticalOffset = 0.0f, const ItemStack *weapon = nullptr);
+                                 float verticalOffset = 0.0f, const ItemStack *weapon = nullptr,
+                                 float angleOffset = 0.0f);
 
     // no shooter: the definition's power and uncertainty_base aim it along direction
     ServerActor *spawnDispensedProjectile(Level &level, const std::string &identifier, const Vector3f &position,
