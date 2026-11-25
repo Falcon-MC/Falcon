@@ -355,7 +355,8 @@ public:
 
     void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
 
-    // minecraft:color only says whether the mob has a color: the value is the one its last color group or dye gave
+    // minecraft:color or minecraft:is_dyeable say whether the mob has a color: the value is the one its last color
+    // group or dye gave
     bool hasColor() const;
 
     int32_t getColor() const;

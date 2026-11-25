@@ -2266,7 +2266,7 @@ bool MobActor::_tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const
 }
 
 bool MobActor::hasColor() const {
-    return getComponent(COLOR_COMPONENT) != nullptr;
+    return getComponent(COLOR_COMPONENT) != nullptr || getComponent(IS_DYEABLE_COMPONENT) != nullptr;
 }
 
 int32_t MobActor::getColor() const {
