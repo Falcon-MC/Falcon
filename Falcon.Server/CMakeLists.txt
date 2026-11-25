@@ -530,7 +530,7 @@ if(FALCON_EXPORT_SYMBOLS)
         set(FALCON_EXPORT_DEFINITION "${CMAKE_CURRENT_BINARY_DIR}/FalconServer.def")
         set(FALCON_EXPORT_SOURCES "$<TARGET_OBJECTS:FalconServer>" "$<TARGET_OBJECTS:FalconCore>"
                 "$<TARGET_FILE:FalconProtocol>"
-                "$<TARGET_FILE:FalconNetwork>" "$<TARGET_FILE:FalconNBT>" "$<TARGET_FILE:FalconBlockStateUpdater>")
+                "$<TARGET_FILE:FalconNetwork>" "$<TARGET_FILE:FalconShared>" "$<TARGET_FILE:FalconBlockStateUpdater>")
         file(GENERATE OUTPUT "${FALCON_EXPORT_INPUTS}" CONTENT "$<JOIN:${FALCON_EXPORT_SOURCES},\n>\n")
         add_custom_command(TARGET FalconServer PRE_LINK
                 COMMAND "${CMAKE_COMMAND}" "-DFALCON_NM=${CMAKE_NM}" "-DFALCON_EXPORT_INPUTS=${FALCON_EXPORT_INPUTS}"
