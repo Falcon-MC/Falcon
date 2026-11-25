@@ -51,6 +51,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Actor/Misc/ExperienceOrbActor.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
+#include "World/Actor/Projectile/ProjectileSystem.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Item/FireworkRocketItem.h"
 #include "World/Item/PotionEffects.h"
@@ -2185,13 +2186,12 @@ void ServerNetworkHandler::tickActors() {
             const int32_t atX = (int32_t) std::floor(at.x);
             const int32_t atY = (int32_t) std::floor(at.y);
             const int32_t atZ = (int32_t) std::floor(at.z);
-            // liquid_inertia replaces inertia while the projectile is in water
+            // liquid_inertia replaces inertia when the tick starts in water
             const bool inWater = LiquidView(level.getBlockState(atX, atY, atZ)).isWater()
                                  || LiquidView(level.getBlockStateAtLayer(atX, atY, atZ, 1)).isWater();
-            const float gravity = settings.mGravity;
-            const float inertia = inWater ? settings.mLiquidInertia : settings.mInertia;
             const bool arrowLike = dynamic_cast<const ArrowActor *>(&actor) != nullptr;
 
+            bool drifting = false;
             if (arrowLike && actor.getProjectileData().mReturning) {
                 ServerPlayer *shooter = nullptr;
                 for (auto &playerEntry: mPlayers) {
@@ -2223,11 +2223,9 @@ void ServerNetworkHandler::tickActors() {
                 motion.x = toX / toLength * speed;
                 motion.y = toY / toLength * speed;
                 motion.z = toZ / toLength * speed;
-            } else if (steered == nullptr || !steered->steer(*this, motion)) {
-                motion.y -= gravity;
-                motion.x *= inertia;
-                motion.y *= inertia;
-                motion.z *= inertia;
+            } else {
+                // inertia and gravity wait for the move: a shot covers its full launch speed on its first tick
+                drifting = steered == nullptr || !steered->steer(*this, motion);
             }
 
             const Vector3f previousPosition = actor.getPosition();
@@ -2247,7 +2245,10 @@ void ServerNetworkHandler::tickActors() {
             actor.setPosition(position);
             if (steered != nullptr)
                 steered->afterMove(*this);
-            faceMotion(actor, motion);
+            if (drifting)
+                actor.setRotation(ProjectileSystem::face(actor.getRotation(), motion));
+            else
+                faceMotion(actor, motion);
 
             const int32_t blockX = (int32_t) std::floor(position.x);
             const int32_t blockY = (int32_t) std::floor(position.y);
@@ -2469,6 +2470,9 @@ void ServerNetworkHandler::tickActors() {
                     continue;
                 }
             }
+
+            if (drifting)
+                actor.setMotion(ProjectileSystem::dragAndFall(motion, settings, inWater));
 
             MoveActorAbsolutePacket move;
             move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
