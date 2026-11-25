@@ -2,6 +2,7 @@
 #include "Protocol/Packets/UpdateTradePacket.h"
 #include "World/Actor/Movement/MovementConstants.h"
 
+#include "Core/Color/DyeColor.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "World/Actor/AI/Goal/BehaviorGoals.h"
@@ -34,6 +35,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/ItemProperties.h"
 #include "World/Item/SpawnEggItem.h"
 
@@ -96,6 +98,11 @@ namespace {
     const char *const INVENTORY_COMPONENT = "minecraft:inventory";
     const char *const NAMEABLE_COMPONENT = "minecraft:nameable";
     const char *const SPAWN_EGG_INTERACTION_COMPONENT = "minecraft:spawn_egg_interaction";
+    const char *const COLOR_COMPONENT = "minecraft:color";
+    const char *const IS_DYEABLE_COMPONENT = "minecraft:is_dyeable";
+    const char *const HEALABLE_COMPONENT = "minecraft:healable";
+    const char *const DYE_SUFFIX = "_dye";
+    const char *const TAG_COLOR = "Color";
     // the size a hatched baby is sent with, as a bred one is
     const float BABY_SCALE = 0.5f;
     const char *const LEASHABLE_COMPONENT = "minecraft:leashable";
@@ -1544,10 +1551,21 @@ bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
     if (_tryNameTag(owner, player, held) || _tryTieLeads(owner, player) || _tryLeash(owner, player, held)
         || _tryInteract(owner, player)
-        || _trySpawnEggBaby(owner, player, held) || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held)
-        || _tryStartLove(owner, player, held)
-        || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player)
-        || _tryTrade(owner, player))
+        || _trySpawnEggBaby(owner, player, held) || _tryTame(owner, player, held) || _tryDye(owner, player, held))
+        return true;
+
+    // one food does all it can at once, as feeding a hurt foal heals it, ages it and adds temper; love comes before
+    // the heal, so require_full_health still sees the hurt
+    bool used = false;
+    bool fed = _tryFeedBaby(owner, held, used);
+    fed = _tryStartLove(owner, held, used) || fed;
+    fed = _tryHeal(owner, player, held, used) || fed;
+    if (!fed && _trySit(owner, player))
+        return true;
+    fed = _tryFeedMount(owner, held, used) || fed;
+    if (used)
+        player.consumeOneHeldItem();
+    if (fed || _tryMount(owner, player) || _tryTrade(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
@@ -1660,7 +1678,7 @@ bool MobActor::_tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, cons
     return true;
 }
 
-bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, const ItemStack &held, bool &used) {
     const json::Value *tamemount = getComponent(TAMEMOUNT_COMPONENT);
     if (tamemount == nullptr || held.isAir())
         return false;
@@ -1688,7 +1706,7 @@ bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, 
 
         const int32_t maximum = (int32_t) numberIn(tamemount, "max_temper", 100.0f);
         mTemper = std::min(maximum, mTemper + (int32_t) numberIn(entry.get(), "temper_mod", 0.0f));
-        player.consumeOneHeldItem();
+        used = true;
         owner.playLevelSound(owner.getLevelFor(*this), "eat", getPosition(), getIdentifier());
         return true;
     }
@@ -2050,7 +2068,7 @@ std::vector<ItemStack> MobActor::rollLoot(ServerNetworkHandler &owner, const std
 
     LootContext context(lootRandom());
     context.mDifficulty = (int32_t) owner.getProperties().getDifficulty();
-    context.mColorIndex = (int32_t) numberIn(getComponent("minecraft:color"), "value", 0.0f);
+    context.mColorIndex = getColor();
     context.mMarkVariant = (int32_t) numberIn(getComponent("minecraft:mark_variant"), "value", 0.0f);
 
     for (const LootDrop &drop: table->roll(context)) {
@@ -2171,20 +2189,20 @@ bool MobActor::tameWithoutOwner(ServerNetworkHandler &owner, const char *compone
     return true;
 }
 
-bool MobActor::_tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+bool MobActor::_tryFeedBaby(ServerNetworkHandler &owner, const ItemStack &held, bool &used) {
     const json::Value *ageable = getComponent("minecraft:ageable");
     if (ageable == nullptr || getComponent("minecraft:is_baby") == nullptr
         || !BehaviorItems(ageable->get("feed_items")).contains(held))
         return false;
 
-    player.consumeOneHeldItem();
+    used = true;
     const float duration = numberIn(ageable, "duration", DEFAULT_AGEABLE_SECONDS) * TICKS_PER_SECOND;
     mAgeTicks += (int32_t) (duration * DEFAULT_FEED_GROWTH);
     owner.broadcastActorEvent(*this, EntityEventType::BabyAge);
     return true;
 }
 
-bool MobActor::_tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+bool MobActor::_tryStartLove(ServerNetworkHandler &owner, const ItemStack &held, bool &used) {
     const json::Value *breedable = getComponent("minecraft:breedable");
     if (breedable == nullptr || getComponent("minecraft:is_baby") != nullptr || isInLove() || mBreedCooldown > 0
         || !BehaviorItems(breedable->get("breed_items")).contains(held))
@@ -2198,7 +2216,7 @@ bool MobActor::_tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, 
     if (requireFullHealth != nullptr && requireFullHealth->boolean(false) && getHealth() < getMaxHealth())
         return false;
 
-    player.consumeOneHeldItem();
+    used = true;
     mLoveTicks = LOVE_TICKS;
     _setFlag(owner, ActorFlag::InLove, true);
     owner.broadcastActorEvent(*this, EntityEventType::InLoveHearts);
@@ -2212,6 +2230,126 @@ bool MobActor::_trySit(ServerNetworkHandler &owner, ServerPlayer &player) {
     mSitting = !mSitting;
     _setFlag(owner, ActorFlag::Sitting, mSitting);
     return true;
+}
+
+bool MobActor::_tryDye(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+    if (held.isAir() || getComponent(IS_DYEABLE_COMPONENT) == nullptr)
+        return false;
+
+    const uint8_t color = DyeColor::fromIdentifier(std::string(held.mDefinition->getIdentifier()), DYE_SUFFIX);
+    if (color == DyeColor::INVALID || (hasColor() && getColor() == (int32_t) color))
+        return false;
+
+    setColor(owner, (int32_t) color);
+    player.consumeOneHeldItem();
+    return true;
+}
+
+bool MobActor::_tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held, bool &used) {
+    const json::Value *healable = getComponent(HEALABLE_COMPONENT);
+    if (healable == nullptr || held.isAir())
+        return false;
+
+    const json::Value *forceUse = healable->get("force_use");
+    if (getHealth() >= getMaxHealth() && (forceUse == nullptr || !forceUse->boolean(false)))
+        return false;
+
+    const json::Value *filters = healable->get("filters");
+    if (filters != nullptr && !EntityFilter::test(*filters, owner, *this, &player))
+        return false;
+
+    const json::Value *items = healable->get("items");
+    if (items == nullptr || !items->isArray())
+        return false;
+
+    for (const std::unique_ptr<json::Value> &item: items->mArray) {
+        // TODO: feed item effects and result_item, the parrot's cookie and the nautilus' buckets
+        if (item->get("effects") != nullptr || item->get("result_item") != nullptr
+            || !BehaviorItems(item.get()).contains(held))
+            continue;
+
+        used = true;
+        heal(numberIn(item.get(), "heal_amount", 0.0f));
+        owner.syncActorAttributes(*this);
+        return true;
+    }
+    return false;
+}
+
+bool MobActor::hasColor() const {
+    return getComponent(COLOR_COMPONENT) != nullptr || getComponent(IS_DYEABLE_COMPONENT) != nullptr;
+}
+
+int32_t MobActor::getColor() const {
+    return mColor.has_value() ? *mColor : (int32_t) numberIn(getComponent(COLOR_COMPONENT), "value", 0.0f);
+}
+
+void MobActor::setColor(ServerNetworkHandler &owner, int32_t color) {
+    mColor = color;
+
+    EntityDataMap metadata;
+    EntityDataEntry entry;
+    entry.mId = ActorFlags::COLOR_DATA_ID;
+    entry.mFormat = EntityDataFormat::Byte;
+    entry.mByteValue = (int8_t) color;
+    metadata.mEntries.push_back(entry);
+    owner.sendActorMetadata(*this, metadata);
+}
+
+void MobActor::inheritColor(ServerNetworkHandler &owner, const MobActor &firstParent, const MobActor &secondParent) {
+    const json::Value *offspring = getComponent("minecraft:offspring");
+    const json::Value *combine = offspring == nullptr ? nullptr : offspring->get("combine_parent_colors");
+    if (combine == nullptr || !combine->boolean(false) || !firstParent.hasColor() || !secondParent.hasColor())
+        return;
+
+    const int32_t first = firstParent.getColor();
+    const int32_t second = secondParent.getColor();
+    setColor(owner, _mixColors(first, second));
+}
+
+int32_t MobActor::_mixColors(int32_t first, int32_t second) {
+    const int32_t picked = std::uniform_int_distribution<int32_t>(0, 1)(lifecycleRandom()) == 0 ? first : second;
+    if (first == second || first < 0 || first >= DyeColor::COUNT || second < 0 || second >= DyeColor::COUNT)
+        return picked;
+
+    // the two dyes' crafting recipe gives the mixed color, as on a crafting table
+    const std::string firstDye = DyeColor::identifier((uint8_t) first, DYE_SUFFIX);
+    const std::string secondDye = DyeColor::identifier((uint8_t) second, DYE_SUFFIX);
+    const CraftingRecipeData *recipes = CraftingRecipeTable::getRecipes();
+    const CraftingIngredientData *ingredients = CraftingRecipeTable::getIngredients();
+    const CraftingOutputData *outputs = CraftingRecipeTable::getOutputs();
+    for (size_t index = 0; index < CraftingRecipeTable::getRecipeCount(); ++index) {
+        const CraftingRecipeData &recipe = recipes[index];
+        if (recipe.mIngredientCount != 2 || recipe.mOutputCount != 1)
+            continue;
+
+        const char *a = ingredients[recipe.mIngredientOffset].mItemId;
+        const char *b = ingredients[recipe.mIngredientOffset + 1].mItemId;
+        if (a == nullptr || b == nullptr
+            || !((firstDye == a && secondDye == b) || (firstDye == b && secondDye == a)))
+            continue;
+
+        const uint8_t mixed = DyeColor::fromIdentifier(outputs[recipe.mOutputOffset].mItemId, DYE_SUFFIX);
+        if (mixed != DyeColor::INVALID)
+            return (int32_t) mixed;
+    }
+    return picked;
+}
+
+void MobActor::inheritOwner(ServerNetworkHandler &owner, const MobActor &firstParent, const MobActor &secondParent) {
+    const json::Value *offspring = getComponent("minecraft:offspring");
+    const json::Value *inherit = offspring == nullptr ? nullptr : offspring->get("inherit_tamed");
+    if (inherit != nullptr && !inherit->boolean(true))
+        return;
+
+    const MobActor &parent = firstParent.getOwnerId() != NO_OWNER ? firstParent : secondParent;
+    if (parent.getOwnerId() == NO_OWNER || isTamed())
+        return;
+
+    mOwnerId = parent.getOwnerId();
+    setPersistent(true);
+    _setFlag(owner, ActorFlag::Tamed, true);
+    _syncOwner(owner);
 }
 
 int32_t MobActor::getVariant() const {
@@ -2372,11 +2510,11 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
         metadata.mEntries.push_back(carried);
     }
 
-    if (const json::Value *color = getComponent("minecraft:color")) {
+    if (hasColor()) {
         EntityDataEntry entry;
         entry.mId = ActorFlags::COLOR_DATA_ID;
         entry.mFormat = EntityDataFormat::Byte;
-        entry.mByteValue = (int8_t) numberIn(color, "value", 0.0f);
+        entry.mByteValue = (int8_t) getColor();
         metadata.mEntries.push_back(entry);
     }
 
@@ -2626,6 +2764,9 @@ void MobActor::addComponentGroup(const std::string &group) {
     const json::Value *added = groups == nullptr ? nullptr : groups->get(group);
     if (added != nullptr && added->get("minecraft:strength") != nullptr)
         mLoadedInventoryStrength = -1;
+    // only an added group sets the color: one loaded back keeps the saved, maybe dyed, color
+    if (const json::Value *color = added == nullptr ? nullptr : added->get(COLOR_COMPONENT))
+        mColor = (int32_t) numberIn(color, "value", 0.0f);
     if (added != nullptr)
         mAddRider.queue(added->get(ADD_RIDER_COMPONENT));
     // the game restocks once per added minecraft:trade_resupply; the schedule removes the group again
@@ -2720,7 +2861,7 @@ Tag MobActor::saveNbt() const {
     data.putInt("Variant", (int32_t) numberIn(getComponent("minecraft:variant"), "value", 0.0f));
     data.putInt("MarkVariant", (int32_t) numberIn(getComponent("minecraft:mark_variant"), "value", 0.0f));
     data.putInt("SkinID", (int32_t) numberIn(getComponent("minecraft:skin_id"), "value", 0.0f));
-    data.putByte("Color", (int8_t) numberIn(getComponent("minecraft:color"), "value", 0.0f));
+    data.putByte(TAG_COLOR, (int8_t) getColor());
     data.putByte("Color2", (int8_t) numberIn(getComponent("minecraft:color2"), "value", 0.0f));
     data.putByte("IsBaby", getComponent("minecraft:is_baby") != nullptr ? 1 : 0);
     data.putByte("IsTamed", getComponent("minecraft:is_tamed") != nullptr || mOwnerless ? 1 : 0);
@@ -2778,6 +2919,8 @@ void MobActor::loadNbt(const Tag &data) {
     // the game keeps an ownerless tame only as IsTamed
     mOwnerless = mOwnerId == NO_OWNER && mLegacyOwnerName.empty() && data.getByte("IsTamed", 0) != 0;
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
+    if (data.contains(TAG_COLOR))
+        mColor = (int32_t) data.getByte(TAG_COLOR, 0);
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
     mTimerLoaded = data.contains(TAG_TIMER_STAMP);

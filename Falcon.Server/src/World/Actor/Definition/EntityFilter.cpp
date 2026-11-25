@@ -1188,7 +1188,8 @@ namespace {
                 return applyNegation(hasValue(filter) && filter.mHasEffect && target->hasEffect(filter.mEffect),
                                      filter);
             case FilterTestType::IsColor: {
-                const int32_t color = componentValue(*target, "minecraft:color");
+                const MobActor *colored = dynamic_cast<const MobActor *>(target);
+                const int32_t color = colored != nullptr && colored->hasColor() ? colored->getColor() : -1;
                 return applyNegation(hasValue(filter) && color >= 0 && color < 16 && filter.mText == COLOR_NAMES[color],
                                      filter);
             }
