@@ -81,6 +81,11 @@ void MobAnger::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (component == nullptr)
         return;
 
+    if (!_keepsTarget(owner, mob, *component)) {
+        _calm(owner, mob, *component);
+        return;
+    }
+
     const json::Value *sound = component->get("angry_sound");
     if (sound != nullptr && --mSoundTicks <= 0) {
         mob.playDefinitionSound(owner, sound->string());
@@ -105,13 +110,23 @@ void MobAnger::onAttack(ServerNetworkHandler &owner, MobActor &mob, Actor &victi
         _broadcast(owner, mob, *mComponent, victim);
 }
 
-void MobAnger::_start(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) {
+// checked every tick: no target keeps the anger only without filters; a target must pass them and stay attackable
+bool MobAnger::_keepsTarget(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) const {
     Actor *target = mob.getTarget(owner);
     const json::Value *filters = component.get("filters");
-    if (target != nullptr && filters != nullptr && !EntityFilter::test(*filters, owner, mob, target)) {
+    if (target == nullptr)
+        return filters == nullptr;
+
+    return mob.canTarget(*target) && (filters == nullptr || EntityFilter::test(*filters, owner, mob, target));
+}
+
+void MobAnger::_start(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) {
+    if (!_keepsTarget(owner, mob, component)) {
         _calm(owner, mob, component);
         return;
     }
+
+    Actor *target = mob.getTarget(owner);
 
     setAngryFlag(owner, mob, true);
     _resetDuration(component);
