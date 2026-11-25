@@ -19,6 +19,8 @@
 !/Falcon.Protocol/**
 !/Falcon.Server
 !/Falcon.Server/**
+!/Falcon.Shared
+!/Falcon.Shared/**
 /Falcon.Server/allowlist.json
 /Falcon.Server/banned-ips.json
 /Falcon.Server/banned-players.json

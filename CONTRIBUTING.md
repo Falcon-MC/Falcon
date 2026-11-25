@@ -74,6 +74,7 @@ on the issue first so the approach can be agreed on before you write the code.
 
 | Path | Contents |
 |---|---|
+| `Falcon.Shared` | NBT, binary streams, JSON, math and logging |
 | `Falcon.Protocol` | Packets, network types and their encoders |
 | `Falcon.Network` | RakNet and NetherNet transport, login parsing |
 | `Falcon.Server/src/Network` | Session, login, movement, inventory and gameplay handlers |
@@ -91,9 +92,9 @@ and old-to-new file inventory. New code should use the relocated include paths.
 Build-generated forwarding headers preserve existing internal-plugin includes; the
 public `Falcon/EmbeddedServer.h` and external plugin C API remain stable.
 
-The protocol and the network layer are part of this repository: a change that needs a new packet field and
-the server code using it is one pull request. NBT, the block state updater and the Bedrock data files live in
-their own repositories under [Falcon-MC](https://github.com/Falcon-MC). Changes to them go there.
+The shared base library, the protocol and the network layer are part of this repository: a change that needs
+a new packet field and the server code using it is one pull request. The block state updater and the Bedrock
+data files live in their own repositories under [Falcon-MC](https://github.com/Falcon-MC). Changes to them go there.
 
 ---
 

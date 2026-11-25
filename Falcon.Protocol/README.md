@@ -27,9 +27,8 @@ The binary format of the Bedrock protocol, with no game logic attached. It is th
   more in `Protocol/Types`
 - **Codecs** - items (inventory and entity formats), entity metadata, skins, inventory transactions,
   camera and data store
-- **Utilities** - a JSON parser, math types and logging
-
-NBT tags and binary streams come from [NBT](https://github.com/Falcon-MC/NBT), fetched automatically.
+NBT, binary streams, the JSON parser, math types and logging come from [Falcon.Shared](../Falcon.Shared), built
+from the folder next to this one.
 
 ## Usage
 
@@ -65,7 +64,7 @@ cmake --build build
 
 - [Falcon.Server](../Falcon.Server) - the server
 - [Falcon.Network](../Falcon.Network) - RakNet and NetherNet transport
-- [NBT](https://github.com/Falcon-MC/NBT) - NBT tags and binary streams
+- [Falcon.Shared](../Falcon.Shared) - NBT, binary streams, JSON, math and logging
 - [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
 
 ## Licensing information
