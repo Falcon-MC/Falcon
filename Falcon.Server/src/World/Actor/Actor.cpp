@@ -4,7 +4,7 @@
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Level/Level.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
 #include <cmath>
@@ -101,6 +101,8 @@ bool Actor::tickFire() {
 void Actor::moveToLevel(const Level &level) {
     mDimension = level.getDimensionType();
     mWorldId = level.getWorldId();
+    ServerNetworkHandler *owner = level.getOwner();
+    mEventBus = owner != nullptr ? &owner->getEventBus() : nullptr;
 }
 
 bool Actor::isIn(const Level &level) const {
@@ -120,18 +122,12 @@ void Actor::setXpAndProgress(int level, float progress) {
 }
 
 void Actor::addXp(int amount) {
-    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EXPERIENCE_CHANGE)
-                                        : nullptr;
-    if (plugins != nullptr) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_EXPERIENCE_CHANGE;
-        event.mCancellable = true;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
-        event.mAmount = (double) amount;
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    if (isPlayer() && mEventBus != nullptr && mEventBus->before().mPlayerExperienceChange.hasSubscribers()) {
+        PlayerExperienceChangeBeforeEvent event(static_cast<ServerPlayer &>(*this), amount);
+        mEventBus->before().mPlayerExperienceChange.emit(event);
+        if (event.isCancelled())
             return;
-        amount = (int) event.mAmount;
+        amount = event.mXp;
     }
 
     mExperience.addXp(amount);
@@ -433,18 +429,12 @@ void Actor::exhaust(float amount) {
 }
 
 void Actor::_changeFood(float food) {
-    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE) : nullptr;
-    if (plugins != nullptr) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PLAYER_FOOD_CHANGE;
-        event.mCancellable = true;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
-        event.mAmount = (double) food;
-        event.mPreviousAmount = (double) getFood();
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    if (isPlayer() && mEventBus != nullptr && mEventBus->before().mPlayerFoodChange.hasSubscribers()) {
+        PlayerFoodChangeBeforeEvent event(static_cast<ServerPlayer &>(*this), food, getFood());
+        mEventBus->before().mPlayerFoodChange.emit(event);
+        if (event.isCancelled())
             return;
-        food = (float) event.mAmount;
+        food = event.mFood;
     }
 
     setFood(food);
@@ -561,18 +551,11 @@ float Actor::heal(float amount, HealCause cause) {
         return getHealth();
     if (sHealFilter && (!sHealFilter(*this, amount, cause) || amount <= 0.0f))
         return getHealth();
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_HEAL)) {
-        static const char *const CAUSES[] = {"heal", "regeneration", "self_heal", "totem"};
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_HEAL;
-        event.mCancellable = true;
-        event.mEntity = this;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
-        event.mAmount = (double) amount;
-        event.mCause = CAUSES[(size_t) cause];
-        plugins->dispatch(event);
-        amount = (float) event.mAmount;
-        if (event.mCancelled || !(amount > 0.0f))
+    if (mEventBus != nullptr && mEventBus->before().mActorHeal.hasSubscribers()) {
+        ActorHealBeforeEvent event(*this, amount, cause);
+        mEventBus->before().mActorHeal.emit(event);
+        amount = event.mHeal;
+        if (event.isCancelled() || !(amount > 0.0f))
             return getHealth();
     }
     const float previous = getHealth();

@@ -1,7 +1,5 @@
 #include "World/Level/Block/FarmlandBlock.h"
 
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockClassRegistry.h"
@@ -13,8 +11,6 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/BlockNames.h"
 
-#include <algorithm>
-#include <cmath>
 #include <random>
 
 FALCON_REGISTER_BLOCK(FarmlandBlock, 245);
@@ -34,20 +30,16 @@ namespace {
     const float TRAMPLE_FALL_OFFSET = 0.5f;
     const float TRAMPLE_MIN_VOLUME = 0.512f;
 
-    void changeMoisture(Level &level, const Vector3i &position, const BlockState &state, int oldMoisture,
-                        int moisture) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_FARMLAND_HYDRATION_CHANGE)) {
-            PluginEvent event;
-            event.mType = FALCON_EVENT_FARMLAND_HYDRATION_CHANGE;
-            event.mCancellable = true;
-            event.mLevel = &level;
-            event.mBlockPosition = position;
-            event.mPreviousAmount = oldMoisture;
-            event.mAmount = moisture;
-            plugins->dispatch(event);
-            if (event.mCancelled || !std::isfinite(event.mAmount))
+    void changeMoisture(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                        int oldMoisture, int moisture) {
+        EventSignal<FarmlandHydrationChangeBeforeEvent> &hydration =
+                owner.getEventBus().before().mFarmlandHydrationChange;
+        if (hydration.hasSubscribers()) {
+            FarmlandHydrationChangeBeforeEvent event(level, position, oldMoisture, moisture);
+            hydration.emit(event);
+            if (event.isCancelled())
                 return;
-            moisture = (int) std::clamp(event.mAmount, 0.0, (double) MAX_MOISTURE);
+            moisture = event.mMoisture;
         }
         level.setBlock(position, DecorationSupport::withState(state, MOISTURE_STATE, moisture), false);
     }
@@ -81,18 +73,16 @@ bool FarmlandBlock::matches(const std::string &identifier) {
 
 void FarmlandBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state) const {
-    (void) owner;
-
     const int32_t moisture = state.mStates.getInt(MOISTURE_STATE, 0);
 
     if (isHydrated(level, position)) {
         if (moisture < MAX_MOISTURE)
-            changeMoisture(level, position, state, moisture, MAX_MOISTURE);
+            changeMoisture(owner, level, position, state, moisture, MAX_MOISTURE);
         return;
     }
 
     if (moisture > 0) {
-        changeMoisture(level, position, state, moisture, moisture - 1);
+        changeMoisture(owner, level, position, state, moisture, moisture - 1);
         return;
     }
 
@@ -117,15 +107,11 @@ void FarmlandBlock::onFallOn(ServerNetworkHandler &owner, Actor &actor, const Ve
     if (nextFloat() >= fallDistance - TRAMPLE_FALL_OFFSET || !canTrample(level, actor))
         return;
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TRAMPLE_FARMLAND)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_TRAMPLE_FARMLAND;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mEntity = &actor;
-        event.mBlockPosition = position;
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    EventSignal<FarmlandTrampleBeforeEvent> &trample = owner.getEventBus().before().mFarmlandTrample;
+    if (trample.hasSubscribers()) {
+        FarmlandTrampleBeforeEvent event(level, actor, position);
+        trample.emit(event);
+        if (event.isCancelled())
             return;
     }
     turnToDirt(level, position);

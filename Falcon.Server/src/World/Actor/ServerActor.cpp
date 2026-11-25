@@ -14,7 +14,6 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -221,37 +220,22 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     if (owner.getScriptEngine().beforeEntityHurt(*this, amount, damageSource) || amount <= 0.0f)
         return false;
 
-    PluginEvent damageEvent;
-    damageEvent.mType = FALCON_EVENT_ENTITY_DAMAGE;
-    damageEvent.mCancellable = true;
-    damageEvent.mEntity = this;
-    damageEvent.mAttacker = attacker;
-    damageEvent.mTarget = damageSource.mDamager;
-    damageEvent.mAmount = amount;
-    damageEvent.mCause = damageSource.mDeathMessageKey;
-    if (damageSource.mBlock) {
-        damageEvent.mLevel = &owner.getLevelFor(*this);
-        damageEvent.mBlockPosition = *damageSource.mBlock;
-        const auto &position = *damageSource.mBlock;
-        if (const BlockState *block = damageEvent.mLevel->peekBlockPtr(position.x, position.y, position.z))
-            damageEvent.mBlockName = block->mName;
-    }
-    // a hit from an attacker pushes: plugins see the game's push and may change it
+    // a hit from an attacker pushes: listeners see the game's push and may change it
     float knockbackHorizontal = 0.4f;
     float knockbackVertical = 0.4f;
-    if (attacker != nullptr) {
-        damageEvent.mKnockbackHorizontal = &knockbackHorizontal;
-        damageEvent.mKnockbackVertical = &knockbackVertical;
-    }
-    PluginManager::getInstance().dispatch(damageEvent);
-    if (attacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
-        setKnockbackOverride(knockbackHorizontal, knockbackVertical);
-    if (damageEvent.mCancelled)
-        return false;
+    EventSignal<ActorDamageBeforeEvent> &damage = owner.getEventBus().before().mActorDamage;
+    if (damage.hasSubscribers()) {
+        ActorDamageBeforeEvent event(*this, damageSource, amount, knockbackHorizontal, knockbackVertical);
+        damage.emit(event);
+        if (attacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
+            setKnockbackOverride(knockbackHorizontal, knockbackVertical);
+        if (event.isCancelled())
+            return false;
 
-    amount = (float) damageEvent.mAmount;
-    if (amount <= 0.0f)
-        return false;
+        amount = event.mDamage;
+        if (amount <= 0.0f)
+            return false;
+    }
 
     ServerPlayer *source = dynamic_cast<ServerPlayer *>(attacker);
     if (source != nullptr)
@@ -318,15 +302,12 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     setDead(true);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
 
-    PluginEvent event;
-    event.mType = FALCON_EVENT_ENTITY_DEATH;
-    event.mEntity = this;
-    event.mAttacker = source;
-    if (mDeathDropsHeld) {
-        event.mDrops = &mDeathDrops;
-        event.mExperience = &mDeathExperience;
+    EventSignal<ActorDeathBeforeEvent> &death = owner.getEventBus().before().mActorDeath;
+    if (death.hasSubscribers()) {
+        ActorDeathBeforeEvent event(*this, source, mDeathDropsHeld ? &mDeathDrops : nullptr,
+                                    mDeathDropsHeld ? &mDeathExperience : nullptr);
+        death.emit(event);
     }
-    PluginManager::getInstance().dispatch(event);
 
     if (mDeathDropsHeld) {
         mDeathDropsHeld = false;

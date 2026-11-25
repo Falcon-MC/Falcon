@@ -23,10 +23,6 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginWorldEventData.h"
-#include "Core/Json/Json.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Scripting/ScriptEngine.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
@@ -37,6 +33,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <optional>
+#include <utility>
 
 namespace {
     // not a game limit: the client lists a few actions per input; each one may run a break check
@@ -52,31 +49,14 @@ namespace {
                 sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT, player.getScale());
     }
 
-    void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(type);
-        if (plugins == nullptr)
-            return;
-
-        PluginEvent event;
-        event.mType = type;
-        event.mPlayer = &player;
-        event.mState = state;
-        plugins->dispatch(event);
-    }
-
-    bool allowPlayerState(ServerPlayer &player, FalconEventType type, bool state, double detail = 0) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(type);
-        if (plugins == nullptr)
+    template <typename T, typename... Args>
+    bool allowPlayerState(EventSignal<T> &signal, Args &&...args) {
+        if (!signal.hasSubscribers())
             return true;
 
-        PluginEvent event;
-        event.mType = type;
-        event.mCancellable = true;
-        event.mPlayer = &player;
-        event.mState = state;
-        event.mAmount = detail;
-        plugins->dispatch(event);
-        return !event.mCancelled;
+        T event(std::forward<Args>(args)...);
+        signal.emit(event);
+        return !event.isCancelled();
     }
 
     // Respiration N skips the air loss on a tick with probability N / (N + 1)
@@ -86,7 +66,8 @@ namespace {
         return respiration <= 0 || std::rand() % (respiration + 1) == 0;
     }
 
-    void freezeWaterUnderfoot(Level &level, ServerPlayer &player, const Vector3f &feetPosition) {
+    void freezeWaterUnderfoot(ServerNetworkHandler &owner, Level &level, ServerPlayer &player,
+                              const Vector3f &feetPosition) {
         if (player.isSpectator())
             return;
 
@@ -107,32 +88,14 @@ namespace {
         BlockState target(FrostedIceBlock::IDENTIFIER, properties);
         BlockState liquid(BlockNames::WATER);
         bool customLiquid = false;
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_FROST_WALKER)) {
-            PluginEvent event;
-            event.mType = FALCON_EVENT_ENTITY_FROST_WALKER;
-            event.mCancellable = true;
-            event.mPlayer = &player;
-            event.mEntity = &player;
-            event.mLevel = &level;
-            event.mAmount = radius;
-            event.mBlockPosition = Vector3i(centerX, y, centerZ);
-            const std::string original = "{\"liquid\":" + PluginWorldEventData::encodeBlock(liquid)
-                                         + ",\"target\":" + PluginWorldEventData::encodeBlock(target) + "}";
-            event.mCustomData = original;
-            plugins->dispatch(event);
-            if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount < 0)
+        EventSignal<PlayerFrostWalkerBeforeEvent> &freeze = owner.getEventBus().before().mPlayerFrostWalker;
+        if (freeze.hasSubscribers()) {
+            PlayerFrostWalkerBeforeEvent event(level, player, Vector3i(centerX, y, centerZ), radius, liquid, target);
+            freeze.emit(event);
+            if (event.isCancelled())
                 return;
-            radius = (int32_t) std::min(event.mAmount, 64.0);
-            if (event.mCustomData != original) {
-                const auto data = json::parse(event.mCustomData);
-                const auto *liquidData = data != nullptr ? data->get("liquid") : nullptr;
-                const auto *targetData = data != nullptr ? data->get("target") : nullptr;
-                if (liquidData == nullptr || targetData == nullptr
-                    || !PluginWorldEventData::decodeBlock(*liquidData, liquid)
-                    || !PluginWorldEventData::decodeBlock(*targetData, target))
-                    return;
-                customLiquid = true;
-            }
+            radius = event.mRadius;
+            customLiquid = event.mExactLiquid;
         }
 
         for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
@@ -320,7 +283,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
     }
 
     if (onGround)
-        freezeWaterUnderfoot(level, player, feetPosition);
+        freezeWaterUnderfoot(owner, level, player, feetPosition);
 
     if (onGround) {
         BlockState support;
@@ -441,14 +404,11 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
     }
 
     if (flying != player.isFlying()) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_TOGGLE_FLIGHT)) {
-            PluginEvent flightEvent;
-            flightEvent.mType = FALCON_EVENT_PLAYER_TOGGLE_FLIGHT;
-            flightEvent.mCancellable = true;
-            flightEvent.mPlayer = &player;
-            flightEvent.mState = flying;
-            plugins->dispatch(flightEvent);
-            if (flightEvent.mCancelled || !player.canToggleFlight()) {
+        EventSignal<PlayerToggleBeforeEvent> &toggleFlight = owner.getEventBus().before().mPlayerToggleFlight;
+        if (toggleFlight.hasSubscribers()) {
+            PlayerToggleBeforeEvent flightEvent(player, flying);
+            toggleFlight.emit(flightEvent);
+            if (flightEvent.isCancelled() || !player.canToggleFlight()) {
                 owner._sendAbilities(player);
                 return false;
             }
@@ -510,7 +470,7 @@ static void recordInput(ServerNetworkHandler &owner, ServerPlayer &player, const
     if (sneakChanged)
         scripts.onPlayerButtonInput(player, "Sneak", sneak);
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing)
-        && allowPlayerState(player, FALCON_EVENT_PLAYER_MISS_SWING, true))
+        && allowPlayerState(owner.getEventBus().before().mPlayerMissSwing, player))
         scripts.onPlayerSwingStart(player, "Attack");
 }
 
@@ -542,7 +502,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
         sprinting = false;
-    if (sprinting != wasSprinting && !allowPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting))
+    BeforeEvents &before = owner.getEventBus().before();
+    if (sprinting != wasSprinting && !allowPlayerState(before.mPlayerToggleSprint, player, sprinting))
         sprinting = wasSprinting && player.canSprint();
 
     const bool wasSneaking = player.getFlags().get(ActorFlag::Sneaking);
@@ -552,8 +513,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
         sneaking = false;
     std::optional<PlayerAuthInputPacket> adjustedPose;
-    if (sneaking != wasSneaking && !allowPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking,
-                                                    sneakPressed ? 1 : -1)) {
+    if (sneaking != wasSneaking && !allowPlayerState(before.mPlayerToggleSneak, player, sneaking, sneakPressed)) {
         adjustedPose = packet;
         std::erase_if(adjustedPose->mInputData, [](int32_t flag) {
             return flag == (int32_t) PlayerAuthInputData::Sneaking || flag == (int32_t) PlayerAuthInputData::SneakDown
@@ -678,11 +638,11 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
 
-    for (const auto &[flag, type]: {std::pair{ActorFlag::Swimming, FALCON_EVENT_PLAYER_TOGGLE_SWIM},
-                                     std::pair{ActorFlag::Gliding, FALCON_EVENT_PLAYER_TOGGLE_GLIDE}}) {
+    for (const auto &[flag, toggle]: {std::pair{ActorFlag::Swimming, &before.mPlayerToggleSwim},
+                                      std::pair{ActorFlag::Gliding, &before.mPlayerToggleGlide}}) {
         const bool wasActive = previous.get(flag);
         const bool active = flags.get(flag);
-        if (active != wasActive && !allowPlayerState(player, type, active))
+        if (active != wasActive && !allowPlayerState(*toggle, player, active))
             flags.set(flag, wasActive);
     }
 
@@ -707,8 +667,11 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         // sprint changes the movement attribute too; client-requested: no validation reset
         owner._sendAttributes(player, false);
     }
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
-        dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);
+    EventSignal<PlayerJumpAfterEvent> &jump = owner.getEventBus().after().mPlayerJump;
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping) && jump.hasSubscribers()) {
+        PlayerJumpAfterEvent event(player);
+        jump.emit(event);
+    }
 
     bool startsUsingItem = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem);
     for (size_t index = 0; index < actionCount; ++index) {

@@ -1,7 +1,5 @@
 #include "World/Level/Block/DragonEggBlock.h"
 
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Level.h"
@@ -59,27 +57,13 @@ void DragonEggBlock::teleport(ServerNetworkHandler &owner, Level &level, const V
         if (level.getBlockState(destination.x, destination.y, destination.z).mName != BlockNames::AIR)
             continue;
 
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_TELEPORT)) {
-            PluginEvent event;
-            event.mType = FALCON_EVENT_BLOCK_TELEPORT;
-            event.mCancellable = true;
-            event.mLevel = &level;
-            event.mBlockPosition = position;
-            event.mTo = Vector3f((float) destination.x, (float) destination.y, (float) destination.z);
-            plugins->dispatch(event);
-            if (event.mCancelled)
+        EventSignal<BlockTeleportBeforeEvent> &blockTeleport = owner.getEventBus().before().mBlockTeleport;
+        if (blockTeleport.hasSubscribers()) {
+            BlockTeleportBeforeEvent event(level, position, destination);
+            blockTeleport.emit(event);
+            if (event.isCancelled())
                 return;
-            if (event.mToChanged) {
-                const Vector3f &to = event.mTo;
-                if (!std::isfinite(to.x) || !std::isfinite(to.y) || !std::isfinite(to.z) || std::abs(to.x) > 30'000'000
-                    || std::abs(to.z) > 30'000'000 || to.y < level.getMinY() || to.y > level.getMaxY())
-                    return;
-                destination = Vector3i((int32_t) std::floor(to.x), (int32_t) std::floor(to.y),
-                                       (int32_t) std::floor(to.z));
-                if (!level.isChunkResident(destination.x >> 4, destination.z >> 4)
-                    || level.getBlockState(destination.x, destination.y, destination.z).mName != BlockNames::AIR)
-                    return;
-            }
+            destination = event.mDestination;
         }
 
         const int32_t diffX = position.x - destination.x;

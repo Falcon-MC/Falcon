@@ -38,6 +38,7 @@ public:
 
 // one request applied atomically; the response lists the slots the client must resync;
 // beaconLevels: the open beacon's pyramid, -1 while no beacon screen is open
+class EventBus;
 class ServerPlayer;
 
 class ItemStackRequestHandler {
@@ -60,5 +61,6 @@ public:
             int32_t clientProtocol = 0, bool grindstoneOpen = false, int32_t *outGrindstoneXpCost = nullptr,
             int32_t beaconLevels = -1, BeaconChoice *outBeacon = nullptr, bool loomOpen = false,
             const CartographyRecipes::Maps *craftingMaps = nullptr,
-            CartographyExpansion *outCartographyExpansion = nullptr, ServerPlayer *eventPlayer = nullptr);
+            CartographyExpansion *outCartographyExpansion = nullptr, ServerPlayer *eventPlayer = nullptr,
+            EventBus *eventBus = nullptr);
 };

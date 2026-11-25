@@ -12,7 +12,6 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Core/Math/VectorMath.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <memory>
@@ -110,16 +109,11 @@ bool BrewingStandBlockActor::tick(ServerNetworkHandler &owner) {
         return true;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREW)) {
-        ItemStack ingredient = mInventory.getContainerItem(SLOT_INGREDIENT);
-        PluginEvent event;
-        event.mType = FALCON_EVENT_BREW;
-        event.mCancellable = true;
-        event.mLevel = mLevel;
-        event.mBlockPosition = mPosition;
-        event.mItem = &ingredient;
-        plugins->dispatch(event);
-        if (event.mCancelled) {
+    EventSignal<BrewBeforeEvent> &brew = owner.getEventBus().before().mBrew;
+    if (brew.hasSubscribers()) {
+        BrewBeforeEvent event(*mLevel, mPosition, mInventory.getContainerItem(SLOT_INGREDIENT));
+        brew.emit(event);
+        if (event.isCancelled()) {
             _stopBrewing(owner);
             return true;
         }
@@ -153,20 +147,14 @@ void BrewingStandBlockActor::_restockFuel(ServerNetworkHandler &owner) {
     ItemStack fuel = mInventory.getContainerItem(SLOT_FUEL);
     const bool validFuel = identifierOf(fuel) == BLAZE_POWDER && fuel.mCount > 0;
     int fuelTime = FUEL_PER_BLAZE_POWDER;
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREWING_FUEL_USE);
-        plugins != nullptr && _hasMix()) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_BREWING_FUEL_USE;
-        event.mCancellable = true;
-        event.mCancelled = !validFuel;
-        event.mLevel = mLevel;
-        event.mBlockPosition = mPosition;
-        event.mAmount = fuelTime;
-        event.mItem = &fuel;
-        plugins->dispatch(event);
-        if (event.mCancelled || !(event.mAmount > 0.0))
+    EventSignal<BrewingFuelUseBeforeEvent> &fuelUse = owner.getEventBus().before().mBrewingFuelUse;
+    if (fuelUse.hasSubscribers() && _hasMix()) {
+        BrewingFuelUseBeforeEvent event(*mLevel, mPosition, fuel, fuelTime);
+        event.setCancelled(!validFuel);
+        fuelUse.emit(event);
+        if (event.isCancelled())
             return;
-        fuelTime = (int) std::min(event.mAmount, 32767.0);
+        fuelTime = event.mFuelTime;
     } else if (!validFuel) {
         return;
     }
@@ -189,7 +177,7 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
     if (reagentId.empty())
         return;
 
-    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREW_ITEM);
+    EventSignal<BrewItemBeforeEvent> &brewItem = owner.getEventBus().before().mBrewItem;
     bool mixed = false;
     bool tried = false;
     for (int slot = FIRST_POTION_SLOT; slot < FIRST_POTION_SLOT + POTION_SLOTS; ++slot) {
@@ -212,18 +200,10 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
         if (mix->mOutputMeta >= 0)
             result.mDamage = mix->mOutputMeta;
         tried = true;
-        if (plugins != nullptr) {
-            ItemStack input = potion;
-            PluginEvent event;
-            event.mType = FALCON_EVENT_BREW_ITEM;
-            event.mCancellable = true;
-            event.mLevel = mLevel;
-            event.mBlockPosition = mPosition;
-            event.mSourceSlot = slot;
-            event.mItem = &input;
-            event.mResult = &result;
-            plugins->dispatch(event);
-            if (event.mCancelled)
+        if (brewItem.hasSubscribers()) {
+            BrewItemBeforeEvent event(*mLevel, mPosition, slot, potion, result);
+            brewItem.emit(event);
+            if (event.isCancelled())
                 continue;
         }
         mInventory.setContainerItem(slot, std::move(result));

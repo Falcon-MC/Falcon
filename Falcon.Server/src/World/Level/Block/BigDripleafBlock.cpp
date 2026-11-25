@@ -1,5 +1,4 @@
 #include "World/Level/Block/BigDripleafBlock.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include "Core/Math/VectorMath.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -133,7 +132,7 @@ bool BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, 
     // a refused growth leaves the small dripleaf whole
     if (height == 0 || !BlockChangeSystem::allows(level, position, head, BlockChangeCause::Grow, nullptr, player))
         return false;
-    if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
+    if (owner.getEventBus().before().mStructureGrow.hasSubscribers()) {
         BlockChangeSystem::StructureBlocks blocks;
         if (upperHalf != nullptr && upperHalf->y >= position.y + height)
             blocks.emplace_back(*upperHalf, BlockState(BlockNames::AIR));
@@ -295,7 +294,7 @@ bool BigDripleafBlock::fertilize(ServerNetworkHandler &owner, Level &level, cons
         return false;
 
     const BlockState head = level.getBlockState(leaf.x, leaf.y, leaf.z);
-    if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
+    if (owner.getEventBus().before().mStructureGrow.hasSubscribers()) {
         const BlockState newHead = withParts(head, true, Tilt::None);
         if (!BlockChangeSystem::allows(level, above, newHead, BlockChangeCause::Grow, nullptr, player))
             return false;

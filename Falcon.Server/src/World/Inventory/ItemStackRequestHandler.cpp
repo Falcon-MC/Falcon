@@ -1,6 +1,7 @@
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/ItemStackRequestHandler.h"
+
+#include "Core/Event/EventBus.h"
 
 #include "Core/Debug/BedrockLog.h"
 #include "Protocol/Packets/CraftingDataPacket.h"
@@ -1614,7 +1615,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
         int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost, int32_t beaconLevels,
         BeaconChoice *outBeacon, bool loomOpen, const CartographyRecipes::Maps *craftingMaps,
-        CartographyExpansion *outCartographyExpansion, ServerPlayer *eventPlayer) {
+        CartographyExpansion *outCartographyExpansion, ServerPlayer *eventPlayer, EventBus *eventBus) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1648,8 +1649,10 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mClientProtocol = clientProtocol;
     context.mTradeOffers = tradeOffers;
     context.mBeaconLevels = beaconLevels;
-    context.mObserveCraft = eventPlayer != nullptr && PluginManager::findWithSubscribers(FALCON_EVENT_CRAFT_ITEM) != nullptr;
-    context.mObserveEnchant = eventPlayer != nullptr && PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_ENCHANT) != nullptr;
+    context.mObserveCraft = eventPlayer != nullptr && eventBus != nullptr
+                            && eventBus->before().mCraftItem.hasSubscribers();
+    context.mObserveEnchant = eventPlayer != nullptr && eventBus != nullptr
+                              && eventBus->before().mItemEnchant.hasSubscribers();
 
 
     if (openContainer != nullptr) {
@@ -1757,44 +1760,22 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     if (context.mObserveCraft && context.mCraftingActive) {
         ItemStack output = context.mCraftedRecipeOutput;
         output.mCount *= context.mCraftRepetitions;
-        PluginEvent event;
-        event.mType = FALCON_EVENT_CRAFT_ITEM;
-        event.mCancellable = true;
-        event.mPlayer = eventPlayer;
-        event.mItem = &output;
-        event.mResult = &output;
-        event.mAmount = context.mCraftRepetitions;
-        event.mPreviousAmount = context.mCraftRecipeId;
-        event.mDrops = &context.mCraftInputs;
         const auto *recipe = context.mCraftingMatch.mRecipe;
-        event.mCustomData = "[" + std::to_string(context.mCraftingGridWidth) + ","
-                            + std::to_string(recipe != nullptr ? recipe->mWidth : 0) + ",[";
-        bool first = true;
-        for (const auto &[slot, count]: context.mCraftSlots) {
-            if (!first)
-                event.mCustomData += ',';
-            first = false;
-            event.mCustomData += '[' + std::to_string(slot) + ',' + std::to_string(count) + ']';
-        }
-        event.mCustomData += "]]";
-        PluginManager::getInstance().dispatch(event);
-        if (event.mCancelled) {
+        CraftItemBeforeEvent event(*eventPlayer, output, context.mCraftRepetitions, context.mCraftRecipeId,
+                                   context.mCraftInputs, context.mCraftingGridWidth,
+                                   recipe != nullptr ? recipe->mWidth : 0, context.mCraftSlots);
+        eventBus->before().mCraftItem.emit(event);
+        if (event.isCancelled()) {
             entry.mResult = RESULT_ERROR;
             return entry;
         }
     }
 
     if (context.mObserveEnchant && context.mEnchantActive) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ITEM_ENCHANT;
-        event.mCancellable = true;
-        event.mPlayer = eventPlayer;
-        event.mItem = &context.mEnchantInput;
-        event.mResult = &context.mEnchantOutput;
-        event.mAmount = context.mEnchantCost;
-        event.mPreviousAmount = context.mEnchantRequiredLevel;
-        PluginManager::getInstance().dispatch(event);
-        if (event.mCancelled) {
+        ItemEnchantBeforeEvent event(*eventPlayer, context.mEnchantInput, context.mEnchantOutput, context.mEnchantCost,
+                                     context.mEnchantRequiredLevel);
+        eventBus->before().mItemEnchant.emit(event);
+        if (event.isCancelled()) {
             entry.mResult = RESULT_ERROR;
             return entry;
         }

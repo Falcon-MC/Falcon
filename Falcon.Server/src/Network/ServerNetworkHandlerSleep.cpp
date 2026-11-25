@@ -5,7 +5,6 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BedBlock.h"
 #include "World/Level/Level.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/AnimatePacket.h"
 
 #include <cmath>
@@ -53,12 +52,10 @@ void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
         return;
 
     const Vector3i head = player.getSleepingPosition();
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_BED_LEAVE)) {
-        PluginEvent bedEvent;
-        bedEvent.mType = FALCON_EVENT_PLAYER_BED_LEAVE;
-        bedEvent.mPlayer = &player;
-        bedEvent.mBlockPosition = head;
-        plugins->dispatch(bedEvent);
+    EventSignal<PlayerBedLeaveAfterEvent> &bedLeave = mEventBus.after().mPlayerBedLeave;
+    if (bedLeave.hasSubscribers()) {
+        PlayerBedLeaveAfterEvent bedEvent(player, head);
+        bedLeave.emit(bedEvent);
     }
     player.clearSleeping();
     player.getFlags().set(ActorFlag::Sleeping, false);

@@ -4,8 +4,6 @@
 
 FALCON_REGISTER_BLOCK(ChestBlock, 40);
 
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -58,6 +56,7 @@ void ChestBlock::pair(Level &level, const Vector3i &position) {
 
     const BlockState &state = level.getBlockState(position.x, position.y, position.z);
     const std::string facing = facingOf(state);
+    ServerNetworkHandler *owner = level.getOwner();
 
     for (const auto &offset: NEIGHBOUR_OFFSETS) {
         if (!isPerpendicularToFacing(facing, offset[0], offset[1]))
@@ -72,24 +71,19 @@ void ChestBlock::pair(Level &level, const Vector3i &position) {
         if (other == nullptr || other->isPaired())
             continue;
 
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_CHEST_PAIR)) {
+        if (owner != nullptr && owner->getEventBus().before().mChestPair.hasSubscribers()) {
             const bool neighbourOnLeft = (facing == "north" && neighbour.x > position.x)
                                          || (facing == "south" && neighbour.x < position.x)
                                          || (facing == "east" && neighbour.z > position.z)
                                          || (facing == "west" && neighbour.z < position.z);
             const Vector3i &left = neighbourOnLeft ? neighbour : position;
             const Vector3i &right = neighbourOnLeft ? position : neighbour;
-            PluginEvent event;
-            event.mType = FALCON_EVENT_CHEST_PAIR;
-            event.mCancellable = true;
-            event.mLevel = &level;
-            event.mBlockPosition = left;
-            event.mTo = Vector3f((float) right.x, (float) right.y, (float) right.z);
-            plugins->dispatch(event);
+            ChestPairBeforeEvent event(level, left, right);
+            owner->getEventBus().before().mChestPair.emit(event);
             const BlockState current = level.getBlockState(position.x, position.y, position.z);
             if (current.mName != state.mName || facingOf(current) != facing)
                 return;
-            if (event.mCancelled)
+            if (event.isCancelled())
                 continue;
             const BlockState neighbourNow = level.getBlockState(neighbour.x, neighbour.y, neighbour.z);
             if (neighbourNow.mName != state.mName || facingOf(neighbourNow) != facing)

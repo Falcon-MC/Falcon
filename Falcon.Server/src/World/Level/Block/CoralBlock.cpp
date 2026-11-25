@@ -1,8 +1,4 @@
 #include "World/Level/Block/CoralBlock.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
-#include "Falcon/Plugin/PluginWorldEventData.h"
-
 
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockData.h"
@@ -77,24 +73,13 @@ void CoralBlock::dieWithoutWater(Level &level, const Vector3i &position, const B
         return;
 
     BlockState next = CopperSystem::transform(current, dead);
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_DEATH)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_BLOCK_DEATH;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mBlockPosition = position;
-        event.mBlockName = next.mName;
-        event.mPreviousBlockName = current.mName;
-        const std::string original = PluginWorldEventData::encodeBlock(next);
-        event.mCustomData = original;
-        plugins->dispatch(event);
-        if (event.mCancelled)
-            return;
-        if (event.mCustomData != original) {
-            BlockState altered;
-            if (!PluginWorldEventData::decodeBlock(event.mCustomData, altered))
+    if (ServerNetworkHandler *owner = level.getOwner(); owner != nullptr) {
+        EventSignal<BlockDeathBeforeEvent> &blockDeath = owner->getEventBus().before().mBlockDeath;
+        if (blockDeath.hasSubscribers()) {
+            BlockDeathBeforeEvent event(level, position, current, next);
+            blockDeath.emit(event);
+            if (event.isCancelled())
                 return;
-            next = std::move(altered);
         }
     }
     BlockChangeSystem::change(level, position, next, BlockChangeCause::Fade, true);

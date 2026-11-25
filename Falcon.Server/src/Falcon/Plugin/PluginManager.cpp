@@ -7,6 +7,7 @@
 #include "Falcon/Plugin/DotnetHost.h"
 #include "Falcon/Plugin/InternalPluginLoader.h"
 #include "Falcon/Plugin/JvmHost.h"
+#include "Falcon/Plugin/PluginBusEvents.h"
 #include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginPackets.h"
 #include "Falcon/Plugin/PluginServerApi.h"
@@ -48,6 +49,7 @@ PluginManager::~PluginManager() {
     disableAll();
     mScheduler.shutdown();
     mSubscriptions.clear();
+    _unhookBusEvents();
     mPlugins.clear();
     if (gInstance == this)
         gInstance = nullptr;
@@ -394,6 +396,7 @@ void PluginManager::_updateSubscribedTypes() {
             types.set(subscription.mType);
     }
     mSubscribedTypes = types;
+    _updateBusHooks();
 
     if (!mOwner.isTransportReady())
         return;
@@ -537,4 +540,22 @@ void PluginManager::_hookEventBus() {
         dispatch(event);
         source.setCancelled(event.mCancelled);
     });
+}
+
+void PluginManager::_updateBusHooks() {
+    EventBus &bus = mOwner.getEventBus();
+    PluginBusEvents::hookBrewing(*this, bus);
+    PluginBusEvents::hookActor(*this, bus);
+    PluginBusEvents::hookLevel(*this, bus);
+    PluginBusEvents::hookBlock(*this, bus);
+    PluginBusEvents::hookInventory(*this, bus);
+    PluginBusEvents::hookServer(*this, bus);
+    PluginBusEvents::hookPlayer(*this, bus);
+    PluginBusEvents::hookTeleport(*this, bus);
+}
+
+void PluginManager::_unhookBusEvents() {
+    for (auto &[signal, unhook]: mBusHooks)
+        unhook();
+    mBusHooks.clear();
 }

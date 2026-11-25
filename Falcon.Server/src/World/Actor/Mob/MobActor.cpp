@@ -32,7 +32,6 @@
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Item/ItemProperties.h"
@@ -1456,12 +1455,10 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
         _passTradesTo(owner, *mob, flagIn(transformation, "keep_level"));
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TRANSFORM)) {
-        PluginEvent transformEvent;
-        transformEvent.mType = FALCON_EVENT_ENTITY_TRANSFORM;
-        transformEvent.mEntity = this;
-        transformEvent.mTarget = result;
-        plugins->dispatch(transformEvent);
+    EventSignal<ActorTransformAfterEvent> &transform = owner.getEventBus().after().mActorTransform;
+    if (transform.hasSubscribers()) {
+        ActorTransformAfterEvent event(*this, *result);
+        transform.emit(event);
     }
 
     if (flagIn(transformation, "drop_equipment"))
@@ -2124,15 +2121,11 @@ bool MobActor::tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *com
     const json::Value *settings = getComponent(component);
     if (settings == nullptr || isTamed() || owner.getScriptEngine().beforeEntityTamed(*this, tamer))
         return false;
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TAME)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_TAME;
-        event.mCancellable = true;
-        event.mEntity = this;
-        event.mTarget = &tamer;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(&tamer);
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    EventSignal<ActorTameBeforeEvent> &tame = owner.getEventBus().before().mActorTame;
+    if (tame.hasSubscribers()) {
+        ActorTameBeforeEvent event(*this, tamer);
+        tame.emit(event);
+        if (event.isCancelled())
             return false;
     }
 
@@ -2835,14 +2828,11 @@ void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
 
 bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
     if (runtimeId != 0 && runtimeId != mTargetRuntimeId) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TARGET)) {
-            PluginEvent targetEvent;
-            targetEvent.mType = FALCON_EVENT_ENTITY_TARGET;
-            targetEvent.mCancellable = true;
-            targetEvent.mEntity = this;
-            targetEvent.mTarget = findActor(owner, runtimeId);
-            plugins->dispatch(targetEvent);
-            if (targetEvent.mCancelled)
+        EventSignal<ActorTargetBeforeEvent> &targeting = owner.getEventBus().before().mActorTarget;
+        if (targeting.hasSubscribers()) {
+            ActorTargetBeforeEvent event(*this, findActor(owner, runtimeId));
+            targeting.emit(event);
+            if (event.isCancelled())
                 return false;
         }
     }
@@ -2978,8 +2968,8 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     owner.getLevelFor(*this).postGameEvent(GameEvents::ENTITY_DIE, getPosition(), this);
 
     if (dropsRewardsOnDeath()) {
-        // plugins listening for the death see the loot first: it is gathered here and drops after their event
-        if (PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_DEATH) != nullptr) {
+        // listeners of the death see the loot first: it is gathered here and drops after their event
+        if (owner.getEventBus().before().mActorDeath.hasSubscribers()) {
             ServerNetworkHandler::DropCapture capture;
             ServerNetworkHandler::DropCapture *previous = owner.setDropCapture(&capture);
             dropDeathRewards(owner, source, lootingLevel);

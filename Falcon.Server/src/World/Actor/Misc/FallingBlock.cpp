@@ -1,8 +1,4 @@
 #include "World/Actor/Misc/FallingBlock.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
-#include "Falcon/Plugin/PluginWorldEventData.h"
-
 
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -205,20 +201,11 @@ void FallingBlock::_land(ServerNetworkHandler &owner, const Vector3i &position) 
             placed = concrete;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_BLOCK_CHANGE)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_BLOCK_CHANGE;
-        event.mCancellable = true;
-        event.mEntity = this;
-        event.mLevel = &level;
-        event.mBlockPosition = target;
-        event.mBlockName = placed.mName;
-        const std::string original = PluginWorldEventData::encodeBlock(placed);
-        event.mCustomData = original;
-        plugins->dispatch(event);
-        if (event.mCancelled)
-            return;
-        if (event.mCustomData != original && !PluginWorldEventData::decodeBlock(event.mCustomData, placed))
+    EventSignal<ActorBlockChangeBeforeEvent> &blockChange = owner.getEventBus().before().mActorBlockChange;
+    if (blockChange.hasSubscribers()) {
+        ActorBlockChangeBeforeEvent event(*this, level, target, placed);
+        blockChange.emit(event);
+        if (event.isCancelled())
             return;
     }
 

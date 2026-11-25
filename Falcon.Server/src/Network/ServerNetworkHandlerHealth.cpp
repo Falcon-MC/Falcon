@@ -21,8 +21,6 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/Handler/ItemActorHandler.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/DeathInfoPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
@@ -173,41 +171,26 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
             mob->setLastHurtMob(player.getRuntimeId());
     }
 
-    PluginEvent damageEvent;
-    damageEvent.mType = FALCON_EVENT_ENTITY_DAMAGE;
-    damageEvent.mCancellable = true;
-    damageEvent.mEntity = &player;
-    damageEvent.mAttacker = source.mAttacker;
-    damageEvent.mTarget = source.mDamager;
-    damageEvent.mAmount = amount;
-    damageEvent.mCause = key;
-    if (source.mBlock) {
-        damageEvent.mLevel = &getLevelFor(player);
-        damageEvent.mBlockPosition = *source.mBlock;
-        const auto &position = *source.mBlock;
-        if (const BlockState *block = damageEvent.mLevel->peekBlockPtr(position.x, position.y, position.z))
-            damageEvent.mBlockName = block->mName;
-    }
-    // a hit from an attacker pushes: plugins see the game's push and may change it
+    // a hit from an attacker pushes: listeners see the game's push and may change it
     float knockbackHorizontal = 0.4f;
     float knockbackVertical = 0.4f;
-    if (source.mAttacker != nullptr) {
-        damageEvent.mKnockbackHorizontal = &knockbackHorizontal;
-        damageEvent.mKnockbackVertical = &knockbackVertical;
+    EventSignal<ActorDamageBeforeEvent> &damage = mEventBus.before().mActorDamage;
+    if (damage.hasSubscribers()) {
+        ActorDamageBeforeEvent event(player, source, amount, knockbackHorizontal, knockbackVertical);
+        damage.emit(event);
+        if (source.mAttacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
+            player.setKnockbackOverride(knockbackHorizontal, knockbackVertical);
+        if (event.isCancelled())
+            return DamageResult::Ignored;
+
+        amount = event.mDamage;
+        if (amount <= 0.0f)
+            return DamageResult::Ignored;
+
+        // rechecked: a listener may have lowered the amount
+        if (cooling && player.getLastDamageAmount() >= amount)
+            return DamageResult::Ignored;
     }
-    PluginManager::getInstance().dispatch(damageEvent);
-    if (source.mAttacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
-        player.setKnockbackOverride(knockbackHorizontal, knockbackVertical);
-    if (damageEvent.mCancelled)
-        return DamageResult::Ignored;
-
-    amount = (float) damageEvent.mAmount;
-    if (amount <= 0.0f)
-        return DamageResult::Ignored;
-
-    // rechecked: a plugin may have lowered the amount
-    if (cooling && player.getLastDamageAmount() >= amount)
-        return DamageResult::Ignored;
 
     if (source.mOrigin.has_value()) {
         Actor *knockedBack = source.mProjectile ? nullptr : source.mAttacker;
@@ -304,20 +287,14 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
                                                         : deathMessageParameters;
 
     std::string deathMessage = key;
-    PluginEvent deathEvent;
-    deathEvent.mType = FALCON_EVENT_PLAYER_DEATH;
-    deathEvent.mPlayer = &player;
-    deathEvent.mEntity = &player;
-    deathEvent.mMessage = &deathMessage;
-
-    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_DEATH);
-    if (plugins == nullptr) {
+    EventSignal<PlayerDeathBeforeEvent> &death = mEventBus.before().mPlayerDeath;
+    if (!death.hasSubscribers()) {
         if (!ruleKeepsInventory) {
             _dropInventoryOnDeath(player);
             _dropExperienceOnDeath(player, player.isCreative() ? 0 : player.getExperience().getXpDropAmount());
         }
     } else {
-        _killPlayerWithPlugins(*plugins, player, deathEvent, ruleKeepsInventory);
+        _killPlayerWithListeners(death, player, deathMessage, ruleKeepsInventory);
     }
 
     player.clearSculkCatalystState();
@@ -349,9 +326,9 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     LOG_INFO(LogAreaID::Server, "%s died", player.getName().c_str());
 }
 
-// the death of a player plugins listen to: they see what will drop and whether the player keeps it, and change it
-void ServerNetworkHandler::_killPlayerWithPlugins(PluginManager &plugins, ServerPlayer &player, PluginEvent &deathEvent,
-                                                  bool ruleKeepsInventory) {
+// the death of a player listeners hear: they see what will drop and whether the player keeps it, and change it
+void ServerNetworkHandler::_killPlayerWithListeners(EventSignal<PlayerDeathBeforeEvent> &death, ServerPlayer &player,
+                                                    std::string &deathMessage, bool ruleKeepsInventory) {
     PlayerInventory &inventory = player.getInventory();
 
     // the inventory as it was, given back when a plugin keeps it after the rule dropped it
@@ -373,15 +350,8 @@ void ServerNetworkHandler::_killPlayerWithPlugins(PluginManager &plugins, Server
     bool keepInventory = ruleKeepsInventory;
     bool keepExperience = ruleKeepsInventory;
     int32_t experience = player.isCreative() || player.isDeathExperienceTaken() ? 0 : player.getExperience().getXpDropAmount();
-    deathEvent.mDrops = &capture.mItems;
-    deathEvent.mExperience = &experience;
-    deathEvent.mKeepInventory = &keepInventory;
-    deathEvent.mKeepExperience = &keepExperience;
-    plugins.dispatch(deathEvent);
-    deathEvent.mDrops = nullptr;
-    deathEvent.mExperience = nullptr;
-    deathEvent.mKeepInventory = nullptr;
-    deathEvent.mKeepExperience = nullptr;
+    PlayerDeathBeforeEvent event(player, deathMessage, capture.mItems, experience, keepInventory, keepExperience);
+    death.emit(event);
 
     if (keepInventory && !ruleKeepsInventory) {
         for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot)
@@ -604,14 +574,17 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     std::optional<Vector3i> anchor;
     Vector3f spawn = _respawnPositionFor(player, destination, anchor);
 
-    PluginEvent respawnEvent;
-    respawnEvent.mType = FALCON_EVENT_PLAYER_RESPAWN;
-    respawnEvent.mPlayer = &player;
-    respawnEvent.mTo = spawn;
-    PluginManager::getInstance().dispatch(respawnEvent);
-    // a plugin position carries no dimension: it is an overworld one, and the anchor was not used
-    if (respawnEvent.mToChanged) {
-        spawn = respawnEvent.mTo;
+    bool spawnChanged = false;
+    EventSignal<PlayerRespawnBeforeEvent> &respawning = mEventBus.before().mPlayerRespawn;
+    if (respawning.hasSubscribers()) {
+        PlayerRespawnBeforeEvent event(player, spawn);
+        respawning.emit(event);
+        spawnChanged = event.mSpawnChanged;
+        if (spawnChanged)
+            spawn = event.mSpawn;
+    }
+    // a listener's position carries no dimension: it is an overworld one, and the anchor was not used
+    if (spawnChanged) {
         destination = &getWorldFor(player).getOverworld();
     } else if (anchor.has_value()) {
         RespawnAnchorBlock::addCharge(*this, *destination, *anchor, -1);

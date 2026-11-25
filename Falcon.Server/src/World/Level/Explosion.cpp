@@ -16,7 +16,6 @@
 #include "World/Level/Chunk/SubChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Level/Particle/BlockExplodeParticle.h"
 #include "World/Level/Particle/ExplodeParticle.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
@@ -454,23 +453,16 @@ bool Explosion::explodeA() {
 }
 
 bool Explosion::_allowByPlugins() {
-    PluginManager &plugins = mOwner.getPluginManager();
-    if (!plugins.hasSubscribers(FALCON_EVENT_EXPLOSION))
+    EventSignal<ExplosionBeforeEvent> &explosion = mOwner.getEventBus().before().mExplosion;
+    if (!explosion.hasSubscribers())
         return _allowByScripts();
 
-    PluginEvent explosionEvent;
-    explosionEvent.mType = FALCON_EVENT_EXPLOSION;
-    explosionEvent.mCancellable = true;
-    explosionEvent.mEntity = const_cast<ServerActor *>(mSourceActor);
-    explosionEvent.mLevel = &mLevel;
-    explosionEvent.mPosition = mSource;
-    explosionEvent.mAmount = mSize;
-    explosionEvent.mBlocks = &mAffectedBlocks;
-    plugins.dispatch(explosionEvent);
-    if (explosionEvent.mCancelled)
+    ExplosionBeforeEvent event(mLevel, mSourceActor, mSource, mSize, mAffectedBlocks);
+    explosion.emit(event);
+    if (event.isCancelled())
         return false;
 
-    mSize = std::max(explosionEvent.mAmount, 0.0);
+    mSize = event.mSize;
     return _allowByScripts();
 }
 

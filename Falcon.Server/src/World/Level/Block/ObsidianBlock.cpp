@@ -7,7 +7,6 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <string>
 #include <vector>
@@ -21,21 +20,18 @@ namespace {
         return identifierAt(level, x, y, z) == OBSIDIAN_IDENTIFIER;
     }
 
-    // FALCON_EVENT_PORTAL_CREATE with the blocks the portal would fill; false when a plugin refuses it
+    // false when a handler refuses the portal the frame would fill
     bool allowedByPlugins(Level &level, const std::vector<Vector3i> &blocks) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PORTAL_CREATE);
-        if (plugins == nullptr)
+        ServerNetworkHandler *owner = level.getOwner();
+        if (owner == nullptr)
+            return true;
+        EventSignal<PortalCreateBeforeEvent> &portalCreate = owner->getEventBus().before().mPortalCreate;
+        if (!portalCreate.hasSubscribers())
             return true;
 
-        // a copy: the portal fills the frame it found, whatever a plugin writes in the list
-        std::vector<Vector3i> shown = blocks;
-        PluginEvent event;
-        event.mType = FALCON_EVENT_PORTAL_CREATE;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mBlocks = &shown;
-        plugins->dispatch(event);
-        return !event.mCancelled;
+        PortalCreateBeforeEvent event(level, blocks);
+        portalCreate.emit(event);
+        return !event.isCancelled();
     }
 }
 

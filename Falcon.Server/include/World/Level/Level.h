@@ -663,8 +663,6 @@ private:
 
     void _restoreSpilledChanges(int64_t key, std::vector<GeneratedBlockChange> changes);
 
-    void _dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated);
-
     void _flushPendingBlockChanges(bool includeInFlight);
 
     void _flushParkedChanges();

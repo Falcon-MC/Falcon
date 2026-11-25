@@ -18,7 +18,6 @@
 #include "Protocol/Types/EntityDataMap.h"
 #include "World/Actor/Movement/MovementConstants.h"
 #include "Core/Math/VectorMath.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -448,11 +447,11 @@ int32_t FishingHookActor::retrieve(ServerNetworkHandler &owner, ServerPlayer &an
     int32_t durability = 0;
     if (mHookedUniqueId != 0) {
         ServerActor *hooked = owner.getActor(mHookedUniqueId);
-        if (hooked != nullptr && hooked->isAlive() && _allowReel(angler, hooked)) {
+        if (hooked != nullptr && hooked->isAlive() && _allowReel(owner, angler, hooked)) {
             _pullTowards(owner, *hooked, angler);
             durability = DURABILITY_ACTOR;
         }
-    } else if (mNibble > 0 && _allowReel(angler, nullptr)) {
+    } else if (mNibble > 0 && _allowReel(owner, angler, nullptr)) {
         _catch(owner, angler);
         durability = DURABILITY_FISH;
     }
@@ -464,20 +463,14 @@ int32_t FishingHookActor::retrieve(ServerNetworkHandler &owner, ServerPlayer &an
     return durability;
 }
 
-bool FishingHookActor::_allowReel(ServerPlayer &angler, Actor *hooked) {
-    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FISH);
-    if (plugins == nullptr)
+bool FishingHookActor::_allowReel(ServerNetworkHandler &owner, ServerPlayer &angler, Actor *hooked) {
+    EventSignal<PlayerFishBeforeEvent> &fish = owner.getEventBus().before().mPlayerFish;
+    if (!fish.hasSubscribers())
         return true;
 
-    PluginEvent event;
-    event.mType = FALCON_EVENT_PLAYER_FISH;
-    event.mCancellable = true;
-    event.mPlayer = &angler;
-    event.mEntity = this;
-    event.mTarget = hooked;
-    event.mState = hooked == nullptr;
-    plugins->dispatch(event);
-    return !event.mCancelled;
+    PlayerFishBeforeEvent event(angler, *this, hooked);
+    fish.emit(event);
+    return !event.isCancelled();
 }
 
 void FishingHookActor::_catch(ServerNetworkHandler &owner, ServerPlayer &angler) {

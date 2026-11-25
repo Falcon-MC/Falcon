@@ -636,15 +636,13 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     const int32_t previousGameMode = player.getGameType();
 
     if (previousGameMode != gameMode) {
-        PluginEvent gameModeEvent;
-        gameModeEvent.mType = FALCON_EVENT_PLAYER_GAME_MODE_CHANGE;
-        gameModeEvent.mCancellable = true;
-        gameModeEvent.mPlayer = &player;
-        gameModeEvent.mGameMode = gameMode;
-        gameModeEvent.mPreviousGameMode = previousGameMode;
-        mPluginManager->dispatch(gameModeEvent);
-        if (gameModeEvent.mCancelled)
-            return;
+        EventSignal<PlayerGameModeChangeBeforeEvent> &gameModeChange = mEventBus.before().mPlayerGameModeChange;
+        if (gameModeChange.hasSubscribers()) {
+            PlayerGameModeChangeBeforeEvent gameModeEvent(player, previousGameMode, gameMode);
+            gameModeChange.emit(gameModeEvent);
+            if (gameModeEvent.isCancelled())
+                return;
+        }
         if (mScriptEngine.beforePlayerGameModeChange(player, previousGameMode, gameMode))
             return;
         player.setAllowFlight(std::nullopt);

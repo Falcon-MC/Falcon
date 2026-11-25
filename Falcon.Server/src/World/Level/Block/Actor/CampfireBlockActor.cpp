@@ -1,7 +1,5 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Level/Block/ContainerBlock.h"
 #include "World/Inventory/ItemStackNbt.h"
 #include "World/Item/CraftingRecipeTable.h"
@@ -160,18 +158,11 @@ bool CampfireBlockActor::tick(ServerNetworkHandler &owner) {
             cooked.mCount = item.mCount;
         }
 
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_CAMPFIRE_COOK)) {
-            ItemStack input = item;
-            PluginEvent event;
-            event.mType = FALCON_EVENT_CAMPFIRE_COOK;
-            event.mCancellable = true;
-            event.mLevel = mLevel;
-            event.mBlockPosition = mPosition;
-            event.mSourceSlot = slot;
-            event.mItem = &input;
-            event.mResult = &cooked;
-            plugins->dispatch(event);
-            if (event.mCancelled)
+        EventSignal<CampfireCookBeforeEvent> &campfireCook = owner.getEventBus().before().mCampfireCook;
+        if (campfireCook.hasSubscribers()) {
+            CampfireCookBeforeEvent event(*mLevel, mPosition, slot, item, cooked);
+            campfireCook.emit(event);
+            if (event.isCancelled())
                 continue;
         }
         mInventory.setContainerItem(slot, ItemStack::air());

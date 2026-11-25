@@ -18,7 +18,6 @@
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/AddItemActorPacket.h"
 #include "Protocol/Packets/MoveActorAbsolutePacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
@@ -438,17 +437,16 @@ add.mMetadata.mEntries.push_back(flags3);
             ItemStack pickedItem = actor.getItem();
             pickedItem.mCount = pickupCount;
 
-            ItemStack eventItem = pickedItem;
-            PluginEvent pluginEvent;
-            pluginEvent.mType = FALCON_EVENT_PLAYER_PICKUP_ITEM;
-            pluginEvent.mCancellable = true;
-            pluginEvent.mPlayer = &player;
-            pluginEvent.mEntity = &actor;
-            pluginEvent.mItem = &eventItem;
-            PluginManager::getInstance().dispatch(pluginEvent);
+            bool cancelled = false;
+            EventSignal<PlayerPickupItemBeforeEvent> &pickup = owner.getEventBus().before().mPlayerPickupItem;
+            if (pickup.hasSubscribers()) {
+                PlayerPickupItemBeforeEvent pickupEvent(player, actor, pickedItem);
+                pickup.emit(pickupEvent);
+                cancelled = pickupEvent.isCancelled();
+            }
             if (actor.isRemoved())
                 return;
-            if (pluginEvent.mCancelled)
+            if (cancelled)
                 continue;
             if (owner.getScriptEngine().beforeEntityItemPickup(player, actor, pickedItem)) {
                 if (actor.isRemoved())
@@ -573,14 +571,11 @@ namespace {
 
                             ItemActor *kept = theirs.mCount >= mine.mCount ? other : self;
                             ItemActor *gone = kept == other ? self : other;
-                            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_MERGE)) {
-                                PluginEvent event;
-                                event.mType = FALCON_EVENT_ITEM_MERGE;
-                                event.mCancellable = true;
-                                event.mEntity = gone;
-                                event.mTarget = kept;
-                                plugins->dispatch(event);
-                                if (event.mCancelled || gone->isRemoved() || kept->isRemoved())
+                            EventSignal<ItemMergeBeforeEvent> &merge = owner.getEventBus().before().mItemMerge;
+                            if (merge.hasSubscribers()) {
+                                ItemMergeBeforeEvent event(*gone, *kept);
+                                merge.emit(event);
+                                if (event.isCancelled() || gone->isRemoved() || kept->isRemoved())
                                     continue;
                             }
                             ItemStack stack = kept->getItem();
@@ -753,13 +748,11 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
 
         bool expired = !actor.isRemoved() && actor.isExpired() && despawns(actor.getItem());
         if (expired) {
-            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_DESPAWN)) {
-                PluginEvent event;
-                event.mType = FALCON_EVENT_ITEM_DESPAWN;
-                event.mCancellable = true;
-                event.mEntity = &actor;
-                plugins->dispatch(event);
-                if (event.mCancelled) {
+            EventSignal<ItemDespawnBeforeEvent> &despawn = owner.getEventBus().before().mItemDespawn;
+            if (despawn.hasSubscribers()) {
+                ItemDespawnBeforeEvent event(actor);
+                despawn.emit(event);
+                if (event.isCancelled()) {
                     actor.setAge(0);
                     expired = false;
                 }

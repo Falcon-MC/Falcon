@@ -9,7 +9,6 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginActor.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cmath>
 #include <string>
@@ -106,9 +105,14 @@ namespace {
         Level *destinationLevel = destination == nullptr ? &owner().getLevelFor(*value) : level(destination);
         // the plugin drawing it keeps it where its own copy is: that is no teleport to tell anyone of
         const ServerActor *drawn = asActor(value);
-        if ((drawn == nullptr || !drawn->isDrawnByPlugin())
-            && !PluginEvents::teleport(*value, to, "plugin", &destinationLevel))
-            return 0;
+        EventSignal<ActorTeleportBeforeEvent> &teleport = owner().getEventBus().before().mActorTeleport;
+        if ((drawn == nullptr || !drawn->isDrawnByPlugin()) && teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(*value, to, TeleportCause::Plugin, destinationLevel);
+            teleport.emit(event);
+            if (event.isCancelled())
+                return 0;
+            destinationLevel = event.mDestination;
+        }
         if (!isFinite(to))
             return 0;
 
