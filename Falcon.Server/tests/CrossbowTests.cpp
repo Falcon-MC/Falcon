@@ -66,6 +66,8 @@ namespace {
         ServerTickProbe::advance(owner, 6);
         owner._useHeldItem(player);
         require(owner.getActors().size() == 1, "the loaded crossbow did not shoot one arrow");
+        const ItemStack &pickup = owner.getActors().begin()->second->getProjectileData().mPickupItem;
+        require(!pickup.isAir() && pickup.mCount == 1, "the survival shot gives no arrow back on pickup");
         require(chargedItemOf(inventory.getItemInHand()) == nullptr, "the shot left the crossbow loaded");
 
         ServerTickProbe::advance(owner, 1);

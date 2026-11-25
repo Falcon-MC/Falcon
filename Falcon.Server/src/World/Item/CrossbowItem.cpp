@@ -81,6 +81,11 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
     const int32_t multishot = ItemEnchantments::getLevel(item, EnchantmentIds::MULTISHOT);
     const int32_t piercing = ItemEnchantments::getLevel(item, EnchantmentIds::PIERCING);
     const int32_t shots = multishot > 0 ? 3 : 1;
+    // the game hands the loaded arrow back from the middle shot; a creative shooter's gives nothing
+    const Tag *loaded = item.mTag.get(CHARGED_ITEM_TAG);
+    const ItemStack pickup = loaded != nullptr && hasFiniteResources(player)
+                                     ? ItemStackNbt::read(*loaded, owner.getCodecContext())
+                                     : ItemStack::air();
 
     for (int32_t index = 0; index < shots; ++index) {
         ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR);
@@ -96,6 +101,8 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
             const int32_t damage = charged->getShort(CHARGED_DAMAGE_TAG, 0);
             data.mPotionId = damage > 0 ? damage - 1 : -1;
         }
+        if (index == 0)
+            data.mPickupItem = pickup;
 
         if (index > 0) {
             const float spread = (index == 1 ? -MULTISHOT_SPREAD_DEGREES : MULTISHOT_SPREAD_DEGREES)
