@@ -9,7 +9,7 @@
 #include <vector>
 
 // minecraft:behavior.drink_potion: the first potion whose chance and filters allow it is held and drunk, its
-// effects taken when the drinking ends
+// effects taken when the drinking ends; speed_modifier is added to the mob's movement meanwhile
 class DrinkPotionGoal : public Goal {
 public:
     struct Potion {
@@ -18,7 +18,7 @@ public:
         CompiledEntityFilter mFilters;
     };
 
-    explicit DrinkPotionGoal(std::vector<Potion> potions);
+    explicit DrinkPotionGoal(std::vector<Potion> potions, float speedModifier = 0.0f);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
@@ -30,6 +30,7 @@ public:
 
 private:
     std::vector<Potion> mPotions;
+    float mSpeedModifier;
     int mCalls = 0;
     int64_t mEndTick = 0;
 };

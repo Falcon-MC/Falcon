@@ -2766,6 +2766,13 @@ float MobActor::getMovementSpeed() const {
     return _rolledValue(getComponent("minecraft:movement"), mRolledMovementSpeed, DEFAULT_MOVEMENT_SPEED);
 }
 
+float MobActor::getMovementModifierScale() const {
+    const float speed = getMovementSpeed();
+    if (mMovementModifier == 0.0f || speed <= 0.0f)
+        return 1.0f;
+    return std::max(0.0f, speed + mMovementModifier) / speed;
+}
+
 float MobActor::getFollowRange() const {
     const json::Value *component = getComponent("minecraft:follow_range");
     const json::Value *value = component == nullptr ? nullptr : component->get("value");

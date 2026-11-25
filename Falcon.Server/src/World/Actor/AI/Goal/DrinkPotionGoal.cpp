@@ -34,7 +34,8 @@ namespace {
     }
 }
 
-DrinkPotionGoal::DrinkPotionGoal(std::vector<Potion> potions) : mPotions(std::move(potions)) {}
+DrinkPotionGoal::DrinkPotionGoal(std::vector<Potion> potions, float speedModifier)
+        : mPotions(std::move(potions)), mSpeedModifier(speedModifier) {}
 
 bool DrinkPotionGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (mCalls++ < CALLS_BETWEEN_TRIES)
@@ -65,6 +66,7 @@ bool DrinkPotionGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     mob.getEquipment().broadcast(owner, mob);
     mEndTick = owner.getCurrentTick() + duration;
     setDrinking(owner, mob, true);
+    mob.setMovementModifier(mSpeedModifier);
     return true;
 }
 
@@ -85,5 +87,6 @@ void DrinkPotionGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
     mob.getEquipment().setSlot(MobEquipment::MAINHAND, ItemStack::air());
     mob.getEquipment().broadcast(owner, mob);
     setDrinking(owner, mob, false);
+    mob.setMovementModifier(0.0f);
     mEndTick = 0;
 }
