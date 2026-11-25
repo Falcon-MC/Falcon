@@ -2,6 +2,7 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Projectile/ProjectileActor.h"
 #include "World/Actor/Projectile/ProjectileReflection.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/GameRules.h"
@@ -90,6 +91,19 @@ namespace {
         require(far.getMotion().x == 0.0f, "a pig out of reach was pushed");
     }
 
+    // the burst of a charge striking a wall still pushes a mob in front of it
+    void blockHits() {
+        Arena arena;
+        arena.mLevel.setBlockState(5, 100, 0, BlockState("minecraft:stone"));
+        ServerActor &pig = arena.spawn("minecraft:pig", Vector3f(3.0f, 100.0f, 0.5f));
+        auto *charge = dynamic_cast<WindChargeActor *>(
+                &arena.spawn("minecraft:wind_charge_projectile", Vector3f(4.6f, 100.5f, 0.5f)));
+        require(charge != nullptr, "the wind charge is not a WindChargeActor");
+        charge->setMotion(Vector3f(1.5f, 0.0f, 0.0f));
+        charge->onHit(arena.mOwner, Vector3f(5.5f, 100.5f, 0.5f), nullptr);
+        require(pig.getMotion().x < 0.0f, "a charge striking a wall did not push the pig beside it");
+    }
+
     void toggles() {
         Arena arena;
         const Vector3i hatch(1, 100, 0);
@@ -156,6 +170,7 @@ int main() {
         EntityDefinitions::initialize();
         impacts();
         pushes();
+        blockHits();
         toggles();
         reflections();
         std::cout << "wind burst checks passed\n";
