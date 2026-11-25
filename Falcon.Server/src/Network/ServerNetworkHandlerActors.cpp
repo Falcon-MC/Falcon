@@ -2241,12 +2241,13 @@ void ServerNetworkHandler::tickActors() {
                 continue;
             }
 
+            const Vector3f startRotation = actor.getRotation();
             actor.setMotion(motion);
             actor.setPosition(position);
             if (steered != nullptr)
                 steered->afterMove(*this);
             if (drifting)
-                actor.setRotation(ProjectileSystem::face(actor.getRotation(), motion));
+                actor.setRotation(ProjectileSystem::face(startRotation, motion));
             else
                 faceMotion(actor, motion);
 
@@ -2451,6 +2452,12 @@ void ServerNetworkHandler::tickActors() {
                     hitActor = nullptr;
 
                 if (hitActor != nullptr && ProjectileReflection::reflect(*this, level, actor, *hitActor)) {
+                    // the game stops it where it met the entity, then turns, slows and drops the new motion this tick
+                    actor.setPosition(contactPosition);
+                    if (drifting) {
+                        actor.setRotation(ProjectileSystem::face(startRotation, actor.getMotion()));
+                        actor.setMotion(ProjectileSystem::dragAndFall(actor.getMotion(), settings, inWater));
+                    }
                     broadcastActorMove(actor);
                     continue;
                 }
