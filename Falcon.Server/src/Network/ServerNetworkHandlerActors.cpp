@@ -17,7 +17,7 @@
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Misc/PaintingActor.h"
-#include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/BlockClip.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
 #include "Server/Commands/ServerCommandOrigin.h"
@@ -75,20 +75,6 @@
 
 namespace {
     const char *const UNDEAD_FAMILY = "undead";
-
-    // a snow layer stops it inside its shape only; other blocks across the whole cell
-    bool blocksProjectile(Level &level, const ServerActor &projectile, const Vector3f &position, int32_t x, int32_t y,
-                          int32_t z) {
-        if (!level.isSolidAt(x, y, z))
-            return false;
-
-        const BlockState *state = level.peekBlockPtr(x, y, z);
-        const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
-        if (block == nullptr || !block->shapesCollisionPerActor())
-            return true;
-
-        return BlockShape::isPositionInside(*state, x, y, z, position.x, position.y, position.z, &projectile);
-    }
 
     MobEffectInstance potionEffectInstance(const PotionEffect &effect, float durationScale) {
         MobEffectInstance instance;
@@ -716,28 +702,12 @@ void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vec
                                ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
 }
 
-// stops at the last free point of this tick's path, so the arrow shows half sunk in the face it hit
-void ServerNetworkHandler::plantProjectile(ServerActor &projectile, Level &level, const Vector3f &from,
-                                           const Vector3i &block) {
+void ServerNetworkHandler::plantProjectile(ServerActor &projectile, const Vector3i &block) {
     ProjectileData &data = projectile.getProjectileData();
-    const Vector3f to = projectile.getPosition();
-    Vector3f resting = from;
-    const int32_t steps = 16;
-    for (int32_t step = 1; step <= steps; ++step) {
-        const float progress = (float) step / (float) steps;
-        const Vector3f sample(from.x + (to.x - from.x) * progress, from.y + (to.y - from.y) * progress,
-                              from.z + (to.z - from.z) * progress);
-        if (blocksProjectile(level, projectile, sample, (int32_t) std::floor(sample.x), (int32_t) std::floor(sample.y),
-                             (int32_t) std::floor(sample.z)))
-            break;
-        resting = sample;
-    }
-
     data.mStuckBlock = block;
     data.mStuckTicks = 0;
     data.mCritical = false;
     projectile.setMotion(Vector3f());
-    projectile.setPosition(resting);
     broadcastActorMove(projectile);
 
     ActorEventPacket shake;
@@ -2251,74 +2221,35 @@ void ServerNetworkHandler::tickActors() {
             else
                 faceMotion(actor, motion);
 
-            const int32_t blockX = (int32_t) std::floor(position.x);
-            const int32_t blockY = (int32_t) std::floor(position.y);
-            const int32_t blockZ = (int32_t) std::floor(position.z);
-
             if (arrowLike && actor.getProjectileData().mReturning) {
                 actor.addLifetimeTick();
                 broadcastActorMove(actor);
                 continue;
             }
 
-            if (actor.getLifetimeTicks() > 1 && blocksProjectile(level, actor, position, blockX, blockY, blockZ)) {
-                const Vector3f hitPosition((float) blockX + 0.5f, (float) blockY + 0.5f, (float) blockZ + 0.5f);
-                const Vector3i hitBlock(blockX, blockY, blockZ);
-                if (!allowProjectileHit(*this, actor, level, hitPosition, nullptr, &hitBlock)) {
-                    expired.push_back(actorId);
-                    continue;
-                }
-
-                const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
-                if (DetectorSystem::isTarget(hitState))
-                    DetectorSystem::onTargetHit(*this, level, hitBlock, position, previousPosition, actor, arrowLike);
-                const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
-                if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
-                    expired.push_back(actorId);
-                    continue;
-                }
-
-                if (!onThrownProjectileHit(actor, hitPosition, nullptr))
-                    mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ, previousPosition, position);
-
-                if (actor.getProjectileData().mStuck) {
-                    plantProjectile(actor, level, previousPosition, Vector3i(blockX, blockY, blockZ));
-                    continue;
-                }
-
-                if (heldAfterHit(actor) != nullptr) {
-                    broadcastActorMove(actor);
-                    continue;
-                }
-
-                if (!actor.getProjectileData().mReturning) {
-                    expired.push_back(actorId);
-                    continue;
-                }
-
-                actor.setPosition(previousPosition);
-                actor.addLifetimeTick();
-                broadcastActorMove(actor);
-                continue;
-            }
+            BlockClipHit blockHit;
+            const bool struckBlock = actor.getLifetimeTicks() > 1
+                                     && BlockClip::clip(level, previousPosition, position, &actor, blockHit);
 
             if (actor.getLifetimeTicks() > 1) {
-                const float sweepX = position.x - previousPosition.x;
-                const float sweepY = position.y - previousPosition.y;
-                const float sweepZ = position.z - previousPosition.z;
+                // only what stands before the struck block is in its way
+                const Vector3f &sweepEnd = struckBlock ? blockHit.mPosition : position;
+                const float sweepX = sweepEnd.x - previousPosition.x;
+                const float sweepY = sweepEnd.y - previousPosition.y;
+                const float sweepZ = sweepEnd.z - previousPosition.z;
                 const float sweepLength = std::sqrt(sweepX * sweepX + sweepY * sweepY + sweepZ * sweepZ);
                 const int64_t sampleCount = std::max<int64_t>(
                         1, (int64_t) std::min(std::ceil((double) sweepLength / 0.25), 2147483647.0));
 
                 ServerPlayer *hitPlayer = nullptr;
                 ServerActor *hitActor = nullptr;
-                Vector3f contactPosition = position;
+                Vector3f contactPosition = sweepEnd;
 
                 // candidates picked once per tick: only a box meeting the sweep's bounds can hold a sample
-                const Vector3f low(std::min(previousPosition.x, position.x), std::min(previousPosition.y, position.y),
-                                   std::min(previousPosition.z, position.z));
-                const Vector3f high(std::max(previousPosition.x, position.x), std::max(previousPosition.y, position.y),
-                                    std::max(previousPosition.z, position.z));
+                const Vector3f low(std::min(previousPosition.x, sweepEnd.x), std::min(previousPosition.y, sweepEnd.y),
+                                   std::min(previousPosition.z, sweepEnd.z));
+                const Vector3f high(std::max(previousPosition.x, sweepEnd.x), std::max(previousPosition.y, sweepEnd.y),
+                                    std::max(previousPosition.z, sweepEnd.z));
                 const auto meetsSweep = [&low, &high](const AxisAlignedBB &box) {
                     return box.mMaxX >= low.x && box.mMinX <= high.x && box.mMaxY >= low.y && box.mMinY <= high.y
                            && box.mMaxZ >= low.z && box.mMinZ <= high.z;
@@ -2364,7 +2295,7 @@ void ServerNetworkHandler::tickActors() {
                 // a sweep over many columns reads every actor once rather than every column of the index
                 if (high.x - low.x <= SWEEP_INDEX_SPAN && high.z - low.z <= SWEEP_INDEX_SPAN) {
                     _refreshActorIndex();
-                    const Vector3f middle((low.x + high.x) * 0.5f, position.y, (low.z + high.z) * 0.5f);
+                    const Vector3f middle((low.x + high.x) * 0.5f, sweepEnd.y, (low.z + high.z) * 0.5f);
                     const float reach = std::max(high.x - low.x, high.z - low.z) * 0.5f
                                         + std::max(mActorIndexWidestHalf, mActorIndexWidestBox) + PROJECTILE_HIT_GROW;
                     forEachActorNear(middle, reach, consider);
@@ -2476,6 +2407,50 @@ void ServerNetworkHandler::tickActors() {
                         expired.push_back(actorId);
                     continue;
                 }
+            }
+
+            if (struckBlock) {
+                const Vector3f hitPosition = blockHit.mPosition;
+                const Vector3i &hitBlock = blockHit.mBlock;
+                actor.setPosition(hitPosition);
+                if (!allowProjectileHit(*this, actor, level, hitPosition, nullptr, &hitBlock)) {
+                    expired.push_back(actorId);
+                    continue;
+                }
+
+                const BlockState hitState = level.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+                if (DetectorSystem::isTarget(hitState))
+                    DetectorSystem::onTargetHit(*this, level, hitBlock, hitPosition, previousPosition, actor,
+                                                arrowLike);
+                const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
+                if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
+                    expired.push_back(actorId);
+                    continue;
+                }
+
+                if (!onThrownProjectileHit(actor, hitPosition, nullptr))
+                    mScriptEngine.onProjectileHitBlock(actor, hitBlock.x, hitBlock.y, hitBlock.z, previousPosition,
+                                                       hitPosition);
+
+                if (actor.getProjectileData().mStuck) {
+                    plantProjectile(actor, hitBlock);
+                    continue;
+                }
+
+                if (heldAfterHit(actor) != nullptr) {
+                    broadcastActorMove(actor);
+                    continue;
+                }
+
+                if (!actor.getProjectileData().mReturning) {
+                    expired.push_back(actorId);
+                    continue;
+                }
+
+                actor.setPosition(previousPosition);
+                actor.addLifetimeTick();
+                broadcastActorMove(actor);
+                continue;
             }
 
             if (drifting)

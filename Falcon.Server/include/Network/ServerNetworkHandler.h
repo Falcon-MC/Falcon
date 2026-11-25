@@ -423,7 +423,7 @@ public:
     void returnProjectileToOwner(ServerPlayer &player, ServerActor &projectile);
 
 
-    void plantProjectile(ServerActor &projectile, Level &level, const Vector3f &from, const Vector3i &block);
+    void plantProjectile(ServerActor &projectile, const Vector3i &block);
 
 
     bool tickPlantedProjectile(ServerActor &projectile, Level &level);
