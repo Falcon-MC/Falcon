@@ -240,6 +240,23 @@ namespace {
         require(fixture.at(ORIGIN).mStates.getByte("toggle_bit", 0) == 0, "an unpowered hopper stayed locked");
     }
 
+    // the game's hopper takes the first update a new block gets: placed beside power, it starts locked
+    void hopperPlacedPowered() {
+        RedstoneFixture fixture;
+        fixture.mLevel.setOwner(&fixture.mOwner);
+
+        fixture.set(ORIGIN, VanillaBlocks::HOPPER().toBlockState());
+        fixture.mLevel.onBlockPlaced(ORIGIN, fixture.at(ORIGIN));
+        require(fixture.at(ORIGIN).mStates.getByte("toggle_bit", 0) == 0, "a hopper placed without power was locked");
+
+        const Vector3i placed(ORIGIN.x + 2, ORIGIN.y, ORIGIN.z);
+        fixture.set(Vector3i(ORIGIN.x + 3, ORIGIN.y, ORIGIN.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        fixture.set(placed, VanillaBlocks::HOPPER().toBlockState());
+        fixture.mLevel.onBlockPlaced(placed, fixture.at(placed));
+        require(fixture.at(placed).mStates.getByte("toggle_bit", 0) == 1,
+                "a hopper placed beside a redstone block was not locked");
+    }
+
     void copperBulb() {
         RedstoneFixture fixture;
 
@@ -314,6 +331,7 @@ int main() {
         comparatorReload();
         comparatorStateIsLevelScoped();
         hopperLock();
+        hopperPlacedPowered();
         lightningRod();
         copperBulb();
         detectorRail();
