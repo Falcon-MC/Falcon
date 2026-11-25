@@ -100,11 +100,10 @@ bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::stri
     }
 
     const Vector3f origin = sender.getPosition();
-    const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                               (int32_t) std::floor(origin.z));
+    const Vector3f rotation = sender.getRotation();
 
     Vector3i position;
-    if (!parseBlockPosition(arguments, 0, originBlock, position)) {
+    if (!parseBlockPosition(arguments, 0, origin, rotation, position)) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }

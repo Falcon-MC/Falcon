@@ -24,11 +24,10 @@ bool TestForBlockCommand::execute(CommandOrigin &sender, const std::vector<std::
     }
 
     const Vector3f origin = sender.getPosition();
-    const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                               (int32_t) std::floor(origin.z));
+    const Vector3f rotation = sender.getRotation();
 
     Vector3i position;
-    if (arguments.size() < 4 || !parseBlockPosition(arguments, 0, originBlock, position)) {
+    if (arguments.size() < 4 || !parseBlockPosition(arguments, 0, origin, rotation, position)) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }

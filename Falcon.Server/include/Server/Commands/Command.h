@@ -56,8 +56,9 @@ public:
 
     static bool parseBlockCoordinate(const std::string &value, int32_t origin, int32_t &out);
 
-    static bool parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3i &origin,
-                                   Vector3i &out);
+    // as parsePosition, floored to a block; ~ counts from the block holding origin
+    static bool parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
+                                   const Vector3f &rotation, Vector3i &out);
 
     const std::string &getName() const {
         return mName;

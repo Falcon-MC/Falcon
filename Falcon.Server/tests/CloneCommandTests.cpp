@@ -61,6 +61,12 @@ namespace {
                 "the blocks did not land in place");
         require(level.getBlockActors().find(Vector3i(6, 65, 0)) != nullptr, "the block actor was not copied");
 
+        // the console faces south: ^ forward is +z, ^ up is +y
+        require(commands.dispatch(console, "setblock ^ ^64.5 ^50.5 stone")
+                        && nameAt(level, 0, 64, 50) == "minecraft:stone",
+                "setblock did not take local coordinates: " + console.mLast);
+        require(!commands.dispatch(console, "setblock ^ 64 ^1 stone"), "setblock mixed local and world coordinates");
+
         require(commands.dispatch(console, "clone 0 64 0 1 65 0 10 64 0 masked")
                         && console.mLast == "commands.clone.success|3",
                 "masked copied the air: " + console.mLast);

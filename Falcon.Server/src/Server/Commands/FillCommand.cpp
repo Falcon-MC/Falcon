@@ -70,12 +70,12 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     }
 
     const Vector3f origin = sender.getPosition();
-    const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                               (int32_t) std::floor(origin.z));
+    const Vector3f rotation = sender.getRotation();
 
     Vector3i from;
     Vector3i to;
-    if (!parseBlockPosition(arguments, 0, originBlock, from) || !parseBlockPosition(arguments, 3, originBlock, to)) {
+    if (!parseBlockPosition(arguments, 0, origin, rotation, from)
+        || !parseBlockPosition(arguments, 3, origin, rotation, to)) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }

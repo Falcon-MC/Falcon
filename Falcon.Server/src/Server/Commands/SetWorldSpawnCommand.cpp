@@ -45,7 +45,7 @@ bool SetWorldSpawnCommand::execute(CommandOrigin &sender, const std::vector<std:
     Vector3i spawn((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                    (int32_t) std::floor(position.z));
 
-    if (!arguments.empty() && !parseBlockPosition(arguments, 0, spawn, spawn)) {
+    if (!arguments.empty() && !parseBlockPosition(arguments, 0, position, self->getRotation(), spawn)) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }
