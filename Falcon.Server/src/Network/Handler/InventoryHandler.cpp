@@ -130,6 +130,8 @@ namespace {
             return "container";
 
         switch (type) {
+            case ContainerSlotType::HorseEquip:
+                return "horse_equip";
             case ContainerSlotType::Hotbar:
                 return "hotbar";
             case ContainerSlotType::Inventory:
@@ -191,10 +193,9 @@ namespace {
     }
 
     ItemStack itemAt(const PlayerInventory &inventory, Container *openContainer, ContainerSlotType type, int slot) {
-        if (isBlockContainer(type)) {
-            if (openContainer == nullptr || slot < 0 || slot >= openContainer->getContainerSize())
-                return ItemStack::air();
-            return openContainer->getContainerItem(slot);
+        if (isBlockContainer(type) || type == ContainerSlotType::HorseEquip) {
+            const int index = openContainer == nullptr ? -1 : openContainer->getNetworkSlotIndex(type, slot);
+            return index < 0 ? ItemStack::air() : openContainer->getContainerItem(index);
         }
 
         const ItemStack *item = inventory.resolveSlot(type, slot);

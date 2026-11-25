@@ -156,7 +156,7 @@ namespace {
                     continue;
                 }
                 outContainer = ContainerSlotType::LevelEntity;
-                outSlot = (int) slot;
+                outSlot = (int) slot - context.mOpenContainer->getEquipmentSlotCount();
                 return &item;
             }
         }
@@ -266,14 +266,13 @@ namespace {
         if (container == ContainerSlotType::CreatedOutput) {
             return (slot == 0 || slot == 50) ? &context.mCreatedOutput : nullptr;
         }
-        // the mount window names its saddle and armor slots horse_equip, numbered as the equippable slots
         if (container == ContainerSlotType::LevelEntity || container == ContainerSlotType::HorseEquip
             || container == ContainerSlotType::Barrel || container == ContainerSlotType::ShulkerBox
             || container == ContainerSlotType::CrafterBlockContainer) {
-            if (context.mOpenContainer == nullptr || slot < 0 || (size_t) slot >= context.mContainerSlots.size()) {
-                return nullptr;
-            }
-            return &context.mContainerSlots[(size_t) slot];
+            const int index = context.mOpenContainer == nullptr
+                                      ? -1 : context.mOpenContainer->getNetworkSlotIndex(container, slot);
+            return index >= 0 && (size_t) index < context.mContainerSlots.size()
+                           ? &context.mContainerSlots[(size_t) index] : nullptr;
         }
         if (container == ContainerSlotType::CraftingInput && slot >= PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST
             && slot < PlayerInventory::CRAFTING_TABLE_NETWORK_SLOT_FIRST + PlayerInventory::CRAFTING_TABLE_SIZE
@@ -473,7 +472,8 @@ namespace {
                || BeaconBlockActor::isPaymentItem(item.mDefinition->getIdentifier());
     }
 
-    bool acceptsInOpenContainer(const RequestContext &context, const ItemStack *slot, const ItemStack &item) {
+    bool acceptsInOpenContainer(const RequestContext &context, const ItemStack *slot, const ItemStack &item,
+                                int count = -1) {
         if (context.mOpenContainer == nullptr || context.mContainerSlots.empty() || item.isAir())
             return true;
 
@@ -483,7 +483,13 @@ namespace {
             return true;
 
         const int index = (int) (slot - first);
-        return context.mOpenContainer->canHoldInSlot(index, item) && !context.mOpenContainer->isSlotDisabled(index);
+        if (context.mOpenContainer->isSlotDisabled(index))
+            return false;
+        if (count < 0 || count == item.mCount)
+            return context.mOpenContainer->canHoldInSlot(index, item);
+        ItemStack placed = item;
+        placed.mCount = count;
+        return context.mOpenContainer->canHoldInSlot(index, placed);
     }
 
     // armor slots take only the matching piece, the head slot also head-worn blocks, as vanilla does;
@@ -553,7 +559,8 @@ namespace {
             return false;
         }
 
-        if (!acceptsInOpenContainer(context, destination, *source)) {
+        const int placedCount = action.mCount + (destination->isAir() ? 0 : destination->mCount);
+        if (!acceptsInOpenContainer(context, destination, *source, placedCount)) {
             return false;
         }
 
@@ -1885,12 +1892,13 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
             || slot.mContainerName.mContainer == ContainerSlotType::Barrel
             || slot.mContainerName.mContainer == ContainerSlotType::ShulkerBox
             || slot.mContainerName.mContainer == ContainerSlotType::CrafterBlockContainer) {
-            if (openContainer == nullptr || slot.mSlot < 0 || (size_t) slot.mSlot >= context.mContainerSlots.size()) {
+            const int index = openContainer == nullptr
+                                      ? -1 : openContainer->getNetworkSlotIndex(slot.mContainerName.mContainer, slot.mSlot);
+            if (index < 0 || (size_t) index >= context.mContainerSlots.size())
                 continue;
-            }
 
             appendResponseSlot(entry.mContainers, slot.mContainerName, slot.mSlot,
-                               context.mContainerSlots[(size_t) slot.mSlot]);
+                               context.mContainerSlots[(size_t) index]);
             continue;
         }
 

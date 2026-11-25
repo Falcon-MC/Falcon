@@ -1250,23 +1250,43 @@ const PushableByEntityPresets &MobActor::getPushPresets() const {
     return mPushPresets;
 }
 
-// mount windows and their saddle, armor and chest slots are not checked against the game
-Container *MobActor::getEntityContainer() {
+bool MobActor::_isMountInventory() const {
     const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
     const json::Value *type = inventory == nullptr ? nullptr : inventory->get("container_type");
-    if (type == nullptr || type->mType != json::Value::Type::String || type->mString != "horse" || !isTamed()
-        || getInventoryCapacity() <= 0)
+    return type != nullptr && type->string() == "horse";
+}
+
+int MobActor::_equippableSlotCount() const {
+    const json::Value *equippable = getComponent(EQUIPPABLE_COMPONENT);
+    const json::Value *slots = equippable == nullptr ? nullptr : equippable->get("slots");
+    return slots != nullptr && slots->isArray()
+                   ? (int) std::min(slots->mArray.size(), (size_t) MAX_EQUIPPABLE_SLOTS) : 0;
+}
+
+Container *MobActor::getEntityContainer() {
+    if (!_isMountInventory() || !isTamed() || getInventoryCapacity() <= 0)
         return nullptr;
     mEquipment.ensureInventorySize(getInventoryCapacity());
     return &mInventoryView;
+}
+
+int MobActor::getInventoryStrength() const {
+    const json::Value *strength = getComponent("minecraft:strength");
+    const int maximum = std::clamp((int) numberIn(strength, "max", 5.0f), 0, 255);
+    const int value = mLoadedInventoryStrength >= 0 ? mLoadedInventoryStrength
+                                                   : (int) numberIn(strength, "value", 0.0f);
+    return std::clamp(value, 0, maximum);
 }
 
 int MobActor::getInventoryCapacity() const {
     const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
     if (inventory == nullptr)
         return 0;
-    // the game reads an inventory without inventory_size as 5 slots: the nautilus and the camel have one
-    return (int) numberIn(inventory, "inventory_size", (float) DEFAULT_INVENTORY_SIZE);
+    const int base = std::clamp((int) numberIn(inventory, "inventory_size", (float) DEFAULT_INVENTORY_SIZE), 0, 256);
+    const int perStrength = std::clamp((int) numberIn(inventory, "additional_slots_per_strength", 0.0f), 0, 256);
+    if (_isMountInventory() && getInventoryStrength() > 0)
+        return std::min(256, _equippableSlotCount() + getInventoryStrength() * perStrength);
+    return base;
 }
 
 Container &MobActor::getInventoryContainer() {
@@ -2351,6 +2371,17 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
         metadata.mEntries.push_back(entry);
     }
 
+    if (_isMountInventory()) {
+        const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+        pushInt(ActorFlags::CONTAINER_SIZE_DATA_ID,
+                (int32_t) numberIn(inventory, "inventory_size", DEFAULT_INVENTORY_SIZE));
+        pushInt(ActorFlags::CONTAINER_STRENGTH_DATA_ID, (int32_t) numberIn(inventory, "additional_slots_per_strength", 0));
+    }
+    if (const json::Value *strength = getComponent("minecraft:strength")) {
+        pushInt(ActorFlags::STRENGTH_DATA_ID, getInventoryStrength());
+        pushInt(ActorFlags::MAX_STRENGTH_DATA_ID, (int32_t) numberIn(strength, "max", 5));
+    }
+
     if (MobEconomy::isTrader(*this))
         mEconomy.appendMetadata(metadata);
 
@@ -2582,6 +2613,8 @@ void MobActor::addComponentGroup(const std::string &group) {
     const json::Value *definition = getDefinition();
     const json::Value *groups = definition == nullptr ? nullptr : definition->get("component_groups");
     const json::Value *added = groups == nullptr ? nullptr : groups->get(group);
+    if (added != nullptr && added->get("minecraft:strength") != nullptr)
+        mLoadedInventoryStrength = -1;
     if (added != nullptr)
         mAddRider.queue(added->get(ADD_RIDER_COMPONENT));
     // the game restocks once per added minecraft:trade_resupply; the schedule removes the group again
@@ -2681,6 +2714,8 @@ Tag MobActor::saveNbt() const {
     data.putByte("IsBaby", getComponent("minecraft:is_baby") != nullptr ? 1 : 0);
     data.putByte("IsTamed", getComponent("minecraft:is_tamed") != nullptr || mOwnerless ? 1 : 0);
     data.putByte("Saddled", getComponent("minecraft:is_saddled") != nullptr ? 1 : 0);
+    if (getComponent("minecraft:strength") != nullptr)
+        data.putInt("Strength", getInventoryStrength());
     data.putByte("Chested", getComponent("minecraft:is_chested") != nullptr ? 1 : 0);
     data.putByte("Sheared", getComponent("minecraft:is_sheared") != nullptr ? 1 : 0);
     data.putInt("InLove", mLoveTicks);
@@ -2730,6 +2765,7 @@ void MobActor::loadNbt(const Tag &data) {
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
+    mLoadedInventoryStrength = data.getInt("Strength", -1);
     mTargetCaptainId = data.getLong(TAG_TARGET_CAPTAIN, 0);
     mEconomy.loadNbt(data);
     mDweller.loadNbt(data);
