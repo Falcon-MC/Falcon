@@ -149,6 +149,56 @@ namespace {
         }, 2);
     }
 
+    void selfDeliveryAfterTeleport() {
+        ServerNetworkHandler owner("Self delivery", "", 1);
+        Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        level.setOwner(&owner);
+        level.insertChunk(LevelChunk(0, 0)).setPopulated(true);
+        const NetworkIdentifier moverId("mover", 100);
+        const NetworkIdentifier viewerId("viewer", 101);
+        ServerPlayer &mover = owner.getPlayers().try_emplace(moverId, moverId, 100).first->second;
+        ServerPlayer &viewer = owner.getPlayers().try_emplace(viewerId, viewerId, 101).first->second;
+        for (ServerPlayer *player: {&mover, &viewer}) {
+            player->moveToLevel(level);
+            player->setLoginState(ServerPlayer::LoginState::Spawned);
+            player->setPosition(Vector3f(1.5f, 64.0f, 1.5f));
+        }
+        viewer.getVisiblePlayers().insert(mover.getRuntimeId());
+
+        std::vector<NetworkIdentifier> recipients;
+        owner.getNetworkHandler().setOutboundFilter([&](const NetworkIdentifier &id, std::string &) {
+            recipients.push_back(id);
+            return false;
+        });
+        SetActorMotionPacket motion;
+        motion.mRuntimeActorId = mover.getRuntimeId();
+        owner.sendToActorViewers(mover, motion, true);
+        require(recipients.size() == 2, "player and viewer did not both receive the packet before the teleport");
+
+        // the index stays where the tick built it: the teleport lands far outside the viewer walk
+        mover.setPosition(Vector3f(2000.0f, 64.0f, 2000.0f));
+        recipients.clear();
+        owner.sendToActorViewers(mover, motion, true);
+        require(recipients.size() == 1 && recipients[0] == moverId, "teleported player lost its own packet");
+
+        size_t hooks = 0;
+        owner.getNetworkHandler().setSendHook([&](const std::vector<NetworkIdentifier> &ids, MinecraftPacketIds) {
+            require(ids.size() == 1 && ids[0] == moverId, "self hook reached another player");
+            ++hooks;
+            return true;
+        });
+        recipients.clear();
+        owner.sendToActorViewers(mover, motion, true);
+        require(hooks == 1 && recipients.size() == 1 && recipients[0] == moverId,
+                "teleported player lost its own packet behind a send hook");
+        owner.getNetworkHandler().setSendHook(nullptr);
+
+        recipients.clear();
+        owner.sendToActorViewers(mover, motion, false);
+        require(recipients.empty(), "packet without self reached the player");
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+    }
+
     void visibilityTransitions() {
         ServerNetworkHandler owner("Visibility transitions", "", 1);
         Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
@@ -286,6 +336,7 @@ int main() {
 
     check("movement batching preserves remote recipients and per-viewer hooks", movementRecipients);
     check("visibility follows chunk, login, dimension and hide transitions", visibilityTransitions);
+    check("a player keeps its own packets after a same-tick teleport", selfDeliveryAfterTeleport);
     ServerPaths::setRoot(originalRoot);
     std::error_code ignored;
     std::filesystem::remove_all(directory, ignored);
