@@ -1,6 +1,7 @@
 #include "Network/Handler/MovementHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
+#include "Protocol/Packets/SetActorDataPacket.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -15,6 +16,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 class ServerTickProbe {
 public:
@@ -48,6 +50,46 @@ namespace {
         MovementHandler::handlePlayerAuthInput(owner, player.getNetworkIdentifier(), player, input);
         owner.tickActors();
         require(owner.getActors().empty(), "one reel input must remove the hook without recasting");
+    }
+
+    // starting to eat ends a sprint in the same input: no flags sent for it may clear the use
+    void checkSprintingEatInput(ServerNetworkHandler &owner, ServerPlayer &player) {
+        player.getInventory().setItemInHand(owner.createItemStack("minecraft:golden_apple", 1));
+        player.getFlags().set(ActorFlag::UsingItem, false);
+        player.getFlags().set(ActorFlag::Sprinting, true);
+        ServerTickProbe::advance(owner, 40);
+
+        std::vector<bool> usingItemSent;
+        owner.getNetworkHandler().setOutboundFilter([&](const NetworkIdentifier &, std::string &bytes) {
+            ReadOnlyBinaryStream header(bytes);
+            unsigned char sender = 0, recipient = 0;
+            if (Packet::peekId(header, sender, recipient) != MinecraftPacketIds::SetActorData)
+                return false;
+            ReadOnlyBinaryStream body(bytes);
+            SetActorDataPacket data;
+            data.readHeader(body);
+            data.read(body, owner.getCodecContext());
+            for (const EntityDataEntry &entry: data.mMetadata.mEntries) {
+                if (entry.mId == ActorFlags::FLAGS_DATA_ID)
+                    usingItemSent.push_back(((entry.mLongValue >> (int) ActorFlag::UsingItem) & 1) != 0);
+            }
+            return false;
+        });
+        PlayerAuthInputPacket input;
+        input.mTick = 100;
+        input.mPosition = Vector3f(0.5f, 101.62f, 0.5f);
+        input.mInputData = {(int32_t) PlayerAuthInputData::StopSprinting,
+                            (int32_t) PlayerAuthInputData::StartUsingItem};
+        input.mHasItemUseTransaction = true;
+        input.mItemUseTransaction.mActionType = 1;
+        MovementHandler::handlePlayerAuthInput(owner, player.getNetworkIdentifier(), player, input);
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+
+        require(player.getFlags().get(ActorFlag::UsingItem), "the apple did not start being eaten while sprinting");
+        require(!player.getFlags().get(ActorFlag::Sprinting), "the sprint survived StopSprinting");
+        require(!usingItemSent.empty(), "the sprint stop sent no flags");
+        for (const bool usingItem: usingItemSent)
+            require(usingItem, "flags sent with the eating input cleared UsingItem on the client");
     }
 
     // a drawn bow switched for a golden apple must not hand the apple its elapsed time
@@ -88,6 +130,7 @@ namespace {
         owner._tickItemUse(player);
         require(inventory.getItem(1).mCount == 1, "a full use of the apple did not eat it");
         checkFishingInput(owner, player);
+        checkSprintingEatInput(owner, player);
     }
 }
 

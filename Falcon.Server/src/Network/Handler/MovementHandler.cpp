@@ -657,8 +657,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             flags.set(ActorFlag::Crawling, false);
     }
 
-    if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
-        owner._sendEntityData(player);
+    const bool flagsChanged = flags.getLowBits() != previous.getLowBits()
+                              || flags.getHighBits() != previous.getHighBits();
 
     if (sneaking != previous.get(ActorFlag::Sneaking))
         owner.getScriptEngine().onEntitySneak(player, sneaking);
@@ -689,6 +689,10 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     // a single click can carry both a start signal and a use-in-air transaction
     if (startsUsingItem || (packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 1))
         owner._useHeldItem(player);
+    // the input starting a use also stops the sprint: flags sent before the use clear UsingItem and the client
+    // drops the use it just began
+    if (flagsChanged)
+        owner._sendEntityData(player);
 
     (void) id;
 }
