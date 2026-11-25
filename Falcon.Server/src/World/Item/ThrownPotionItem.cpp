@@ -21,10 +21,10 @@ FALCON_REGISTER_ITEM_CUSTOM(
         });
 
 ThrownPotionItem::ThrownPotionItem(const Item &base, std::string entityIdentifier)
-        : ThrowableItem(base, std::move(entityIdentifier), 1.5f, 0, DispenseMode::Shoot) {}
+        : ThrowableItem(base, std::move(entityIdentifier), 1.0f, 0, DispenseMode::Shoot) {}
 
 bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
-    ServerActor *projectile = owner.spawnProjectile(player, mEntityIdentifier, mThrowForce,
+    ServerActor *projectile = owner.spawnProjectile(player, mEntityIdentifier, mLaunchPower,
                                                     ServerNetworkHandler::THROWN_PROJECTILE_DROP);
     if (projectile == nullptr)
         return false;

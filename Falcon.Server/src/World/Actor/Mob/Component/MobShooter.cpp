@@ -4,6 +4,7 @@
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
+#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "World/Item/PotionEffects.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
@@ -15,7 +16,6 @@
 namespace {
     const char *const SHOOTER_COMPONENT = "minecraft:shooter";
     const char *const PROJECTILE_COMPONENT = "minecraft:projectile";
-    const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const float EYE_HEIGHT_RATIO = 0.85f;
     const float PLAYER_HEIGHT = 1.8f;
     const float DEGREES_TO_RADIANS = 0.017453292f;
@@ -80,30 +80,6 @@ namespace {
         settings.mImpact = onHit == nullptr ? nullptr : onHit->get("impact_damage");
     }
 
-    // the projectile's own spawn event picks its group from the shooter: arrow.json mob_arrow, mob_crossbow_arrow
-    const json::Value *spawnedGroup(ServerNetworkHandler &owner, const MobActor &mob, const json::Value &definition) {
-        const json::Value *events = definition.get("events");
-        const json::Value *spawned = events == nullptr ? nullptr : events->get(SPAWNED_EVENT);
-        const json::Value *choices = spawned == nullptr ? nullptr : spawned->get("first_valid");
-        const json::Value *groups = definition.get("component_groups");
-        if (choices == nullptr || !choices->isArray() || groups == nullptr)
-            return nullptr;
-
-        for (const std::unique_ptr<json::Value> &choice: choices->mArray) {
-            const json::Value *filters = choice->get("filters");
-            if (filters != nullptr && !EntityFilter::test(*filters, owner, mob, &mob))
-                continue;
-
-            const json::Value *add = choice->get("add");
-            const json::Value *names = add == nullptr ? nullptr : add->get("component_groups");
-            if (names == nullptr || !names->isArray() || names->mArray.empty())
-                return nullptr;
-
-            return groups->get(names->mArray.front()->string());
-        }
-        return nullptr;
-    }
-
     // a group replaces the whole component, as component groups do
     ProjectileSettings projectileSettings(ServerNetworkHandler &owner, const MobActor &mob,
                                           const std::string &identifier) {
@@ -117,7 +93,8 @@ namespace {
         if (base != nullptr)
             readProjectile(*base, settings);
 
-        const json::Value *group = spawnedGroup(owner, mob, *definition);
+        // the projectile's own spawn event picks its group from the shooter: arrow.json mob_arrow, mob_crossbow_arrow
+        const json::Value *group = ProjectileComponent::spawnedGroup(owner, *definition, mob, mob);
         const json::Value *override = group == nullptr ? nullptr : group->get(PROJECTILE_COMPONENT);
         if (override != nullptr) {
             settings = ProjectileSettings();
