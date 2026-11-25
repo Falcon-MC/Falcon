@@ -61,7 +61,6 @@ Falcon.Server/
     Resources/                  Resource packs and pack dependencies
     Scripting/                  JavaScript scripting API for behavior packs
     Falcon/                     Falcon-specific embedding and plugin implementation
-  structure/                    source layout notes and relocation inventory
 ```
 
 The network transport, protocol packets, NBT and Bedrock data files live in separate `Falcon-MC`
