@@ -7,9 +7,9 @@
 class Level;
 class ServerNetworkHandler;
 
-// a carved pumpkin or a jack o'lantern placed on top of snow or iron blocks turns them into a golem
+// a carved pumpkin or a jack o'lantern placed on top of snow, iron or copper blocks turns them into a golem
 namespace GolemBuilding {
-    enum class Kind { None, Snow, Iron };
+    enum class Kind { None, Snow, Iron, Copper };
 
     struct Match {
         Kind mKind = Kind::None;
@@ -19,7 +19,7 @@ namespace GolemBuilding {
         int32_t mUp = 0;
     };
 
-    // the snow golem with the placed block as its head, else the iron golem anywhere around it
+    // the snow golem with the placed block as its head, else the iron then the copper golem anywhere around it
     Match find(Level &level, const Vector3i &pumpkin);
 
     // spawns the golem the pattern makes and clears the blocks; false when nothing matched

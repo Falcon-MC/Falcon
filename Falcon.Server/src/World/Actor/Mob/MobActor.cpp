@@ -19,6 +19,7 @@
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/Systems/CopperSystem.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
@@ -30,6 +31,7 @@
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
+#include "World/Level/World.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -60,6 +62,16 @@ namespace {
     const InteractParticle INTERACT_PARTICLES[] = {{"smoke", "minecraft:basic_smoke_particle"},
                                                    {"largeexplode", "minecraft:large_explosion"}};
 
+    struct CopperInteractEvent {
+        const char *mName;
+        int32_t mLevelEvent;
+    };
+
+    // the level events copper blocks use for the same action
+    const CopperInteractEvent COPPER_INTERACT_EVENTS[] = {{"wax_on", CopperSystem::WAX_ON_EVENT},
+                                                          {"wax_off", CopperSystem::WAX_OFF_EVENT},
+                                                          {"scrape", CopperSystem::SCRAPE_EVENT}};
+
     const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const char *const PERSISTENT = "minecraft:persistent";
     const char *const BORN_EVENT = "minecraft:entity_born";
@@ -78,6 +90,9 @@ namespace {
     const char *const TAG_OWNER = "OwnerNew";
     const char *const TAG_SITTING = "Sitting";
     const char *const TAG_HOME = "HomePos";
+    // the tick of the world the timer runs out on, as the game saves it
+    const char *const TAG_TIMER_STAMP = "TimeStamp";
+    const char *const TAG_TIMER_EXECUTED = "HasExecuted";
     const float DEFAULT_MOVEMENT_SPEED = 0.25f;
     const float DEFAULT_FOLLOW_RANGE = 16.0f;
     const int32_t LOVE_TICKS = 600;
@@ -201,8 +216,6 @@ namespace {
     const int32_t TAME_FAILED_REARING_TICKS = 20;
     const float DEFAULT_JUMP_STRENGTH = 0.7f;
     const char *const TAG_TEMPER = "Temper";
-    const char *const TAG_TIMER_STAMP = "TimeStamp";
-    const char *const TAG_TIMER_EXECUTED = "HasExecuted";
     const char *const TAG_TARGET_CAPTAIN = "TargetCaptainID";
     const char *const ON_HURT_COMPONENT = "minecraft:on_hurt";
     const char *const ON_HURT_BY_PLAYER_COMPONENT = "minecraft:on_hurt_by_player";
@@ -895,24 +908,29 @@ void MobActor::_tickSpellEffects() {
 
 void MobActor::_tickTimer(ServerNetworkHandler &owner) {
     const json::Value *timer = getComponent(TIMER_COMPONENT);
-    // the overworld keeps the world's tick
-    const int64_t worldTick = owner.getWorldFor(*this).getOverworld().getWorldTick();
     if (timer != mTimerComponent) {
         mTimerComponent = timer;
-        if (timer != nullptr && mTimerLoaded)
-            mTimerTicks = mTimerTicks < 0 ? -1 : (int32_t) std::max<int64_t>(1, mTimerStamp - worldTick);
-        else
-            mTimerTicks = timer == nullptr ? 0 : timerTicks(*timer);
-        mTimerLoaded = false;
-        mTimerStamp = worldTick + std::max(0, mTimerTicks);
+        // a loaded timer keeps its saved stamp; any other start rolls a new duration
+        if (timer != nullptr && !mTimerLoaded) {
+            mTimerStamp = owner.getWorldFor(*this).getOverworld().getWorldTick() + timerTicks(*timer);
+            mTimerExecuted = false;
+        }
+        if (timer != nullptr)
+            mTimerLoaded = false;
     }
+    if (timer == nullptr || mTimerExecuted)
+        return;
 
-    if (timer == nullptr || mTimerTicks < 0 || --mTimerTicks > 0)
+    // the game counts against the level's tick: a mob out of a ticking chunk still runs out on time
+    const int64_t now = owner.getWorldFor(*this).getOverworld().getWorldTick();
+    if (now < mTimerStamp)
         return;
 
     const json::Value *looping = timer->get("looping");
-    mTimerTicks = looping == nullptr || looping->boolean(true) ? timerTicks(*timer) : -1;
-    mTimerStamp = worldTick + std::max(0, mTimerTicks);
+    if (looping == nullptr || looping->boolean(true))
+        mTimerStamp = now + timerTicks(*timer);
+    else
+        mTimerExecuted = true;
 
     EntityEvents::fireTrigger(owner, *this, timer->get("time_down_event"));
 }
@@ -1945,9 +1963,8 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         }
 
         const json::Value *particle = interaction->get("particle_on_start");
-        const json::Value *particleType = particle == nullptr ? nullptr : particle->get("particle_type");
-        if (particleType != nullptr)
-            _emitInteractParticle(owner, player, *particle, particleType->string());
+        if (particle != nullptr)
+            _emitInteractParticle(owner, player, *particle);
 
         const json::Value *sound = interaction->get("play_sounds");
         if (sound != nullptr && sound->isString())
@@ -2094,13 +2111,20 @@ void MobActor::_spawnLoot(ServerNetworkHandler &owner, Level &level, const std::
 }
 
 void MobActor::_emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player,
-                                     const json::Value &particle, const std::string &type) {
+                                     const json::Value &particle) {
+    const json::Value *type = particle.get("particle_type");
     const char *effect = nullptr;
     for (const InteractParticle &entry: INTERACT_PARTICLES) {
-        if (type == entry.mType)
+        if (type != nullptr && type->string() == entry.mType)
             effect = entry.mEffect;
     }
-    if (effect == nullptr)
+    const json::Value *copper = particle.get("copper_event");
+    int32_t copperEvent = 0;
+    for (const CopperInteractEvent &entry: COPPER_INTERACT_EVENTS) {
+        if (copper != nullptr && copper->string() == entry.mName)
+            copperEvent = entry.mLevelEvent;
+    }
+    if (effect == nullptr && copperEvent == 0)
         return;
 
     Vector3f position = getPosition();
@@ -2119,7 +2143,12 @@ void MobActor::_emitInteractParticle(ServerNetworkHandler &owner, const ServerPl
         }
     }
 
-    owner.spawnParticleEffect(owner.getLevelFor(*this), effect, position);
+    Level &level = owner.getLevelFor(*this);
+    // the copper event goes out before the particle, as the game sends them
+    if (copperEvent != 0)
+        owner.broadcastLevelEvent(level, copperEvent, position, 0);
+    if (effect != nullptr)
+        owner.spawnParticleEffect(level, effect, position);
 }
 
 void MobActor::_givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack item) {
@@ -2788,6 +2817,13 @@ void MobActor::removeComponentGroup(const std::string &group) {
 
     mComponentGroups.erase(found);
     _markComponentsChanged();
+
+    // removing the timer drops its count: adding it back in the same event starts it over
+    const json::Value *definition = getDefinition();
+    const json::Value *groups = definition == nullptr ? nullptr : definition->get("component_groups");
+    const json::Value *removed = groups == nullptr ? nullptr : groups->get(group);
+    if (removed != nullptr && removed->get(TIMER_COMPONENT) != nullptr)
+        mTimerComponent = nullptr;
 }
 
 void MobActor::_markComponentsChanged() {
@@ -2881,7 +2917,7 @@ Tag MobActor::saveNbt() const {
     data.putInt(TAG_TEMPER, mTemper);
     if (mTimerComponent != nullptr || mTimerLoaded) {
         data.putLong(TAG_TIMER_STAMP, mTimerStamp);
-        data.putByte(TAG_TIMER_EXECUTED, mTimerTicks < 0 ? 1 : 0);
+        data.putByte(TAG_TIMER_EXECUTED, mTimerExecuted ? 1 : 0);
     }
     if (mTargetCaptainId != 0)
         data.putLong(TAG_TARGET_CAPTAIN, mTargetCaptainId);
@@ -2917,6 +2953,11 @@ void MobActor::loadNbt(const Tag &data) {
     mAngerLevel.load(data);
 
     mSpawnEvent = data.getString(TAG_SPAWN_EVENT, mSpawnEvent);
+    mTimerLoaded = data.contains(TAG_TIMER_STAMP);
+    if (mTimerLoaded) {
+        mTimerStamp = data.getLong(TAG_TIMER_STAMP, 0);
+        mTimerExecuted = data.getByte(TAG_TIMER_EXECUTED, 0) != 0;
+    }
 
     mAgeTicks = data.getInt(TAG_AGE, 0);
     mActorVersion = data.getInt(TAG_ACTOR_VERSION, 0);
@@ -2930,9 +2971,6 @@ void MobActor::loadNbt(const Tag &data) {
         mColor = (int32_t) data.getByte(TAG_COLOR, 0);
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
-    mTimerLoaded = data.contains(TAG_TIMER_STAMP);
-    mTimerStamp = data.getLong(TAG_TIMER_STAMP, 0);
-    mTimerTicks = data.getByte(TAG_TIMER_EXECUTED, 0) != 0 ? -1 : 0;
     mLoadedInventoryStrength = data.getInt("Strength", -1);
     mTargetCaptainId = data.getLong(TAG_TARGET_CAPTAIN, 0);
     mEconomy.loadNbt(data);
