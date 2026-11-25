@@ -1520,6 +1520,7 @@ bool ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleporte
     move.mPosition = actor.getPosition();
     move.mPosition.y += actor.getBaseOffset();
     move.mRotation = actor.getRotation();
+    move.mOnGround = actor.isOnGround();
     move.mTeleported = teleported;
 
     BandwidthOptimization::Values values;
@@ -2464,15 +2465,7 @@ void ServerNetworkHandler::tickActors() {
             if (drifting)
                 actor.setMotion(ProjectileSystem::dragAndFall(motion, settings, inWater));
 
-            MoveActorAbsolutePacket move;
-            move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
-            move.mPosition = position;
-            move.mRotation = actor.getRotation();
-
-            for (auto &playerEntry: mPlayers) {
-                if (playerEntry.second.isSpawned() && playerEntry.second.sharesLevelWith(actor))
-                    mNetworkHandler->send(playerEntry.first, move, mCodecContext);
-            }
+            broadcastActorMove(actor);
 
             if (actor.getLifetimeTicks() > PROJECTILE_MAX_LIFETIME)
                 expired.push_back(actorId);
