@@ -3,14 +3,18 @@
 #include "Protocol/Packets/LevelEventGenericPacket.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/SculkSensorBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/OpenableBlock.h"
 #include "World/Level/Block/SculkSensorBlock.h"
 #include "World/Level/Block/Systems/BlockContactSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Block/TntBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
 #include "World/Level/Vibration/MovementGameEvents.h"
@@ -508,6 +512,74 @@ namespace {
         BlockActionHandler::breakBlock(fixture.mOwner, player, Vector3i(12, 64, 8));
         require(fixture.ticksUntilReceived(10) == 0, "breaking wool made a vibration");
     }
+
+    const GameEvent *receivedWithin(VibrationFixture &fixture, int limit) {
+        fixture.mProbe->mReceived.clear();
+        return fixture.ticksUntilReceived(limit) == 0 ? nullptr : fixture.mProbe->mReceived.front().mEvent;
+    }
+
+    void mechanisms() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(14.5f, 64.0f, 14.5f));
+        require(cow != nullptr, "no fixture cow");
+
+        const Vector3i trapdoor(11, 64, 8);
+        fixture.place(trapdoor, VanillaBlocks::TRAPDOOR().toBlockState());
+        OpenableBlock::toggle(fixture.mOwner, fixture.mLevel, trapdoor,
+                              fixture.mLevel.getBlockState(trapdoor.x, trapdoor.y, trapdoor.z), cow);
+        require(receivedWithin(fixture, 5) == &GameEvents::BLOCK_OPEN, "opening a trapdoor made no block_open");
+        OpenableBlock::toggle(fixture.mOwner, fixture.mLevel, trapdoor,
+                              fixture.mLevel.getBlockState(trapdoor.x, trapdoor.y, trapdoor.z), cow);
+        require(receivedWithin(fixture, 5) == &GameEvents::BLOCK_CLOSE, "closing a trapdoor made no block_close");
+
+        const Vector3i button(10, 64, 8);
+        fixture.place(button, VanillaBlocks::STONE_BUTTON().toBlockState());
+        RedstoneSystem::onButtonActivated(fixture.mOwner, fixture.mLevel, button,
+                                          fixture.mLevel.getBlockState(button.x, button.y, button.z), cow);
+        require(receivedWithin(fixture, 5) == &GameEvents::BLOCK_ACTIVATE, "pressing a button made no block_activate");
+
+        const Vector3i tnt(12, 64, 8);
+        fixture.place(tnt, VanillaBlocks::TNT().toBlockState());
+        TntBlock::primeByExplosion(fixture.mOwner, fixture.mLevel, tnt, 80);
+        require(receivedWithin(fixture, 6) == nullptr, "TNT set off by an explosion made prime_fuse");
+        fixture.place(tnt, VanillaBlocks::TNT().toBlockState());
+        TntBlock::prime(fixture.mOwner, fixture.mLevel, tnt, 80, cow);
+        require(receivedWithin(fixture, 6) == &GameEvents::PRIME_FUSE, "lighting TNT made no prime_fuse");
+    }
+
+    void strikesShotsAndBlasts() {
+        VibrationFixture fixture;
+        fixture.mOwner.strikeLightning(fixture.mLevel, Vector3f(11.5f, 65.0f, 8.5f));
+        require(receivedWithin(fixture, 6) == &GameEvents::LIGHTNING_STRIKE, "lightning made no lightning_strike");
+        require(fixture.mProbe->mReceived.front().mPosition == Vector3i(11, 64, 8),
+                "lightning did not strike the block under it");
+
+        ServerActor *arrow = fixture.mOwner.spawnDispensedProjectile(fixture.mLevel, "minecraft:arrow",
+                                                                     Vector3f(12.5f, 64.5f, 8.5f),
+                                                                     Vector3f(1.0f, 0.0f, 0.0f));
+        require(arrow != nullptr, "no fixture arrow");
+        require(receivedWithin(fixture, 6) == &GameEvents::PROJECTILE_SHOOT, "shooting made no projectile_shoot");
+
+        // apart: the blast would hurt the arrow, and its closer entity_damage would win the tick
+        VibrationFixture blast;
+        Explosion explosion(blast.mOwner, blast.mLevel, Vector3f(13.5f, 64.5f, 8.5f), 1.0, nullptr, false);
+        explosion.explodeWithoutBlocks();
+        require(receivedWithin(blast, 7) == &GameEvents::EXPLODE, "an explosion made no explode");
+    }
+
+    void hurtsAndRides() {
+        VibrationFixture fixture;
+        ServerActor *cow = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:cow", Vector3f(11.5f, 64.0f, 8.5f));
+        ServerActor *pig = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:pig", Vector3f(10.5f, 64.0f, 8.5f));
+        require(cow != nullptr && pig != nullptr, "no fixture cow or pig");
+        fixture.mOwner.damageActor(*cow, 1.0f, nullptr);
+        require(receivedWithin(fixture, 5) == &GameEvents::ENTITY_DAMAGE, "a hurt cow made no entity_damage");
+
+        require(RideSystem::mount(fixture.mOwner, *cow, *pig, true), "the cow did not mount the pig");
+        require(receivedWithin(fixture, 5) == &GameEvents::ENTITY_MOUNT, "mounting made no entity_mount");
+        RideSystem::dismount(fixture.mOwner, *cow, true);
+        require(receivedWithin(fixture, 5) == &GameEvents::ENTITY_DISMOUNT, "dismounting made no entity_dismount");
+    }
 }
 
 int main() {
@@ -525,6 +597,9 @@ int main() {
         movementSteps();
         landingAndSculkTouch();
         playerBreaksBlock();
+        mechanisms();
+        strikesShotsAndBlasts();
+        hurtsAndRides();
         sculkSensorActivates();
         calibratedSensorFilters();
         std::cout << "vibration checks passed\n";

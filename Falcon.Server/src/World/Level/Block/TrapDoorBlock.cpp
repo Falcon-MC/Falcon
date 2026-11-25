@@ -36,7 +36,7 @@ bool TrapDoorBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const
 
 bool TrapDoorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                const BlockState &state) const {
-    return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state);
+    return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state, &player);
 }
 
 void TrapDoorBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

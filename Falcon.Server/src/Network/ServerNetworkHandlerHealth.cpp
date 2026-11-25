@@ -243,6 +243,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
 
     _sendHealth(player);
     _broadcastEntityEvent(player, (uint8_t) EntityEventType::HurtAnimation);
+    // with the hurt event, from the one hurt
+    getLevelFor(player).postGameEvent(GameEvents::ENTITY_DAMAGE, player.getPosition(), &player);
     return DamageResult::Dealt;
 }
 

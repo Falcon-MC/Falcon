@@ -6,6 +6,7 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
@@ -61,10 +62,17 @@ void OpenableBlock::forgetLevel(const Level &level) {
     gManualOverrides.erase(&level);
 }
 
+void OpenableBlock::postToggled(Level &level, const Vector3i &position, bool open, Actor *source) {
+    level.postGameEvent(open ? GameEvents::BLOCK_OPEN : GameEvents::BLOCK_CLOSE,
+                        Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
+                        source);
+}
+
 bool OpenableBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                           const BlockState &state) {
+                           const BlockState &state, Actor *source) {
     const bool open = !isOpen(state);
     setOpen(owner, level, position, state, open);
+    postToggled(level, position, open, source);
     setManualOverride(level, position, open || RedstoneSystem::isGettingPower(owner, level, position));
 
     return true;
@@ -86,6 +94,7 @@ void OpenableBlock::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, 
 
     if (open != gettingPower && !manualOverride) {
         setOpen(owner, level, position, state, gettingPower);
+        postToggled(level, position, gettingPower, nullptr);
         return;
     }
 

@@ -12,6 +12,7 @@
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/TntBlock.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/SubChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -858,6 +859,8 @@ bool Explosion::explodeB() {
     _destroyBlocks();
     _ignite();
     _playEffects();
+    Actor *source = mSourceActor == nullptr ? nullptr : mOwner.getEntity(mSourceActor->getUniqueId());
+    mLevel.postGameEvent(GameEvents::EXPLODE, mSource, source);
     mOwner.getScriptEngine().onExplosion(mLevel, mSourceActor, mDestroyed);
     return true;
 }
@@ -1068,7 +1071,7 @@ void Explosion::_destroyBlocks() {
             mSmokePositions.push_back(position);
 
         if ((kind->second & TNT) != 0) {
-            TntBlock::prime(mOwner, mLevel, position, nextInt(10, 30));
+            TntBlock::primeByExplosion(mOwner, mLevel, position, nextInt(10, 30));
             continue;
         }
 
