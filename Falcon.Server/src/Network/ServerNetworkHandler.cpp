@@ -155,6 +155,7 @@
 #include "World/Item/VanillaItems.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ChorusFruitItem.h"
+#include "World/Item/SpawnEggItem.h"
 #include "Core/NBT/NbtIo.h"
 
 #include <cmath>
@@ -2674,29 +2675,42 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
     if (player == nullptr || !player->isSpawned() || player->isDead())
         return;
 
+    Actor *target = nullptr;
+    ItemStack picked;
     for (const std::unique_ptr<ItemActor> &actor: mItemEntities) {
-        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId || !actor->sharesLevelWith(*player))
+        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId)
             continue;
-
-        const Vector3f position = player->getPosition();
-        const Vector3f entityPosition = actor->getPosition();
-        const float dx = position.x - entityPosition.x;
-        const float dy = position.y - entityPosition.y;
-        const float dz = position.z - entityPosition.z;
-        if (dx * dx + dy * dy + dz * dz > 10000.0f)
-            return;
-
-        ItemStack picked = actor->getItem();
-        EventSignal<PlayerEntityPickBeforeEvent> &entityPick = mEventBus.before().mPlayerEntityPick;
-        if (entityPick.hasSubscribers()) {
-            PlayerEntityPickBeforeEvent event(*player, *actor, picked);
-            entityPick.emit(event);
-            if (event.isCancelled())
-                return;
-        }
-        putPickedItem(*player, std::move(picked), packet.mHotbarSlot);
-        return;
+        target = actor.get();
+        picked = actor->getItem();
+        break;
     }
+    if (target == nullptr) {
+        ServerActor *actor = getActorByRuntimeId(packet.mRuntimeActorId);
+        if (actor == nullptr || actor->isDead())
+            return;
+        target = actor;
+        // a mob gives its spawn egg; an actor without one gives nothing
+        picked = createItemStack(SpawnEggItem::eggOf(actor->getIdentifier()), 1);
+    }
+    if (picked.isAir() || !target->sharesLevelWith(*player))
+        return;
+
+    const Vector3f position = player->getPosition();
+    const Vector3f entityPosition = target->getPosition();
+    const float dx = position.x - entityPosition.x;
+    const float dy = position.y - entityPosition.y;
+    const float dz = position.z - entityPosition.z;
+    if (dx * dx + dy * dy + dz * dz > 10000.0f)
+        return;
+
+    EventSignal<PlayerEntityPickBeforeEvent> &entityPick = mEventBus.before().mPlayerEntityPick;
+    if (entityPick.hasSubscribers()) {
+        PlayerEntityPickBeforeEvent event(*player, *target, picked);
+        entityPick.emit(event);
+        if (event.isCancelled())
+            return;
+    }
+    putPickedItem(*player, std::move(picked), packet.mHotbarSlot);
 }
 
 ItemActor *ServerNetworkHandler::dropItem(Level &level, const Vector3f &position, const ItemStack &item,

@@ -8,7 +8,6 @@
 #include "Network/NetworkIdentifier.h"
 #include "Protocol/Types/ItemStack.h"
 #include "Protocol/Types/SerializedSkin.h"
-#include "World/Actor/Misc/ItemActor.h"
 
 #include <cstdint>
 #include <string>
@@ -181,7 +180,7 @@ namespace {
                             event.mCancellable = true;
                             event.mCancelled = source.isCancelled();
                             event.mPlayer = &source.mPlayer;
-                            event.mEntity = &source.mItemActor;
+                            event.mEntity = &source.mEntity;
                             event.mResult = &source.mPicked;
                             plugins.dispatch(event);
                             source.setCancelled(event.mCancelled);

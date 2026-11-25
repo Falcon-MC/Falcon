@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <string>
+#include <utility>
 
 namespace {
     const std::string SPAWN_EGG_SUFFIX = "_spawn_egg";
@@ -26,15 +27,19 @@ namespace {
     const float RADIANS_TO_DEGREES = 57.295776f;
     const float MIN_FACING_DISTANCE_SQUARED = 0.00000011920929f;
 
+    // eggs named after a mob whose actor identifier differs
+    const std::pair<const char *, const char *> EGG_ACTOR_ALIASES[] = {
+            {"minecraft:villager", "minecraft:villager_v2"},
+            {"minecraft:zombie_villager", "minecraft:zombie_villager_v2"},
+            {"minecraft:evoker", "minecraft:evocation_illager"},
+            {"minecraft:tropical_fish", "minecraft:tropicalfish"},
+    };
+
     std::string resolveSpawnedActor(const std::string &identifier) {
-        if (identifier == "minecraft:villager")
-            return "minecraft:villager_v2";
-        if (identifier == "minecraft:zombie_villager")
-            return "minecraft:zombie_villager_v2";
-        if (identifier == "minecraft:evoker")
-            return "minecraft:evocation_illager";
-        if (identifier == "minecraft:tropical_fish")
-            return "minecraft:tropicalfish";
+        for (const auto &alias: EGG_ACTOR_ALIASES) {
+            if (identifier == alias.first)
+                return alias.second;
+        }
         return identifier;
     }
 
@@ -78,6 +83,14 @@ std::string SpawnEggItem::spawnedActorOf(const std::string &itemIdentifier) {
                    != 0)
         return std::string();
     return resolveSpawnedActor(itemIdentifier.substr(0, itemIdentifier.size() - SPAWN_EGG_SUFFIX.size()));
+}
+
+std::string SpawnEggItem::eggOf(const std::string &actorIdentifier) {
+    for (const auto &alias: EGG_ACTOR_ALIASES) {
+        if (actorIdentifier == alias.second)
+            return alias.first + SPAWN_EGG_SUFFIX;
+    }
+    return actorIdentifier + SPAWN_EGG_SUFFIX;
 }
 
 bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,

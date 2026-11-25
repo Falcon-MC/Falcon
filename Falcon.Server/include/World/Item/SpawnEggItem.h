@@ -11,6 +11,9 @@ public:
     // the actor an egg item spawns; empty for an item that is no egg
     static std::string spawnedActorOf(const std::string &itemIdentifier);
 
+    // the egg item named after an actor; the item may not exist
+    static std::string eggOf(const std::string &actorIdentifier);
+
     bool onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                       const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const override;
 };
