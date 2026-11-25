@@ -176,14 +176,14 @@ bool ExecuteCommand::runChain(CommandOrigin &sender, const Context &context, con
 bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context, const std::vector<std::string> &arguments,
                                size_t index, size_t &next, bool &matched) {
     if (arguments.size() < index + 4) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
     Level &level = resolveLevel(context);
     Vector3i position;
     if (!parseBlockPosition(arguments, index, context.mPosition, context.mRotation, position)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -224,7 +224,7 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
                                 const std::vector<std::string> &arguments, size_t index, size_t &next, bool &matched,
                                 int32_t &count) {
     if (arguments.size() < index + 9) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -236,7 +236,7 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
     if (!parseBlockPosition(arguments, index, context.mPosition, context.mRotation, begin)
         || !parseBlockPosition(arguments, index + 3, context.mPosition, context.mRotation, end)
         || !parseBlockPosition(arguments, index + 6, context.mPosition, context.mRotation, destination)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -306,7 +306,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
     ++mExecuted;
 
     if (index >= arguments.size()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -314,7 +314,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
     if (subcommand == "run") {
         if (index + 1 >= arguments.size()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -333,7 +333,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
     if (subcommand == "as" || subcommand == "at") {
         if (index + 1 >= arguments.size()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -364,7 +364,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
     if (subcommand == "in") {
         if (index + 1 >= arguments.size()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -384,7 +384,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         else if (name == "the_end" || name == "end")
             context.mLevel = &world.getLevel(DimensionType::TheEnd);
         else {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -394,7 +394,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
     if (subcommand == "positioned") {
         if (index + 1 < arguments.size() && arguments[index + 1] == "as") {
             if (index + 2 >= arguments.size()) {
-                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                sendUsageError(sender);
                 return false;
             }
 
@@ -418,7 +418,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
         Vector3f position;
         if (!parsePosition(arguments, index + 1, context.mPosition, context.mRotation, position)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -429,7 +429,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
     if (subcommand == "rotated") {
         if (index + 1 < arguments.size() && arguments[index + 1] == "as") {
             if (index + 2 >= arguments.size()) {
-                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                sendUsageError(sender);
                 return false;
             }
 
@@ -454,7 +454,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         Vector3f rotation = context.mRotation;
         if (arguments.size() < index + 3 || !parseRotation(arguments[index + 1], context.mRotation.y, rotation.y)
             || !parseRotation(arguments[index + 2], context.mRotation.x, rotation.x)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -465,7 +465,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
     if (subcommand == "facing") {
         if (index + 1 < arguments.size() && arguments[index + 1] == "entity") {
             if (index + 3 >= arguments.size()) {
-                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                sendUsageError(sender);
                 return false;
             }
 
@@ -495,7 +495,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
         Vector3f destination;
         if (!parsePosition(arguments, index + 1, context.mPosition, context.mRotation, destination)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -505,7 +505,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
     if (subcommand == "align") {
         if (index + 1 >= arguments.size()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -537,14 +537,14 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
     if (subcommand == "anchored") {
         if (index + 1 >= arguments.size()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
         if (arguments[index + 1] == "eyes")
             context.mPosition.y += PLAYER_EYE_HEIGHT;
         else if (arguments[index + 1] != "feet") {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -553,7 +553,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
     if (subcommand == "if" || subcommand == "unless") {
         if (index + 1 >= arguments.size()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -575,7 +575,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             withCount = true;
         } else if (condition == "entity") {
             if (index + 2 >= arguments.size()) {
-                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                sendUsageError(sender);
                 return false;
             }
 
@@ -589,7 +589,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         } else if (condition == "score") {
             // score <target> <objective> (<op> <source> <objective> | matches <range>)
             if (index + 5 >= arguments.size()) {
-                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                sendUsageError(sender);
                 return false;
             }
             ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation,
@@ -610,7 +610,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 if (index + 6 >= arguments.size()
                     || (operation != "<" && operation != "<=" && operation != "=" && operation != ">="
                         && operation != ">")) {
-                    sender.sendTranslation("commands.generic.usage", {getUsage()});
+                    sendUsageError(sender);
                     return false;
                 }
                 int32_t source = 0;
@@ -630,7 +630,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 next = index + 7;
             }
         } else {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -658,7 +658,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         return runChain(sender, context, arguments, next, successes);
     }
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }
 

@@ -18,7 +18,7 @@ std::vector<CommandOverloadData> DebugHudCommand::getOverloads() const {
 
 bool DebugHudCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     if (!sender.isPlayer()) {
@@ -38,7 +38,7 @@ bool DebugHudCommand::execute(CommandOrigin &sender, const std::vector<std::stri
     else if (arguments[0] == "off")
         page = DebugHud::Page::Off;
     else {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

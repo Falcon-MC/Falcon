@@ -27,7 +27,7 @@ bool FogCommand::execute(CommandOrigin &sender, const std::vector<std::string> &
     const bool popping = arguments.size() == 3 && arguments[1] == "pop";
     const bool removing = arguments.size() == 3 && arguments[1] == "remove";
     if (!pushing && !popping && !removing) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

@@ -31,7 +31,7 @@ std::vector<CommandOverloadData> ProfilerCommand::getOverloads() const {
 
 bool ProfilerCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

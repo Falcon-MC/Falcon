@@ -105,7 +105,7 @@ std::vector<CommandOverloadData> TickingAreaCommand::getOverloads() const {
 
 bool TickingAreaCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty() || sender.getLevel() == nullptr) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -123,7 +123,7 @@ bool TickingAreaCommand::execute(CommandOrigin &sender, const std::vector<std::s
     if (mode == "preload")
         return _preload(sender, arguments, origin);
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }
 
@@ -140,7 +140,7 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
         int32_t radius = 0;
         if (arguments.size() < 6 || !parseBlockPosition(arguments, 2, origin, sender.getRotation(), center)
             || !parseInteger(arguments[5], radius) || radius < 0) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -156,7 +156,7 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
         Vector3i to;
         if (arguments.size() < 7 || !parseBlockPosition(arguments, 1, origin, sender.getRotation(), from)
             || !parseBlockPosition(arguments, 4, origin, sender.getRotation(), to)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -171,7 +171,7 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
     }
 
     if (arguments.size() > optionalIndex + 1 && !parseBoolean(arguments[optionalIndex + 1], area.mPreload)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -208,7 +208,7 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
 bool TickingAreaCommand::_remove(CommandOrigin &sender, const std::vector<std::string> &arguments,
                                  const Vector3f &origin) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -298,7 +298,7 @@ bool TickingAreaCommand::_list(CommandOrigin &sender, const std::vector<std::str
 bool TickingAreaCommand::_preload(CommandOrigin &sender, const std::vector<std::string> &arguments,
                                   const Vector3f &origin) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -312,7 +312,7 @@ bool TickingAreaCommand::_preload(CommandOrigin &sender, const std::vector<std::
     bool preload = false;
     const bool setting = arguments.size() > valueIndex;
     if (setting && !parseBoolean(arguments[valueIndex], preload)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

@@ -3191,7 +3191,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
     }
 
     PlayerCommandOrigin sender(*this, *player, packet.mOrigin);
-    mCommands.dispatch(sender, commandLine);
+    sender.collectOutput();
+    sender.sendCollectedOutput(mCommands.dispatch(sender, commandLine));
 }
 
 void ServerNetworkHandler::onReceiveIPSupport(RakPeerHelper::IPSupport support) {

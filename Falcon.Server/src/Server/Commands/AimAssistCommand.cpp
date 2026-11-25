@@ -52,7 +52,7 @@ std::vector<CommandOverloadData> AimAssistCommand::getOverloads() const {
 
 bool AimAssistCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2 || (arguments[1] != "set" && arguments[1] != "clear")) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -69,7 +69,7 @@ bool AimAssistCommand::execute(CommandOrigin &sender, const std::vector<std::str
                              && (arguments.size() < 4 || parseFloat(arguments[3], packet.mViewAngle.y))
                              && (arguments.size() < 5 || parseFloat(arguments[4], packet.mDistance));
         if (!numbers || (arguments.size() >= 6 && arguments[5] != "angle" && arguments[5] != "distance")) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         if (packet.mViewAngle.x < MIN_ANGLE || packet.mViewAngle.x > MAX_ANGLE) {

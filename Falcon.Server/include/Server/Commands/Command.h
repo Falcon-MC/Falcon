@@ -49,6 +49,9 @@ public:
     static CommandParamData makeEnumParameter(const std::string &name, const std::string &enumName,
                                               const std::vector<std::string> &values, bool optional = false);
 
+    // a line the overloads do not accept: the game's syntax error at the token where they stop, else the usage
+    void sendUsageError(CommandOrigin &sender) const;
+
     static std::string joinArguments(const std::vector<std::string> &arguments, size_t first);
 
     static std::string joinPlayerNames(const std::vector<ServerPlayer *> &players);

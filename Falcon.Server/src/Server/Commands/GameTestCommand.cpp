@@ -100,7 +100,7 @@ std::vector<CommandOverloadData> GameTestCommand::getOverloads() const {
 
 bool GameTestCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     Level *level = sender.getLevel();
@@ -125,7 +125,7 @@ bool GameTestCommand::execute(CommandOrigin &sender, const std::vector<std::stri
     GameTestRunner::Outcome outcome;
     if (modeName == "run") {
         if (arguments.size() < 2) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         bool stopOnFailure = false;
@@ -133,7 +133,7 @@ bool GameTestCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         int32_t rotation = rotationAt(2);
         if (arguments.size() >= 4 && parseBool(arguments[2], stopOnFailure)) {
             if (!parseInt(arguments[3], repeatCount)) {
-                sender.sendTranslation("commands.generic.usage", {getUsage()});
+                sendUsageError(sender);
                 return false;
             }
             rotation = rotationAt(4);
@@ -154,14 +154,14 @@ bool GameTestCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         outcome = runner.runSet(*level, origin, tag, rotationAt(rotationIndex), modeName == "runsetuntilfail");
     } else if (modeName == "create") {
         if (arguments.size() < 2) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         int32_t width = GameTestRunner::DEFAULT_CREATE_SIZE, height = 0, depth = 0;
         if ((arguments.size() >= 3 && !parseInt(arguments[2], width))
             || (arguments.size() >= 4 && !parseInt(arguments[3], height))
             || (arguments.size() >= 5 && !parseInt(arguments[4], depth))) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         outcome = runner.create(*level, origin, arguments[1], width, height, depth);

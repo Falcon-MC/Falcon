@@ -105,7 +105,7 @@ bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vecto
     for (ServerPlayer *victim: victims) {
         Vector3f destination;
         if (!parsePosition(arguments, first, victim->getPosition(), victim->getRotation(), destination)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 
@@ -156,6 +156,6 @@ bool TeleportCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         return teleportToPosition(sender, victims, arguments, 1);
     }
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }

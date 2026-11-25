@@ -170,7 +170,10 @@ namespace {
         if (!hasText(commandLine))
             return 0;
         PlayerCommandOrigin sender(owner(), *player(target), CommandOriginData());
-        return owner().getCommands().dispatch(sender, commandLine) ? 1 : 0;
+        sender.collectOutput();
+        const bool success = owner().getCommands().dispatch(sender, commandLine);
+        sender.sendCollectedOutput(success);
+        return success ? 1 : 0;
     }
 
     // the public chat as the player typed it: one line, the chat events decide what goes out

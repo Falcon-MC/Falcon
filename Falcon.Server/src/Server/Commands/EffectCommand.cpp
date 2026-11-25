@@ -83,7 +83,7 @@ std::vector<CommandOverloadData> EffectCommand::getOverloads() const {
 
 bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -143,16 +143,16 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
         if (arguments[2] == "infinite") {
             infinite = true;
         } else if (!parseInteger(arguments[2], seconds) || seconds < 1) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
     }
     if (arguments.size() > 3 && (!parseInteger(arguments[3], amplifier) || amplifier < 0 || amplifier > 255)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     if (arguments.size() > 4 && !parseBoolean(arguments[4], particles)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

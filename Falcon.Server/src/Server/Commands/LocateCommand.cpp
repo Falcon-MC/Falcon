@@ -95,7 +95,7 @@ std::vector<CommandOverloadData> LocateCommand::getOverloads() const {
 
 bool LocateCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -103,7 +103,7 @@ bool LocateCommand::execute(CommandOrigin &sender, const std::vector<std::string
         return _locateStructure(sender, arguments);
 
     if (arguments[0] != "biome") {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -112,7 +112,7 @@ bool LocateCommand::execute(CommandOrigin &sender, const std::vector<std::string
 
 bool LocateCommand::_locateStructure(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -184,7 +184,7 @@ bool LocateCommand::_locateStructure(CommandOrigin &sender, const std::vector<st
 
 bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

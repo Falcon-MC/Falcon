@@ -48,7 +48,7 @@ bool PlayAnimationCommand::readAnimation(const std::vector<std::string> &argumen
 
 bool PlayAnimationCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

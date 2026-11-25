@@ -39,7 +39,7 @@ bool TestForBlocksCommand::execute(CommandOrigin &sender, const std::vector<std:
     if (arguments.size() < 9 || !parseBlockPosition(arguments, 0, origin, rotation, begin)
         || !parseBlockPosition(arguments, 3, origin, rotation, end)
         || !parseBlockPosition(arguments, 6, origin, rotation, destination)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

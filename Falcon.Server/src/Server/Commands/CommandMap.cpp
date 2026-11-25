@@ -99,7 +99,7 @@ Command *CommandMap::getCommand(const std::string &name) const {
 }
 
 std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, std::vector<size_t> *starts,
-                                              bool *endsInToken) {
+                                              bool *endsInToken, std::vector<size_t> *ends) {
     std::vector<std::string> tokens;
     std::string token;
     bool quoted = false;
@@ -149,6 +149,8 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
                 tokens.push_back(token);
                 if (starts != nullptr)
                     starts->push_back(start);
+                if (ends != nullptr)
+                    ends->push_back(index);
                 token.clear();
                 started = false;
             }
@@ -165,6 +167,8 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
         tokens.push_back(token);
         if (starts != nullptr)
             starts->push_back(start);
+        if (ends != nullptr)
+            ends->push_back(commandLine.size());
     }
 
     return tokens;
@@ -213,6 +217,33 @@ std::string CommandMap::_skipFields(const std::string &commandLine, size_t count
     return commandLine.substr(index);
 }
 
+namespace {
+    // commands run on the main thread
+    const CommandMap::DispatchContext *currentContext = nullptr;
+
+    // nested dispatches (execute run, functions) restore the outer line when they finish
+    class DispatchScope {
+    public:
+        explicit DispatchScope(const CommandMap::DispatchContext &context) : mPrevious(currentContext) {
+            currentContext = &context;
+        }
+
+        ~DispatchScope() {
+            currentContext = mPrevious;
+        }
+
+        DispatchScope(const DispatchScope &) = delete;
+        DispatchScope &operator=(const DispatchScope &) = delete;
+
+    private:
+        const CommandMap::DispatchContext *mPrevious;
+    };
+}
+
+const CommandMap::DispatchContext *CommandMap::currentDispatch() {
+    return currentContext;
+}
+
 bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine) {
     std::string line = commandLine;
     if (!line.empty() && line[0] == '/')
@@ -232,6 +263,15 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
         sender.sendTranslation("commands.generic.error.permissions", {tokens[0]});
         return false;
     }
+
+    // the syntax error quotes the line as it was typed, slash included
+    DispatchContext context;
+    context.mCommand = command;
+    context.mLine = commandLine;
+    context.mTokens = tokenize(commandLine, &context.mStarts, nullptr, &context.mEnds);
+    if (!context.mTokens.empty() && context.mTokens[0].starts_with('/'))
+        context.mTokens[0].erase(0, 1);
+    const DispatchScope scope(context);
 
     std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
 

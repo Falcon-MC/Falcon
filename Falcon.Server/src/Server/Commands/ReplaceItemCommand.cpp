@@ -506,7 +506,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
 
     const bool entity = !tokens.empty() && tokens[0] == "entity";
     if (!entity && (tokens.empty() || tokens[0] != "block")) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -514,7 +514,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
     size_t index = entity ? 3 : 5;
     Request request;
     if (tokens.size() < index + 2 || !parseInteger(tokens[index], request.mSlotId)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     index++;
@@ -524,7 +524,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
         index++;
     }
     if (tokens.size() <= index) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -533,7 +533,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
     int data = 0;
     if ((tokens.size() > index + 1 && !parseInteger(tokens[index + 1], request.mAmount))
         || (tokens.size() > index + 2 && !parseInteger(tokens[index + 2], data))) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     const bool hasComponents = tokens.size() > index + 3;
@@ -547,7 +547,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
     if (entity) {
         const auto found = std::find(SLOT_NAMES.begin(), SLOT_NAMES.end(), slotName);
         if (found == SLOT_NAMES.end()) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         slotType = (int) (found - SLOT_NAMES.begin());
@@ -563,7 +563,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
         const Vector3f rotation = sender.getRotation();
         Level *level = sender.getLevel();
         if (slotName != BLOCK_SLOT || level == nullptr || !parseBlockPosition(tokens, 1, origin, rotation, position)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 

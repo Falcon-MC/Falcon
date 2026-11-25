@@ -59,7 +59,7 @@ std::vector<CommandOverloadData> FillCommand::getOverloads() const {
 
 bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 7 || arguments.size() > 8) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -76,7 +76,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     Vector3i to;
     if (!parseBlockPosition(arguments, 0, origin, rotation, from)
         || !parseBlockPosition(arguments, 3, origin, rotation, to)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -88,7 +88,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
     const std::string mode = arguments.size() == 8 ? arguments[7] : "replace";
     if (std::find(MODES.begin(), MODES.end(), mode) == MODES.end()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

@@ -75,7 +75,7 @@ bool SpawnPointCommand::execute(CommandOrigin &sender, const std::vector<std::st
 
     const bool explicitPosition = arguments.size() == 4 || positionOnly;
     if (!arguments.empty() && arguments.size() != 1 && !explicitPosition) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -87,7 +87,7 @@ bool SpawnPointCommand::execute(CommandOrigin &sender, const std::vector<std::st
                        (int32_t) std::floor(position.z));
 
         if (explicitPosition && !parseBlockPosition(arguments, positionIndex, position, target->getRotation(), spawn)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 

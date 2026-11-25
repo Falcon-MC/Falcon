@@ -138,7 +138,7 @@ bool ScoreboardCommand::execute(CommandOrigin &sender, const std::vector<std::st
         return _objectives(sender, arguments);
     if (arguments.size() >= 2 && arguments[0] == "players")
         return _players(sender, arguments);
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }
 
@@ -208,7 +208,7 @@ bool ScoreboardCommand::_objectives(CommandOrigin &sender, const std::vector<std
 
     if (action == "remove") {
         if (arguments.size() < 3) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         if (!scoreboard.removeObjective(arguments[2])) {
@@ -234,7 +234,7 @@ bool ScoreboardCommand::_objectives(CommandOrigin &sender, const std::vector<std
 
     if (action == "setdisplay") {
         if (arguments.size() < 3) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         const std::string &slot = arguments[2];
@@ -267,7 +267,7 @@ bool ScoreboardCommand::_objectives(CommandOrigin &sender, const std::vector<std
         return true;
     }
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }
 
@@ -285,7 +285,7 @@ bool ScoreboardCommand::_players(CommandOrigin &sender, const std::vector<std::s
         return _random(sender, arguments);
     if (action == "operation")
         return _operation(sender, arguments);
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }
 
@@ -333,7 +333,7 @@ bool ScoreboardCommand::_change(CommandOrigin &sender, const std::vector<std::st
     const std::string &action = arguments[1];
     int32_t count = 0;
     if (arguments.size() < 5) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     if (!parseInt(arguments[4], count)) {
@@ -394,7 +394,7 @@ bool ScoreboardCommand::_change(CommandOrigin &sender, const std::vector<std::st
 bool ScoreboardCommand::_reset(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     Scoreboard &scoreboard = mHandler.getScoreboard();
     if (arguments.size() < 3) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     ScoreboardObjective *objective = nullptr;
@@ -432,7 +432,7 @@ bool ScoreboardCommand::_test(CommandOrigin &sender, const std::vector<std::stri
     Scoreboard &scoreboard = mHandler.getScoreboard();
     int32_t min = INT32_MIN, max = INT32_MAX;
     if (arguments.size() < 5) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     if (!parseBound(arguments[4], INT32_MIN, min)
@@ -475,7 +475,7 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
     Scoreboard &scoreboard = mHandler.getScoreboard();
     int32_t min = 0, max = 0;
     if (arguments.size() < 6) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     if (!parseInt(arguments[4], min) || !parseInt(arguments[5], max)) {
@@ -517,7 +517,7 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
 bool ScoreboardCommand::_operation(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     Scoreboard &scoreboard = mHandler.getScoreboard();
     if (arguments.size() < 7) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     const std::string &operation = arguments[4];

@@ -59,7 +59,7 @@ std::vector<CommandOverloadData> InputPermissionCommand::getOverloads() const {
 
 bool InputPermissionCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 3 || (arguments[0] != "query" && arguments[0] != "set")) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     const bool setting = arguments[0] == "set";

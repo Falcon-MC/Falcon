@@ -28,7 +28,7 @@ bool TestForBlockCommand::execute(CommandOrigin &sender, const std::vector<std::
 
     Vector3i position;
     if (arguments.size() < 4 || !parseBlockPosition(arguments, 0, origin, rotation, position)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

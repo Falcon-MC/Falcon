@@ -68,7 +68,7 @@ bool MusicCommand::execute(CommandOrigin &sender, const std::vector<std::string>
     const bool shaped = ((queueing || playing) && arguments.size() >= 2 && arguments.size() <= 5)
                         || (stopping && arguments.size() <= 2) || (setting && arguments.size() == 2);
     if (!shaped) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -87,7 +87,7 @@ bool MusicCommand::execute(CommandOrigin &sender, const std::vector<std::string>
         valid = parseFloat(arguments[1], volume);
     }
     if (!valid) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

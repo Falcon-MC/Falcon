@@ -83,7 +83,7 @@ bool GiveCommand::_parseData(const std::string &value, int &out) {
 
 bool GiveCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -108,13 +108,13 @@ bool GiveCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
     int count = item.getMaxStackSize();
     if (arguments.size() > 2 && !_parseCount(arguments[2], count)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
     int data = 0;
     if (arguments.size() > 3 && !_parseData(arguments[3], data)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

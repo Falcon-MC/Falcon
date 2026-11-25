@@ -1,5 +1,8 @@
 #include "Server/Commands/Command.h"
 
+#include "Server/Commands/CommandMap.h"
+#include "Server/Commands/CommandSyntax.h"
+
 #include "Core/Math/MathConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
@@ -22,6 +25,19 @@ std::vector<CommandOverloadData> Command::getOverloads() const {
     overload.mParameters.push_back(argsParameter);
 
     return {overload};
+}
+
+void Command::sendUsageError(CommandOrigin &sender) const {
+    const CommandMap::DispatchContext *context = CommandMap::currentDispatch();
+    if (context != nullptr && context->mCommand == this) {
+        const std::optional<CommandSyntaxError> error = CommandSyntax::find(
+                getOverloads(), context->mLine, context->mTokens, context->mStarts, context->mEnds);
+        if (error.has_value()) {
+            sender.sendTranslation("commands.generic.syntax", {error->mBefore, error->mToken, error->mAfter});
+            return;
+        }
+    }
+    sender.sendTranslation("commands.generic.usage", {getUsage()});
 }
 
 CommandParamData Command::makePlayerParameter(const std::string &name) {
