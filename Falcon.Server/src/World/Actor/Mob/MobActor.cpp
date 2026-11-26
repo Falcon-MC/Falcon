@@ -156,6 +156,10 @@ namespace {
     const char *const INSTANT_DESPAWN_COMPONENT = "minecraft:instant_despawn";
     const char *const BODY_ROTATION_BLOCKED_COMPONENT = "minecraft:body_rotation_blocked";
     const char *const IS_ILLAGER_CAPTAIN_COMPONENT = "minecraft:is_illager_captain";
+    const char *const IS_STUNNED_COMPONENT = "minecraft:is_stunned";
+    const char *const RAVAGER_BLOCKED_COMPONENT = "minecraft:ravager_blocked";
+    // knockback strengths are scaled to motion, as for the roar
+    const float BLOCKED_KNOCKBACK_SCALE = 0.4f;
     const char *const KNOCKBACK_RESISTANCE_COMPONENT = "minecraft:knockback_resistance";
     const char *const KNOCKBACK_RESISTANCE_ATTRIBUTE = "minecraft:knockback_resistance";
     const char *const BOUNCINESS_COMPONENT = "minecraft:bounciness";
@@ -258,21 +262,26 @@ namespace {
         return std::max(1, (int32_t) std::lround(seconds * (float) TICKS_PER_SECOND));
     }
 
-    float weightedChoice(const json::Value &choices) {
+    // a weighted pick from a non-empty array; with no weight at all, the first entry
+    const json::Value &weightedPick(const json::Value &choices) {
         int32_t total = 0;
         for (const std::unique_ptr<json::Value> &choice: choices.mArray)
             total += std::max(0, choice->get("weight") != nullptr ? choice->get("weight")->integer(1) : 1);
 
         if (total <= 0)
-            return numberIn(choices.mArray.front().get(), "value", 0.0f);
+            return *choices.mArray.front();
 
         int32_t roll = std::uniform_int_distribution<int32_t>(0, total - 1)(lifecycleRandom());
         for (const std::unique_ptr<json::Value> &choice: choices.mArray) {
             roll -= std::max(0, choice->get("weight") != nullptr ? choice->get("weight")->integer(1) : 1);
             if (roll < 0)
-                return numberIn(choice.get(), "value", 0.0f);
+                return *choice;
         }
-        return numberIn(choices.mArray.back().get(), "value", 0.0f);
+        return *choices.mArray.back();
+    }
+
+    float weightedChoice(const json::Value &choices) {
+        return numberIn(&weightedPick(choices), "value", 0.0f);
     }
 
     // time_between_hurt in seconds, truncated to ticks: 0 hurts every tick
@@ -2475,6 +2484,7 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
     _setFlag(owner, ActorFlag::Sheared, getComponent("minecraft:is_sheared") != nullptr);
     _setFlag(owner, ActorFlag::BodyRotationBlocked, getComponent(BODY_ROTATION_BLOCKED_COMPONENT) != nullptr);
     _setFlag(owner, ActorFlag::IsIllagerCaptain, getComponent(IS_ILLAGER_CAPTAIN_COMPONENT) != nullptr);
+    _setFlag(owner, ActorFlag::Stunned, getComponent(IS_STUNNED_COMPONENT) != nullptr);
     RideControlSystem::syncFlags(owner, *this);
     getAttributes().setClamped(KNOCKBACK_RESISTANCE_ATTRIBUTE,
                                numberIn(getComponent(KNOCKBACK_RESISTANCE_COMPONENT), "value", 0.0f));
@@ -2882,6 +2892,22 @@ void MobActor::setCarriedBlock(ServerNetworkHandler &owner, const BlockState &st
 
 void MobActor::fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other) {
     EntityEvents::fire(owner, *this, event, 0, other);
+}
+
+void MobActor::onAttackBlocked(ServerNetworkHandler &owner, Actor &blocker) {
+    const json::Value *blocked = getComponent(RAVAGER_BLOCKED_COMPONENT);
+    if (blocked == nullptr)
+        return;
+
+    const Vector3f self = getPosition();
+    const Vector3f other = blocker.getPosition();
+    owner.knockBack(blocker, other.x - self.x, other.z - self.z,
+                    numberIn(blocked, "knockback_strength", 0.0f) * BLOCKED_KNOCKBACK_SCALE);
+
+    // a choice without a value does nothing
+    const json::Value *choices = blocked->get("reaction_choices");
+    if (choices != nullptr && choices->isArray() && !choices->mArray.empty())
+        EntityEvents::fireTrigger(owner, *this, weightedPick(*choices).get("value"), &blocker);
 }
 
 float MobActor::getAttackDamage() const {

@@ -81,6 +81,7 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor 
         if (result == DamageResult::Blocked) {
             owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
             mTicksSinceAttack = 0;
+            mob.onAttackBlocked(owner, *player);
             return;
         }
         landed = result == DamageResult::Dealt;

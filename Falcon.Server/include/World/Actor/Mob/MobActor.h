@@ -275,6 +275,9 @@ public:
 
     void fireEvent(ServerNetworkHandler &owner, const std::string &event, Actor *other = nullptr);
 
+    // a shield stopped this mob's melee hit: minecraft:ravager_blocked pushes the blocker off and reacts
+    void onAttackBlocked(ServerNetworkHandler &owner, Actor &blocker);
+
     void playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound);
 
     void setParent(uint64_t runtimeId) {
