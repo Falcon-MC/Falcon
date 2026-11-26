@@ -12,6 +12,8 @@ public:
 
     static bool isLiveCoral(const std::string &identifier);
 
+    static bool isLiveCoralBlock(const std::string &identifier);
+
     static void scheduleDeathCheck(Level &level, const Vector3i &position);
 
     static void dieWithoutWater(Level &level, const Vector3i &position, const BlockState &state);

@@ -37,6 +37,10 @@ bool CoralBlock::isLiveCoral(const std::string &identifier) {
            || endsWith(identifier, "_coral_wall_fan");
 }
 
+bool CoralBlock::isLiveCoralBlock(const std::string &identifier) {
+    return isLiveCoral(identifier) && endsWith(identifier, "_coral_block");
+}
+
 bool CoralBlock::matches(const std::string &identifier) {
     return isLiveCoral(identifier) && !endsWith(identifier, "_coral_fan") && !endsWith(identifier, "_coral_wall_fan");
 }

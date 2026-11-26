@@ -26,8 +26,7 @@ namespace {
 }
 
 bool MultifaceBlock::matches(const std::string &identifier) {
-    return identifier == BlockNames::SCULK_VEIN || identifier == BlockNames::GLOW_LICHEN
-           || identifier == BlockNames::RESIN_CLUMP;
+    return identifier == BlockNames::SCULK_VEIN || identifier == BlockNames::RESIN_CLUMP;
 }
 
 // the face the block clings to has to be a full face, like when a vein spreads
