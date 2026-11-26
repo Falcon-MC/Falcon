@@ -22,8 +22,9 @@ foreach(entry IN LISTS inventoryPaths)
             set(FALCON_CURRENT_SERVER_HEADER "${CMAKE_MATCH_1}")
             if(NOT legacyHeader STREQUAL FALCON_CURRENT_SERVER_HEADER)
                 list(APPEND expectedLegacyHeaders "${legacyHeader}")
-                if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/${FALCON_CURRENT_SERVER_HEADER}")
-                    message(FATAL_ERROR "Missing relocated server header: ${FALCON_CURRENT_SERVER_HEADER}")
+                if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/${FALCON_CURRENT_SERVER_HEADER}"
+                        AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../Falcon.Shared/include/${FALCON_CURRENT_SERVER_HEADER}")
+                    message(FATAL_ERROR "Missing relocated header: ${FALCON_CURRENT_SERVER_HEADER}")
                 endif()
                 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LegacyServerHeader.h.in"
                         "${FALCON_LEGACY_INCLUDE_DIR}/${legacyHeader}" @ONLY)
