@@ -145,6 +145,5 @@ int main() {
         std::fprintf(stderr, "FAILED: %s\n", exception.what());
         return 1;
     }
-    std::printf("sculk spreader checks passed\n");
     return 0;
 }
