@@ -54,7 +54,7 @@ namespace nethernet {
     public:
         // localSender: the datagram came from a loopback or private address
         typedef std::function<bool(const std::string &networkID, const std::string &offer, std::string &answer,
-                                   int &errorCode, bool localSender)> OfferHandler;
+                                   int &errorCode, bool localSender, size_t answerBudget)> OfferHandler;
         typedef std::function<ServerData()> ServerDataProvider;
 
         DiscoveryListener();

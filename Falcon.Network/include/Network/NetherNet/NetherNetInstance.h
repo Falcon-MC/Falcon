@@ -115,10 +115,12 @@ public:
 
 private:
     bool _negotiate(const std::string &networkID, const std::string &offer, std::string &answer, int &errorCode,
-                    const std::string &signalKey = std::string(), bool anonymousAllowed = false);
+                    const std::string &signalKey = std::string(), bool anonymousAllowed = false,
+                    size_t lanAnswerBudget = 0, bool localLanAnswer = false);
 
     bool _negotiateOffer(const std::string &networkID, const std::string &offer, std::string &answer, int &errorCode,
-                         const std::string &signalKey, int &clientCheck, bool anonymousAllowed);
+                         const std::string &signalKey, int &clientCheck, bool anonymousAllowed, size_t lanAnswerBudget,
+                         bool localLanAnswer);
 
     void _onSignal(const nethernet::Signal &signal);
 

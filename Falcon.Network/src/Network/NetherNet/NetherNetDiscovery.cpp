@@ -45,6 +45,7 @@ namespace nethernet {
         const uint64_t APPLICATION_ID = 0xdeadbeefull;
         const size_t CHECKSUM_LENGTH = 32;
         const size_t HEADER_PADDING = 8;
+        const size_t MAX_LAN_SIGNAL_LENGTH = 1140;
 
         const uint16_t PACKET_REQUEST = 0x00;
         const uint16_t PACKET_RESPONSE = 0x01;
@@ -422,16 +423,16 @@ namespace nethernet {
             if (signal.mType != SIGNAL_TYPE_OFFER)
                 return;
 
-            std::string answer;
-            int errorCode = 0;
-            if (!mOfferHandler(signal.mNetworkID, signal.mData, answer, errorCode, isLocalAddress(from)))
-                return;
-
             Signal response;
             response.mType = SIGNAL_TYPE_ANSWER;
             response.mConnectionID = signal.mConnectionID;
-            response.mData = answer;
             response.mNetworkID = std::to_string(mNetworkId);
+
+            const size_t answerBudget = MAX_LAN_SIGNAL_LENGTH - response.toString().size();
+            int errorCode = 0;
+            if (!mOfferHandler(signal.mNetworkID, signal.mData, response.mData, errorCode, isLocalAddress(from),
+                               answerBudget))
+                return;
 
             _sendMessage(senderId, response.toString(), from, fromLength);
         } catch (const std::exception &) {
