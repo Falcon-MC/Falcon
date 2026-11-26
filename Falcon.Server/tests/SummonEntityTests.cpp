@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorFlags.h"
+#include "World/Actor/AI/Goal/SpellCasting.h"
 #include "World/Actor/AI/Goal/SummonEntityGoal.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
@@ -83,6 +84,7 @@ namespace {
         require(goal.canUse(arena.mOwner, evoker), "the only choice in range was not picked");
         goal.start(arena.mOwner, evoker);
         require(evoker.getFlags().get(ActorFlag::Casting), "the casting flag was not set");
+        require(goal.getRequiredControlFlags() == SpellCasting::CASTING_FLAGS, "the caster can walk during the cast");
         goal.tick(arena.mOwner, evoker);
 
         const std::vector<ServerActor *> vexes = arena.summonedBy(evoker);
@@ -97,8 +99,12 @@ namespace {
         for (int32_t tick = 0; tick < 4; tick++)
             goal.tick(arena.mOwner, evoker);
         require(!evoker.getFlags().get(ActorFlag::Casting), "the casting flag outlived cast_duration");
+        require(goal.getRequiredControlFlags() == SpellCasting::AFTER_CAST_FLAGS,
+                "the caster is still held after cast_duration");
         require(!goal.canContinueToUse(arena.mOwner, evoker), "the goal went on after its sequence");
         goal.stop(arena.mOwner, evoker);
+        require(goal.getRequiredControlFlags() == SpellCasting::CASTING_FLAGS,
+                "the next cast does not hold the caster");
         require(!goal.canUse(arena.mOwner, evoker), "cast again inside cooldown_time");
     }
 
