@@ -1,5 +1,6 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/BaseRailBlock.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/Circuit/CircuitSystem.h"
@@ -279,8 +280,7 @@ namespace {
                         "a ring torch was off while the ring's block was powered from outside");
         }
 
-        lever.mStates.putByte("open_bit", 0);
-        fixture.set(Vector3i(centre.x, centre.y - 1, centre.z), lever);
+        fixture.flip(Vector3i(centre.x, centre.y - 1, centre.z));
         fixture.run(10);
         unsigned litTorches = 0;
         for (int tick = 0; tick < 12; ++tick) {
@@ -500,6 +500,66 @@ namespace {
         require(fixture.signal(east(lamp, 1)) == 15, "dust beside a lamp powered by a lever on it got no signal");
     }
 
+    // a powered rail beside a redstone block passes the power along eight more rails of its kind and axis
+    void railLine() {
+        Fixture fixture;
+        const Vector3i source(0, ORIGIN.y, ORIGIN.z);
+        BlockState rail = fixture.block("minecraft:golden_rail");
+        rail.mStates.putInt("rail_direction", 1);
+        for (int step = 1; step <= 10; ++step)
+            fixture.set(east(source, step), rail);
+        // a rail across the line: on the other axis, it stays off
+        BlockState across = rail;
+        across.mStates.putInt("rail_direction", 0);
+        fixture.set(Vector3i(source.x + 1, source.y, source.z + 1), across);
+        fixture.run(6);
+        const auto powered = [&fixture](const Vector3i &at) {
+            return fixture.at(at).mStates.getByte("rail_data_bit", 0) != 0;
+        };
+        require(!powered(east(source, 1)), "a rail with no power around it was powered");
+
+        fixture.set(source, fixture.block("minecraft:redstone_block"));
+        fixture.run(6);
+        for (int step = 1; step <= 9; ++step)
+            require(powered(east(source, step)), "rail " + std::to_string(step) + " of the line was not powered");
+        require(!powered(east(source, 10)), "the tenth rail, nine past the source, was powered");
+        require(!powered(Vector3i(source.x + 1, source.y, source.z + 1)), "a rail on the other axis was powered");
+
+        // a rail's strength is how far the power still reaches, not a signal: it gives no redstone power
+        require(RedstoneSystem::getWeakPower(fixture.mOwner, fixture.mLevel, east(source, 1), RedstoneFace::UP) == 0
+                        && RedstoneSystem::isBlockIndirectlyGettingPowered(
+                                   fixture.mOwner, fixture.mLevel, Vector3i(source.x + 1, source.y + 1, source.z)) == 0,
+                "a powered rail gave redstone power");
+
+        fixture.set(source, BlockState(BlockNames::AIR));
+        fixture.run(6);
+        for (int step = 1; step <= 9; ++step)
+            require(!powered(east(source, step)), "rail " + std::to_string(step) + " stayed powered without a source");
+    }
+
+    void railSlopeConnection() {
+        Fixture fixture;
+        const Vector3i lower = ORIGIN;
+        const Vector3i upper(lower.x + 1, lower.y + 1, lower.z);
+        BlockState flat = fixture.block("minecraft:golden_rail");
+        flat.mStates.putInt("rail_direction", BaseRailBlock::STRAIGHT_EAST_WEST);
+        fixture.set(Vector3i(upper.x, upper.y - 1, upper.z), fixture.block("minecraft:stone"));
+        fixture.set(lower, flat);
+        fixture.set(upper, flat);
+        fixture.set(east(lower, -1), fixture.block("minecraft:redstone_block"));
+        fixture.run(8);
+        require(fixture.at(lower).mStates.getByte("rail_data_bit", 0) != 0, "the lower rail had no input");
+        require(fixture.at(upper).mStates.getByte("rail_data_bit", 0) == 0,
+                "two flat rails at different heights shared power");
+
+        BlockState slope = flat;
+        slope.mStates.putInt("rail_direction", BaseRailBlock::ASCENDING_EAST);
+        fixture.set(lower, slope);
+        fixture.run(8);
+        require(fixture.at(upper).mStates.getByte("rail_data_bit", 0) != 0,
+                "the upper rail did not get power from the slope connected to it");
+    }
+
     // the game's movable table: what a piston pushes, pulls, breaks or stops at
     void pistonMovableTable() {
         const auto movement = [](const char *name) { return PistonMovable::of(name).mMovement; };
@@ -627,6 +687,8 @@ int main() {
         producerSetups();
         consumerSetups();
         lampPassesPowerOn();
+        railLine();
+        railSlopeConnection();
         pistonMovableTable();
         pistonMoves();
         std::cout << "circuit checks passed\n";
