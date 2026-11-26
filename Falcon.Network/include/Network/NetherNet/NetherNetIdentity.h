@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <mutex>
 #include <string>
 
@@ -13,6 +14,13 @@ namespace nethernet {
         ~Identity();
 
         bool generate(const std::string &domain);
+
+        // the game asks to trust a server again when its key changes: the key is kept in keyPath across restarts.
+        // false for an unreadable key file, which is left untouched; saved is false when a new key couldn't be written
+        bool loadOrGenerate(const std::string &domain, const std::string &keyPath, bool &saved);
+
+        // first 8 bytes of the public key's SHA-256: an id that stays with the key
+        uint64_t fingerprint() const;
 
         bool issueToken();
 

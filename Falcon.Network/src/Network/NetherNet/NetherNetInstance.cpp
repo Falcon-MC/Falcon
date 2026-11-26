@@ -25,6 +25,7 @@ namespace {
     // a failed refresh holds back one offer at most per this many seconds
     const int CREDENTIALS_RETRY_SECONDS = 30;
     const char *IDENTITY_DOMAIN = "self";
+    const char *IDENTITY_KEY_FILE = "nethernet-identity.pem";
 
     unsigned long long randomNetworkID() {
         std::random_device device;
@@ -91,10 +92,15 @@ bool NetherNetInstance::host(const ConnectionDefinition &definition) {
 
     mConnectionDefinition = definition;
 
-    if (!mIdentity.generate(IDENTITY_DOMAIN)) {
-        LOG_ERROR(LogAreaID::Network, "Failed to generate the NetherNet server identity key");
+    bool identitySaved = false;
+    if (!mIdentity.loadOrGenerate(IDENTITY_DOMAIN, IDENTITY_KEY_FILE, identitySaved)) {
+        LOG_ERROR(LogAreaID::Network, "Failed to load or generate the NetherNet server identity key (%s)",
+                  IDENTITY_KEY_FILE);
         return false;
     }
+    if (!identitySaved)
+        LOG_WARN(LogAreaID::Network, "Could not save %s: players will be asked to trust the server after every restart",
+                 IDENTITY_KEY_FILE);
 
     const nethernet::SignalingServer::OfferHandler handler =
             [this](const std::string &networkID, const std::string &offer, std::string &answer, int &errorCode) {
@@ -136,11 +142,14 @@ bool NetherNetInstance::host(const ConnectionDefinition &definition) {
             mAcme.reset();
     }
 
-    unsigned char rawId[8];
-    RAND_bytes(rawId, sizeof(rawId));
-    mNetworkId = 0;
-    for (size_t i = 0; i < sizeof(rawId); i++)
-        mNetworkId |= ((uint64_t) rawId[i]) << (i * 8);
+    // kept with the identity key: the game remembers a server by it
+    mNetworkId = mIdentity.fingerprint();
+    if (mNetworkId == 0) {
+        unsigned char rawId[8];
+        RAND_bytes(rawId, sizeof(rawId));
+        for (size_t i = 0; i < sizeof(rawId); i++)
+            mNetworkId |= ((uint64_t) rawId[i]) << (i * 8);
+    }
 
     const nethernet::DiscoveryListener::ServerDataProvider dataProvider =
             [this]() {

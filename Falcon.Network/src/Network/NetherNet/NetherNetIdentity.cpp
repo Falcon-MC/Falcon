@@ -8,8 +8,15 @@
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
 #include <openssl/obj_mac.h>
+#include <openssl/pem.h>
 #include <openssl/x509.h>
 
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
+#include <cstdio>
 #include <ctime>
 #include <memory>
 #include <utility>
@@ -252,6 +259,69 @@ namespace nethernet {
         EVP_PKEY_CTX_free(context);
         mDomain = domain;
         return issueToken();
+    }
+
+    bool Identity::loadOrGenerate(const std::string &domain, const std::string &keyPath, bool &saved) {
+        saved = false;
+        if (FILE *file = std::fopen(keyPath.c_str(), "rb")) {
+            EVP_PKEY *key = PEM_read_PrivateKey(file, nullptr, nullptr, nullptr);
+            std::fclose(file);
+            if (key == nullptr || EVP_PKEY_id(key) != EVP_PKEY_EC || EVP_PKEY_bits(key) != 384) {
+                if (key != nullptr)
+                    EVP_PKEY_free(key);
+                return false;
+            }
+
+            if (mPrivateKey != nullptr)
+                EVP_PKEY_free(mPrivateKey);
+            mPrivateKey = key;
+            mDomain = domain;
+            saved = true;
+            return issueToken();
+        }
+
+        if (!generate(domain))
+            return false;
+
+        // private key: readable by the server's user only
+#ifdef _WIN32
+        FILE *file = std::fopen(keyPath.c_str(), "wb");
+#else
+        const int descriptor = open(keyPath.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+        FILE *file = descriptor < 0 ? nullptr : fdopen(descriptor, "wb");
+        if (file == nullptr && descriptor >= 0)
+            close(descriptor);
+#endif
+        if (file == nullptr)
+            return true;
+
+        saved = PEM_write_PrivateKey(file, mPrivateKey, nullptr, nullptr, 0, nullptr, nullptr) == 1;
+        saved = std::fclose(file) == 0 && saved;
+        if (!saved)
+            std::remove(keyPath.c_str());
+        return true;
+    }
+
+    uint64_t Identity::fingerprint() const {
+        if (mPrivateKey == nullptr)
+            return 0;
+
+        unsigned char *der = nullptr;
+        const int length = i2d_PUBKEY(mPrivateKey, &der);
+        if (length <= 0)
+            return 0;
+
+        unsigned char digest[EVP_MAX_MD_SIZE];
+        unsigned int digestLength = 0;
+        const bool hashed = EVP_Digest(der, (size_t) length, digest, &digestLength, EVP_sha256(), nullptr) == 1;
+        OPENSSL_free(der);
+        if (!hashed || digestLength < 8)
+            return 0;
+
+        uint64_t value = 0;
+        for (int i = 0; i < 8; i++)
+            value |= ((uint64_t) digest[i]) << (i * 8);
+        return value;
     }
 
     bool Identity::issueToken() {
