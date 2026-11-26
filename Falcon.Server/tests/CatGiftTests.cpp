@@ -21,6 +21,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
     const char *const GIFT_GROUP = "minecraft:cat_gift_for_owner";
@@ -84,12 +85,10 @@ namespace {
             return *cat;
         }
 
-        std::set<std::string> droppedItems() {
-            std::set<std::string> items;
-            for (auto &entry: mOwner.getActors()) {
-                if (const auto *item = dynamic_cast<const ItemActor *>(entry.second.get()))
-                    items.insert(item->getItem().mDefinition->getIdentifier());
-            }
+        std::vector<std::string> droppedItems() {
+            std::vector<std::string> items;
+            for (const auto &item: mOwner.getItemEntities())
+                items.push_back(item->getItem().mDefinition->getIdentifier());
             return items;
         }
     };
@@ -196,7 +195,7 @@ namespace {
         const float dz = std::floor(position.z) - 0.0f;
         require(dx * dx + dz * dz == 4.0f && position.y == 100.0f, "the cat was not put beside its owner");
 
-        const std::set<std::string> items = arena.droppedItems();
+        const std::vector<std::string> items = arena.droppedItems();
         require(items.size() == 1, "the cat did not drop exactly one gift");
         const std::set<std::string> gifts = {"minecraft:rabbit_hide", "minecraft:rabbit_foot", "minecraft:chicken",
                                              "minecraft:feather", "minecraft:rotten_flesh", "minecraft:string",
