@@ -2,7 +2,7 @@
 
 #include "World/Actor/AI/Goal/BaseMoveToBlockGoal.h"
 
-// minecraft:behavior.ocelot_sit_on_block: a tamed cat or ocelot walks to a closed chest, a furnace or the foot of a
+// minecraft:behavior.ocelot_sit_on_block: a tamed cat or ocelot walks to a closed chest, a lit furnace or the foot of a
 // bed and sits on it until the walk or the stay runs out
 class OcelotSitOnBlockGoal final : public BaseMoveToBlockGoal {
 public:

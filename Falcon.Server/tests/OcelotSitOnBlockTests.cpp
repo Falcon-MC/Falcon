@@ -88,19 +88,19 @@ namespace {
         return settings;
     }
 
-    // closed chests, furnaces lit or not and the foot of a bed; not the blast furnace, the smoker or the bed head
+    // a closed chest, a lit furnace and the foot of a bed; nothing else
     void seats() {
         Arena arena;
         const Vector3i at(0, 100, 0);
         require(arena.seats(BlockNames::CHEST, at, BlockState(BlockNames::CHEST)), "a chest is no seat");
-        require(arena.seats(BlockNames::TRAPPED_CHEST, at, BlockState(BlockNames::TRAPPED_CHEST)),
-                "a trapped chest is no seat");
-        require(arena.seats(BlockNames::FURNACE, at, BlockState(BlockNames::FURNACE)), "a furnace is no seat");
+        require(!arena.seats(BlockNames::TRAPPED_CHEST, at, BlockState(BlockNames::TRAPPED_CHEST)),
+                "a trapped chest is a seat");
+        require(!arena.seats(BlockNames::FURNACE, at, BlockState(BlockNames::FURNACE)), "an unlit furnace is a seat");
         require(arena.seats(BlockNames::LIT_FURNACE, at, BlockState(BlockNames::LIT_FURNACE)),
                 "a lit furnace is no seat");
-        require(!arena.seats(BlockNames::BLAST_FURNACE, at, BlockState(BlockNames::BLAST_FURNACE)),
-                "a blast furnace is a seat");
-        require(!arena.seats(BlockNames::SMOKER, at, BlockState(BlockNames::SMOKER)), "a smoker is a seat");
+        require(!arena.seats(BlockNames::LIT_BLAST_FURNACE, at, BlockState(BlockNames::LIT_BLAST_FURNACE)),
+                "a lit blast furnace is a seat");
+        require(!arena.seats(BlockNames::LIT_SMOKER, at, BlockState(BlockNames::LIT_SMOKER)), "a lit smoker is a seat");
         require(arena.seats(BlockNames::BED, at, bedPart(false)), "the foot of a bed is no seat");
         require(!arena.seats(BlockNames::BED, at, bedPart(true)), "the head of a bed is a seat");
         require(!arena.seats(BlockNames::STONE, at, VanillaBlocks::STONE().toBlockState()), "stone is a seat");
