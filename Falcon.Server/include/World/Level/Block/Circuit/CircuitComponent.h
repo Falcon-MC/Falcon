@@ -391,6 +391,16 @@ public:
         return mPromotedToProducer;
     }
 
+    // false: a torch or diode whose own side points into the consumer does not power it
+    void setAcceptFacingCapacitor(bool accept) {
+        mAcceptFacingCapacitor = accept;
+    }
+
+    // a one-evaluation pulse is read at its strength instead of as a full one
+    void setFullHalfPulse(bool full) {
+        mFullHalfPulse = full;
+    }
+
 protected:
     bool mSecondaryPowered = false;
     bool mPropagatePower = false;

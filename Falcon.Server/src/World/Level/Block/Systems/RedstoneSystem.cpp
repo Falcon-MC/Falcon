@@ -449,11 +449,60 @@ namespace {
         return shape;
     }
 
-    // doors, trapdoors, fence gates and note blocks skip the update a new consumer gets
-    bool ignoresFirstUpdate(const BlockState &state) {
+    // the game's setup of a consumer: whether it passes power on to the dust beyond it, takes a torch or diode
+    // pointing into it from its own side, reads a one-evaluation pulse at its own strength, stops dust stepping down
+    // past it and skips the update a new component gets
+    struct ConsumerShape {
+        bool mPropagatePower = false;
+        bool mAcceptFacingCapacitor = true;
+        bool mFullHalfPulse = false;
+        bool mNoWireStepDown = false;
+        bool mIgnoreFirstUpdate = false;
+        int mStrength = 0;
+    };
+
+    ConsumerShape consumerShape(const BlockState &state) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        const std::string &name = state.mName;
+        ConsumerShape shape;
+        // the blocks set up from the game's block table
+        if (name == "minecraft:dispenser" || name == "minecraft:dropper") {
+            shape.mPropagatePower = true;
+            shape.mAcceptFacingCapacitor = false;
+            shape.mFullHalfPulse = true;
+        } else if (dynamic_cast<const RedstoneLampBlock *>(block) != nullptr || name == "minecraft:noteblock"
+                   || name == "minecraft:bell" || name == "minecraft:big_dripleaf" || CommandBlock::matches(name)) {
+            shape.mPropagatePower = true;
+            shape.mAcceptFacingCapacitor = false;
+        } else if (dynamic_cast<const TntBlock *>(block) != nullptr || name == "minecraft:underwater_tnt"
+                   || BlockIdentifier::endsWith(name, "copper_bulb") || BlockIdentifier::endsWith(name, "_shelf")) {
+            shape.mAcceptFacingCapacitor = false;
+        } else if (BlockIdentifier::endsWith(name, "_skull") || BlockIdentifier::endsWith(name, "_head")) {
+            shape.mFullHalfPulse = true;
+        } else if (BlockIdentifier::endsWith(name, "shulker_box")) {
+            shape.mPropagatePower = true;
+            shape.mAcceptFacingCapacitor = false;
+        } else if (dynamic_cast<const TrapDoorBlock *>(block) != nullptr) {
+            // the only block the game marks to skip its first update
+            shape.mNoWireStepDown = true;
+            shape.mFullHalfPulse = true;
+            shape.mIgnoreFirstUpdate = true;
+            shape.mStrength = OpenableBlock::isOpen(state) ? RedstoneSystem::MAX_SIGNAL : 0;
+        } else if (dynamic_cast<const FenceGateBlock *>(block) != nullptr) {
+            shape.mNoWireStepDown = true;
+            shape.mStrength = OpenableBlock::isOpen(state) ? RedstoneSystem::MAX_SIGNAL : 0;
+        } else if (dynamic_cast<const DoorOrientationBlock *>(block) != nullptr) {
+            shape.mFullHalfPulse = true;
+            shape.mStrength = OpenableBlock::isOpen(state) ? RedstoneSystem::MAX_SIGNAL : 0;
+        }
+        return shape;
+    }
+
+    // a door or fence gate itself skips the update its new component gets. The note block's own handling of it is
+    // not read yet: it keeps skipping it, so a note block placed beside power does not play
+    bool skipsFirstUpdateItself(const BlockState &state) {
         const Block *block = VanillaBlocks::fromIdentifier(state.mName);
         return dynamic_cast<const DoorOrientationBlock *>(block) != nullptr
-               || dynamic_cast<const TrapDoorBlock *>(block) != nullptr
                || dynamic_cast<const FenceGateBlock *>(block) != nullptr || state.mName == "minecraft:noteblock";
     }
 
@@ -515,8 +564,15 @@ namespace {
             case CircuitKind::Consumer:
             case CircuitKind::Door: {
                 auto *consumer = circuit.create<ConsumerComponent>(position, CircuitFace::NONE);
-                if (consumer != nullptr)
-                    consumer->setIgnoreFirstUpdate(ignoresFirstUpdate(state));
+                if (consumer != nullptr) {
+                    const ConsumerShape shape = consumerShape(state);
+                    consumer->setPropagatePower(shape.mPropagatePower);
+                    consumer->setAcceptFacingCapacitor(shape.mAcceptFacingCapacitor);
+                    consumer->setFullHalfPulse(shape.mFullHalfPulse);
+                    consumer->setBlocksWireStepDown(shape.mNoWireStepDown);
+                    consumer->setIgnoreFirstUpdate(shape.mIgnoreFirstUpdate);
+                    consumer->setStrength(shape.mStrength);
+                }
                 break;
             }
             case CircuitKind::None:
@@ -610,7 +666,8 @@ namespace {
     }
 
     // the circuit handed the component at `position` its new strength
-    void onComponentUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int strength) {
+    void onComponentUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int strength,
+                           bool firstTime) {
         const BlockState state = stateAt(level, position);
         switch (kindOf(state)) {
             case CircuitKind::Wire: {
@@ -653,6 +710,8 @@ namespace {
             case CircuitKind::Consumer:
             case CircuitKind::Door:
             case CircuitKind::Piston:
+                if (firstTime && skipsFirstUpdateItself(state))
+                    return;
                 onConsumerUpdate(owner, level, position, state, strength);
                 return;
             default:
@@ -1210,8 +1269,8 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
     for (const auto &chunk: circuit.getSceneGraph().getChunkLists())
         chunks.push_back(chunk.first);
     const CircuitBlockUpdate update = [&](const Vector3i &position, int strength, int previous, bool firstTime) {
-        (void) previous, (void) firstTime;
-        onComponentUpdate(owner, level, position, strength);
+        (void) previous;
+        onComponentUpdate(owner, level, position, strength, firstTime);
     };
     for (const int64_t key: chunks) {
         const auto chunkX = (int32_t) (key >> 32);
