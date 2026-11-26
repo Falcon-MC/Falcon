@@ -32,8 +32,6 @@ public:
     std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,
                                             const BlockState &state) const override;
 
-    PistonMoveReaction getPistonMoveReaction() const override;
-
     bool getCollisionShapesAt(const BlockState &state, const Vector3i &position, const Actor *actor,
                               const std::function<const BlockState *(int32_t, int32_t, int32_t)> &neighbours,
                               std::vector<AxisAlignedBB> &shapes) const override;

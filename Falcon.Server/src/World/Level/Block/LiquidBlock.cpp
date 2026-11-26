@@ -11,10 +11,6 @@ bool LiquidBlock::canBeReplaced(const BlockState &state) const {
     return true;
 }
 
-PistonMoveReaction LiquidBlock::getPistonMoveReaction() const {
-    return PistonMoveReaction::Break;
-}
-
 bool LiquidBlock::isWater() const {
     return WaterBlock::matches(getIdentifier());
 }

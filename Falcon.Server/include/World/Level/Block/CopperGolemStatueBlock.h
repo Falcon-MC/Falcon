@@ -23,6 +23,4 @@ public:
 
     bool onActorEvent(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
                       const std::string &event, MobActor &source) const override;
-
-    PistonMoveReaction getPistonMoveReaction() const override;
 };

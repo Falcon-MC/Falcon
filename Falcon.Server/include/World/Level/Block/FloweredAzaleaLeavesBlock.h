@@ -12,8 +12,6 @@ public:
         return true;
     }
 
-    PistonMoveReaction getPistonMoveReaction() const override;
-
     bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
                   std::vector<BlockDrop> &drops) const override;
 };

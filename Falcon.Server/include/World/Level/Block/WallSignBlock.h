@@ -12,8 +12,6 @@ public:
 
     const char *getBlockActorId() const override;
 
-    PistonMoveReaction getPistonMoveReaction() const override;
-
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 

@@ -93,10 +93,6 @@ bool LeavesBlock::matches(const std::string &identifier) {
     return BlockIdentifier::endsWith(identifier, "_leaves");
 }
 
-PistonMoveReaction LeavesBlock::getPistonMoveReaction() const {
-    return PistonMoveReaction::Break;
-}
-
 void LeavesBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state) const {
     if (state.mStates.getByte("update_bit") != 0 || state.mStates.getByte("persistent_bit") != 0)

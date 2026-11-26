@@ -9,6 +9,4 @@ public:
     explicit GlazedTerracottaBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
-
-    PistonMoveReaction getPistonMoveReaction() const override;
 };

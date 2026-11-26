@@ -139,10 +139,6 @@ bool CopperGolemStatueBlock::onActorEvent(ServerNetworkHandler &owner, Level &le
     return true;
 }
 
-PistonMoveReaction CopperGolemStatueBlock::getPistonMoveReaction() const {
-    return PistonMoveReaction::Break;
-}
-
 const char *CopperGolemStatueBlock::getBlockActorId() const {
     return CopperGolemStatueBlockActor::BLOCK_ACTOR_ID;
 }

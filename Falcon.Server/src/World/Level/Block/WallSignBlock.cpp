@@ -11,10 +11,6 @@ bool WallSignBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:wall_sign" || BlockIdentifier::endsWith(identifier, "_wall_sign");
 }
 
-PistonMoveReaction WallSignBlock::getPistonMoveReaction() const {
-    return PistonMoveReaction::Break;
-}
-
 bool WallSignBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                const BlockState &state) const {
     return SignEditing::interact(owner, player, position, state);
