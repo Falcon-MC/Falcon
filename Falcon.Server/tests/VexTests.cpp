@@ -32,6 +32,11 @@ namespace {
                         mLevel.setBlockState(x, y, z, BlockState("minecraft:stone"));
                 }
             }
+            // a floor in front of the wall: a zombie walking into it stands on it and cannot drop under the wall
+            for (int32_t x = -1; x <= 1; x++) {
+                for (int32_t z = -3; z <= 3; z++)
+                    mLevel.setBlockState(x, 63, z, BlockState("minecraft:stone"));
+            }
         }
 
         MobActor &spawn(const char *identifier, const Vector3f &position) {
