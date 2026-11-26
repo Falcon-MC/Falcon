@@ -3079,7 +3079,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InteractPac
     if (player == nullptr || !player->isSpawned())
         return;
 
-    if (packet.mAction == InteractPacket::Action::LeaveVehicle) {
+    if (packet.mAction == InteractPacket::Action::StopRiding) {
         if (player->isRiding())
             RideSystem::dismount(*this, *player, true);
         return;

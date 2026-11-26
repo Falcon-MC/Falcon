@@ -6,14 +6,13 @@ class InteractPacket : public Packet {
 public:
     static const MinecraftPacketIds ID = MinecraftPacketIds::Interact;
 
-    enum class Action : int {
-        None,
-        Interact,
-        Damage,
-        LeaveVehicle,
-        MouseOver,
-        NpcOpen,
-        OpenInventory
+    // the game's values, sent as one byte: 1 and 2 are no longer used
+    enum class Action : uint8_t {
+        Invalid = 0,
+        StopRiding = 3,
+        InteractUpdate = 4,
+        NpcOpen = 5,
+        OpenInventory = 6
     };
 
     InteractPacket();
