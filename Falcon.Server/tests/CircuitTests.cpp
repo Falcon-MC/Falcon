@@ -245,6 +245,11 @@ namespace {
                 torch = torch->getNextOrder();
             }
         }
+        // the rebuilt ring goes north, south, east and back to north
+        require(torchAt(torches[0])->getNextOrder() == torchAt(torches[2])
+                        && torchAt(torches[2])->getNextOrder() == torchAt(torches[3])
+                        && torchAt(torches[3])->getNextOrder() == torchAt(torches[0]),
+                "the three torches left did not form one ring in order");
     }
 
     // the lamp lights with the evaluation and goes out four ticks after it loses power

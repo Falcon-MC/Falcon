@@ -474,7 +474,7 @@ bool PistonConsumerComponent::addSource(CircuitSceneGraph &graph, const CircuitT
 
 RedstoneTorchCapacitor::~RedstoneTorchCapacitor() {
     _setNextOrder(nullptr);
-    // a torch linked to this one skips it, as removeSource does
+    // a torch linked to this one drops the link; the next graph update links the ring again without this torch
     const std::vector<RedstoneTorchCapacitor *> linked = mLinkedFrom;
     for (RedstoneTorchCapacitor *torch: linked)
         torch->_setNextOrder(torch->mNextOrder == this ? nullptr : torch->mNextOrder);
