@@ -94,11 +94,11 @@ namespace {
     }
 
     bool canSpreadInto(SculkWorld &world, const Vector3i &position, int32_t face) {
-        const BlockState support = world.getBlock(add(position, faceStep(face)));
+        const BlockState &support = world.getBlock(add(position, faceStep(face)));
         if (support.mName == BlockNames::SCULK_CATALYST || support.mName == BlockNames::MOVING_BLOCK
             || support.mName == BlockNames::SCULK)
             return false;
-        const BlockState state = world.getBlock(position);
+        const BlockState &state = world.getBlock(position);
         if (veinCanReplace(world, position, state))
             return true;
         return state.mName == BlockNames::SCULK_VEIN || isAir(state) || world.isWaterSource(position);
@@ -119,7 +119,8 @@ namespace {
         return a.mName != b.mName || !(a.mStates == b.mStates);
     }
 
-    // MultifaceSpreader::getSpreadFromFaceTowardDirection
+    // where a vein on face from of position spreads toward to: the same block, the next one on that plane, or
+    // around the edge
     bool spreadTarget(SculkWorld &world, const BlockState &state, const Vector3i &position, int32_t from, int32_t to,
                       bool samePositionOnly, Vector3i &target, int32_t &targetFace) {
         if (!canSpreadFrom(state, from) || to == from || to == opposite(from))
@@ -143,7 +144,7 @@ namespace {
             }
             if (!canSpreadInto(world, candidate, face))
                 continue;
-            const BlockState current = world.getBlock(candidate);
+            const BlockState &current = world.getBlock(candidate);
             if (!differs(placementWith(world, current, candidate, face), current))
                 continue;
             target = candidate;
@@ -156,12 +157,12 @@ namespace {
     int32_t spreadFromFace(SculkWorld &world, const Vector3i &position, int32_t from, bool samePositionOnly) {
         int32_t placed = 0;
         for (int32_t to: SPREAD_ORDER) {
-            const BlockState state = world.getBlock(position);
+            const BlockState &state = world.getBlock(position);
             Vector3i target;
             int32_t face = 0;
             if (!spreadTarget(world, state, position, from, to, samePositionOnly, target, face))
                 continue;
-            const BlockState current = world.getBlock(target);
+            const BlockState &current = world.getBlock(target);
             const BlockState placedState = placementWith(world, current, target, face);
             if (differs(placedState, current)) {
                 world.setBlock(target, placedState);
@@ -171,35 +172,34 @@ namespace {
         return placed;
     }
 
-    // a vein loses the faces it lays on sculk with; with none left the water it held stays, or air
+    // a vein loses the faces it lays on sculk with; with none left it is gone, and the water it held comes back
+    // to its block
     void dischargeVein(SculkWorld &world, const Vector3i &position) {
         for (int32_t face: SPREAD_ORDER) {
-            const BlockState state = world.getBlock(position);
+            const BlockState &state = world.getBlock(position);
             if (state.mName != BlockNames::SCULK_VEIN || !SculkBehaviours::hasFace(state, face))
                 continue;
             if (world.getBlock(add(position, faceStep(face))).mName != BlockNames::SCULK)
                 continue;
             const int32_t bits = state.mStates.getInt(STATE_FACES, 0) & ~SculkBehaviours::faceBit(face);
-            if (bits != 0)
-                world.setBlock(position, veinWith(bits));
-            else if (world.isWaterSource(position))
-                world.setBlock(position, VanillaBlocks::WATER().toBlockState());
-            else
+            if (bits == 0)
                 world.setBlock(position, BlockState(BlockNames::AIR));
+            else
+                world.setBlock(position, veinWith(bits));
         }
     }
 
     // room for a sensor or a shrieker above the sculk, with few of them around
     bool canPlaceGrowth(SculkWorld &world, const Vector3i &position) {
         const Vector3i above(position.x, position.y + 1, position.z);
-        const BlockState state = world.getBlock(above);
+        const BlockState &state = world.getBlock(above);
         if (!isAir(state) && state.mName != BlockNames::WATER)
             return false;
         int32_t growths = 0;
         for (int32_t x = above.x - GROWTH_HORIZONTAL_RANGE; x <= above.x + GROWTH_HORIZONTAL_RANGE; ++x) {
             for (int32_t y = above.y - 1; y <= above.y + 1; ++y) {
                 for (int32_t z = above.z - GROWTH_HORIZONTAL_RANGE; z <= above.z + GROWTH_HORIZONTAL_RANGE; ++z) {
-                    const std::string name = world.getBlock(Vector3i(x, y, z)).mName;
+                    const std::string &name = world.getBlock(Vector3i(x, y, z)).mName;
                     if (name == BlockNames::SCULK_SENSOR || name == BlockNames::SCULK_SHRIEKER)
                         ++growths;
                 }
@@ -272,7 +272,7 @@ namespace {
                 if (swap != index)
                     std::swap(faces[index], faces[swap]);
             }
-            const BlockState state = world.getBlock(position);
+            const BlockState &state = world.getBlock(position);
             for (int32_t face: faces) {
                 if (!SculkBehaviours::hasFace(state, face))
                     continue;

@@ -23,6 +23,11 @@ namespace {
     // the world generation spreader of the game
     const SculkSpreader::Settings SETTINGS = {true, 50, 1, 5, 10};
 
+    const BlockState &airState() {
+        static const BlockState air(BlockNames::AIR);
+        return air;
+    }
+
     bool isWater(const BlockState &state) {
         return state.mName == BlockNames::WATER || state.mName == BlockNames::FLOWING_WATER;
     }
@@ -32,19 +37,27 @@ namespace {
     public:
         explicit DecorationSculkWorld(BlockManager &blocks) : mBlocks(blocks) {}
 
-        BlockState getBlock(const Vector3i &position) override {
+        const BlockState &getBlock(const Vector3i &position) override {
             return mBlocks.getBlockAt(position.x, position.y, position.z);
         }
 
+        // as in a level: air taking a waterlogged block's place lets its water back to the first layer
         void setBlock(const Vector3i &position, const BlockState &state) override {
-            const BlockState replaced = mBlocks.getBlockAt(position.x, position.y, position.z);
-            const BlockState extra = mBlocks.getExtraBlockAt(position.x, position.y, position.z);
-            const bool water = isWater(replaced) || isWater(extra);
-            mBlocks.setBlockStateAt(position.x, position.y, position.z, state);
-            if (water && !isWater(state) && LiquidPhysicsSystem::getWaterloggingLevel(state) > 0)
-                mBlocks.setExtraBlockAt(position.x, position.y, position.z, isWater(replaced) ? replaced : extra);
+            const BlockState &replaced = mBlocks.getBlockAt(position.x, position.y, position.z);
+            const BlockState &extra = mBlocks.getExtraBlockAt(position.x, position.y, position.z);
+            const BlockState water = isWater(replaced) ? replaced : extra;
+            if (!isWater(water)) {
+                mBlocks.setBlockStateAt(position.x, position.y, position.z, state);
+                return;
+            }
+
+            const bool holdsWater = !isWater(state) && LiquidPhysicsSystem::getWaterloggingLevel(state) > 0;
+            mBlocks.setBlockStateAt(position.x, position.y, position.z,
+                                    DecorationSupport::isAir(state) && isWater(extra) ? extra : state);
+            if (holdsWater)
+                mBlocks.setExtraBlockAt(position.x, position.y, position.z, water);
             else if (isWater(extra))
-                mBlocks.setExtraBlockAt(position.x, position.y, position.z, BlockState(BlockNames::AIR));
+                mBlocks.setExtraBlockAt(position.x, position.y, position.z, airState());
         }
 
         bool isWaterSource(const Vector3i &position) override {
