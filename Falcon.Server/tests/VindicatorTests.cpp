@@ -17,6 +17,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
     const char *const VINDICATOR = "minecraft:vindicator";
@@ -82,9 +83,21 @@ namespace {
             require(mob.onInteract(mOwner, namer) && mob.getNameTag() == name, "the name tag did not name the mob");
         }
 
-        const Actor *targetAfter(MobActor &mob, int32_t ticks) {
-            for (int32_t tick = 0; tick < ticks && mob.getTarget(mOwner) == nullptr; tick++)
+        // the mobs are held where they stand: a stroll takes them out of each other's 12 block range; a scan
+        // runs one tick in ten at random, 200 ticks leave a miss at about 1e-9
+        const Actor *targetAfter(MobActor &mob, const std::vector<MobActor *> &others, int32_t ticks = 200) {
+            std::vector<MobActor *> held = others;
+            held.push_back(&mob);
+            std::vector<Vector3f> standing;
+            for (MobActor *actor: held)
+                standing.push_back(actor->getPosition());
+            for (int32_t tick = 0; tick < ticks && mob.getTarget(mOwner) == nullptr; tick++) {
+                for (size_t index = 0; index < held.size(); index++) {
+                    held[index]->setMotion(Vector3f());
+                    held[index]->setPosition(standing[index]);
+                }
                 this->ticks(1);
+            }
             return mob.getTarget(mOwner);
         }
     };
@@ -94,17 +107,18 @@ namespace {
         {
             Arena arena;
             MobActor &vindicator = arena.spawn(VINDICATOR, Vector3f(0.5f, 64.0f, 0.5f));
-            arena.spawn("minecraft:pig", Vector3f(3.5f, 64.0f, 0.5f));
+            MobActor &pig = arena.spawn("minecraft:pig", Vector3f(3.5f, 64.0f, 0.5f));
             MobActor &baby = arena.spawn("minecraft:villager_v2", Vector3f(-3.5f, 64.0f, 0.5f));
             baby.removeComponentGroup("adult");
             baby.addComponentGroup("baby");
-            require(arena.targetAfter(vindicator, 60) == nullptr, "the vindicator picked a pig or a baby villager");
+            require(arena.targetAfter(vindicator, {&pig, &baby}) == nullptr,
+                    "the vindicator picked a pig or a baby villager");
         }
         {
             Arena arena;
             MobActor &vindicator = arena.spawn(VINDICATOR, Vector3f(0.5f, 64.0f, 0.5f));
             MobActor &trader = arena.spawn("minecraft:wandering_trader", Vector3f(4.5f, 64.0f, 0.5f));
-            require(arena.targetAfter(vindicator, 60) == &trader, "the vindicator ignored a wandering trader");
+            require(arena.targetAfter(vindicator, {&trader}) == &trader, "the vindicator ignored a wandering trader");
             // on_target_acquired: the axe goes up
             arena.ticks(1);
             require(vindicator.hasComponentGroup("minecraft:vindicator_aggro")
@@ -117,13 +131,13 @@ namespace {
     void johnny() {
         Arena arena;
         MobActor &vindicator = arena.spawn(VINDICATOR, Vector3f(0.5f, 64.0f, 0.5f));
-        arena.spawn("minecraft:pillager", Vector3f(-3.5f, 64.0f, 0.5f));
+        MobActor &pillager = arena.spawn("minecraft:pillager", Vector3f(-3.5f, 64.0f, 0.5f));
         arena.name(vindicator, "Johnny");
         require(vindicator.hasComponentGroup("minecraft:vindicator_johnny"), "Johnny did not start");
-        require(arena.targetAfter(vindicator, 60) == nullptr, "Johnny went for an illager");
+        require(arena.targetAfter(vindicator, {&pillager}) == nullptr, "Johnny went for an illager");
 
         MobActor &pig = arena.spawn("minecraft:pig", Vector3f(4.5f, 64.0f, 0.5f));
-        require(arena.targetAfter(vindicator, 60) == &pig, "Johnny ignored a pig");
+        require(arena.targetAfter(vindicator, {&pillager, &pig}) == &pig, "Johnny ignored a pig");
 
         arena.name(vindicator, "Bob");
         require(!vindicator.hasComponentGroup("minecraft:vindicator_johnny")

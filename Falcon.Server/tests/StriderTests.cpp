@@ -145,12 +145,17 @@ namespace {
         }
         ServerPlayer &player = arena.player(1, Vector3f(8.5f, 64.0f, 0.5f));
         MobActor &strider = arena.spawn("minecraft:strider", Vector3f(0.5f, 58.0f, 0.5f), "spawn_adult");
-        // the rise goal settles the feet half a block into the top lava block
+        // the rise goal settles the feet half a block into the top lava block; held over the middle of the pool:
+        // a stroll at the edge steps it onto the bank before it settles
         int32_t surfaced = -1;
         for (int32_t tick = 0; tick < 10 * TICKS_PER_SECOND && surfaced < 0; tick++) {
+            const Vector3f held = strider.getPosition();
+            strider.setPosition(Vector3f(0.5f, held.y, 0.5f));
+            strider.setMotion(Vector3f(0.0f, strider.getMotion().y, 0.0f));
             arena.ticks(1);
             const Vector3f position = strider.getPosition();
-            const bool overLava = std::fabs(position.x) < 4.0f && std::fabs(position.z) < 3.0f;
+            // the lava blocks run from -4 to 4 and -3 to 3: their columns end at 5 and 4
+            const bool overLava = position.x >= -4.0f && position.x < 5.0f && position.z >= -3.0f && position.z < 4.0f;
             if (overLava && position.y > 63.2f && position.y < 64.0f)
                 surfaced = tick;
         }
