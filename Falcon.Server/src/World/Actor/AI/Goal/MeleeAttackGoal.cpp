@@ -12,6 +12,9 @@
 namespace {
     const float ATTACK_KNOCKBACK = 0.3f;
     const char *DEATH_MESSAGE = "death.attack.mob";
+    // the game's min_path_time and max_path_time defaults, 0.2 and 0.55 seconds
+    const int32_t MIN_REPATH_TICKS = 4;
+    const int32_t MAX_REPATH_TICKS = 11;
 }
 
 MeleeAttackGoal::MeleeAttackGoal(float speed, float maxRange, int32_t coolDown, float attackRangeSquared)
@@ -28,6 +31,7 @@ bool MeleeAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 void MeleeAttackGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
     mTicksSinceAttack = 0;
+    mTicksUntilRepath = 0;
     mHasLastTarget = false;
     mob.getLookControl().setPitchEnabled(true);
 }
@@ -50,8 +54,14 @@ void MeleeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     const int32_t blockX = (int32_t) std::floor(targetPosition.x);
     const int32_t blockY = (int32_t) std::floor(targetPosition.y);
     const int32_t blockZ = (int32_t) std::floor(targetPosition.z);
-    if (!mHasLastTarget || blockX != mLastTargetX || blockY != mLastTargetY || blockZ != mLastTargetZ) {
+    // the game also repaths on a timer: a mob knocked back once its path ran out, by a shield say, walks back to
+    // a target still on the same block
+    const bool moved = !mHasLastTarget || blockX != mLastTargetX || blockY != mLastTargetY || blockZ != mLastTargetZ;
+    if (mTicksUntilRepath > 0)
+        mTicksUntilRepath--;
+    if (moved || (mTicksUntilRepath == 0 && mob.getNavigation().isDone())) {
         mob.getNavigation().moveTo(targetPosition, mSpeed);
+        mTicksUntilRepath = MobActor::randomRange(MIN_REPATH_TICKS, MAX_REPATH_TICKS);
         mLastTargetX = blockX;
         mLastTargetY = blockY;
         mLastTargetZ = blockZ;

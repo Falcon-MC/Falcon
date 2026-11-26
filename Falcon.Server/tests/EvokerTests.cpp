@@ -13,11 +13,20 @@
 #include <string>
 #include <vector>
 
+// a test server does not listen, so its tick returns at once: the clock is moved by hand
+class ServerTickProbe {
+public:
+    static void advance(ServerNetworkHandler &owner, int64_t ticks) {
+        owner.mCurrentTick += ticks;
+    }
+};
+
 namespace {
     const int32_t TICKS_PER_SECOND = 20;
     const char *const EVOKER = "minecraft:evocation_illager";
     const char *const FANG = "minecraft:evocation_fang";
     const char *const VEX = "minecraft:vex";
+    const char *const TRADER = "minecraft:wandering_trader";
 
     void require(bool condition, const std::string &message) {
         if (!condition)
@@ -31,6 +40,8 @@ namespace {
     struct Arena {
         ServerNetworkHandler mOwner{"Evokers", "", 1};
         Level &mLevel = mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        // held in the middle: a fang or vex whose spot is past the edge of the floor has no ground and never comes
+        MobActor *mHeld = nullptr;
 
         Arena() {
             for (int32_t x = -2; x <= 2; x++) {
@@ -71,15 +82,25 @@ namespace {
             return found;
         }
 
-        // ticks until something of the type appears; the player stands still and is healed, as a client would
-        std::vector<ServerActor *> until(const char *identifier, ServerPlayer &player, const Vector3f &at,
+        // the target is kept healed at a fixed offset from the evoker: the spell picked depends on that distance
+        void tick(Actor &target, const MobActor &evoker, float offset) {
+            if (mHeld != nullptr)
+                mHeld->setPosition(Vector3f(0.5f, 64.0f, 0.5f));
+            const Vector3f &from = evoker.getPosition();
+            target.setPosition(Vector3f(from.x + offset, from.y, from.z));
+            target.setHealth(target.getMaxHealth());
+            ServerTickProbe::advance(mOwner, 1);
+            mOwner.getWorlds().getDefault().getOverworld().tickTime();
+            PathFinder::tryReserveSearch(-1);
+            mOwner.tickActors();
+        }
+
+        // ticks until something of the type appears; one cast in four is the vexes and their 17 s cooldown:
+        // the waits are long so a run of them does not starve the spell under test
+        std::vector<ServerActor *> until(const char *identifier, Actor &target, const MobActor &evoker, float offset,
                                          int32_t seconds) {
             for (int32_t tick = 0; tick < seconds * TICKS_PER_SECOND; tick++) {
-                player.setPosition(at);
-                player.setHealth(player.getMaxHealth());
-                mOwner.getWorlds().getDefault().getOverworld().tickTime();
-                PathFinder::tryReserveSearch(-1);
-                mOwner.tickActors();
+                this->tick(target, evoker, offset);
                 std::vector<ServerActor *> found = all(identifier);
                 if (!found.empty())
                     return found;
@@ -88,13 +109,13 @@ namespace {
         }
     };
 
-    // a target within 3 blocks: the fangs come up in rings around the evoker
+    // a target within 3 blocks: the fangs come up in rings around the evoker.
+    // a trader, not a player: the evoker flees a close player before it casts
     void ringsUpClose() {
         Arena arena;
-        const Vector3f at(2.5f, 64.0f, 0.5f);
-        ServerPlayer &player = arena.player(1, at);
+        MobActor &trader = arena.spawn(TRADER, Vector3f(2.5f, 64.0f, 0.5f));
         MobActor &evoker = arena.spawn(EVOKER, Vector3f(0.5f, 64.0f, 0.5f));
-        const std::vector<ServerActor *> fangs = arena.until(FANG, player, at, 30);
+        const std::vector<ServerActor *> fangs = arena.until(FANG, trader, evoker, 2.0f, 120);
         require(!fangs.empty(), "the evoker never cast fangs at a close target");
         for (const ServerActor *fang: fangs) {
             require(horizontalDistance(fang->getPosition(), evoker.getPosition()) < 4.0f,
@@ -103,20 +124,17 @@ namespace {
         }
     }
 
-    // a farther target: a line of fangs runs out toward it
+    // a farther target, out of the evoker's flee range: a line of fangs runs out toward it
     void lineFarAway() {
         Arena arena;
-        const Vector3f at(10.5f, 64.0f, 0.5f);
-        ServerPlayer &player = arena.player(1, at);
+        ServerPlayer &player = arena.player(1, Vector3f(10.5f, 64.0f, 0.5f));
         MobActor &evoker = arena.spawn(EVOKER, Vector3f(0.5f, 64.0f, 0.5f));
-        std::vector<ServerActor *> fangs = arena.until(FANG, player, at, 30);
+        arena.mHeld = &evoker;
+        std::vector<ServerActor *> fangs = arena.until(FANG, player, evoker, 10.0f, 120);
         require(!fangs.empty(), "the evoker never cast fangs at a far target");
         // the line comes out one fang every tick: let a few of them come up
-        for (int32_t tick = 0; tick < 6; tick++) {
-            player.setPosition(at);
-            player.setHealth(player.getMaxHealth());
-            arena.mOwner.tickActors();
-        }
+        for (int32_t tick = 0; tick < 6; tick++)
+            arena.tick(player, evoker, 10.0f);
         fangs = arena.all(FANG);
         float farthest = 0.0f;
         for (const ServerActor *fang: fangs) {
@@ -130,14 +148,14 @@ namespace {
     // vexes come three at a time, owned by the evoker and with their life running out
     void summonsVexes() {
         Arena arena;
-        const Vector3f at(10.5f, 64.0f, 0.5f);
-        ServerPlayer &player = arena.player(1, at);
+        ServerPlayer &player = arena.player(1, Vector3f(10.5f, 64.0f, 0.5f));
         MobActor &evoker = arena.spawn(EVOKER, Vector3f(0.5f, 64.0f, 0.5f));
-        std::vector<ServerActor *> vexes = arena.until(VEX, player, at, 120);
+        arena.mHeld = &evoker;
+        std::vector<ServerActor *> vexes = arena.until(VEX, player, evoker, 10.0f, 300);
         require(!vexes.empty(), "the evoker never summoned vexes");
         // the vexes appear with the summon's delay: give the rest of the cast time
         for (int32_t tick = 0; tick < TICKS_PER_SECOND; tick++)
-            arena.mOwner.tickActors();
+            arena.tick(player, evoker, 10.0f);
         vexes = arena.all(VEX);
         require(vexes.size() == 3, "one cast summoned " + std::to_string(vexes.size()) + " vexes");
         for (ServerActor *actor: vexes) {

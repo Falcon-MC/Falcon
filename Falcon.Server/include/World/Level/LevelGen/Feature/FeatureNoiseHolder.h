@@ -16,10 +16,6 @@ public:
         return *mMossSnapToCeiling;
     }
 
-    const SimplexF &getSculkPatch() const {
-        return *mSculkPatch;
-    }
-
     const SimplexNoise &getKelp() const {
         return *mKelp;
     }
@@ -32,7 +28,6 @@ private:
     explicit FeatureNoiseHolder(IRandom &random);
 
     std::shared_ptr<SimplexF> mMossSnapToCeiling;
-    std::shared_ptr<SimplexF> mSculkPatch;
     std::shared_ptr<SimplexNoise> mKelp;
     std::shared_ptr<SimplexNoise> mIceCaveGradient;
 };

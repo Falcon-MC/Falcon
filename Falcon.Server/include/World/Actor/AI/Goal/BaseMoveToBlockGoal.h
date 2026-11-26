@@ -58,9 +58,10 @@ protected:
 
     void moveToTarget(MobActor &mob);
 
-private:
-    bool _canReach(ServerNetworkHandler &owner, MobActor &mob, const Vector3i &position) const;
+    // a path to the block above ends within the goal radius of it
+    bool canReach(ServerNetworkHandler &owner, MobActor &mob, const Vector3i &position) const;
 
+private:
     bool _tryCandidate(ServerNetworkHandler &owner, MobActor &mob, const Vector3i &origin, const Vector3i &position,
                        float &best);
 

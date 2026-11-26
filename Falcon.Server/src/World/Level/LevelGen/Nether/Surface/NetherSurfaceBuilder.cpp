@@ -227,6 +227,11 @@ void LayeredNetherSurface::build(const NetherSurfaceColumn &column) const {
     const int32_t seaFloorDepth = mSeaFloorDepth + runDepth;
     const BlockState *foundation = &netherrackState();
 
+    // the block right under the bedrock roof takes the top the column starts from
+    int32_t roofBottom = HEIGHT;
+    while (roofBottom > 0 && sameBlock(chunk.getBlock(column.mX, roofBottom - 1, column.mZ), bedrockState()))
+        roofBottom--;
+
     int32_t remaining = -1;
     const BlockState *layerTop = baseTop;
     const BlockState *layerMid = baseMid;
@@ -243,8 +248,9 @@ void LayeredNetherSurface::build(const NetherSurfaceColumn &column) const {
             continue;
 
         const auto setLayer = [&](const BlockState &layer) {
-            if (!bedrock)
-                chunk.setBlock(column.mX, y, column.mZ, layer);
+            if (bedrock)
+                return;
+            chunk.setBlock(column.mX, y, column.mZ, y == roofBottom - 1 && roofBottom < HEIGHT ? *baseTop : layer);
         };
 
         const BlockState *top = baseTop;

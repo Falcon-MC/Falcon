@@ -30,8 +30,12 @@ namespace {
         owner.setProperties(PropertiesSettings(path.string()));
         Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
         for (int32_t x = -2; x <= 1; x++) {
-            for (int32_t z = -2; z <= 1; z++)
+            for (int32_t z = -2; z <= 1; z++) {
+                // the opened world has generated the chunk its random seed spawns in, and an existing chunk
+                // wins the insert
+                level.dropChunk(x, z);
                 level.insertChunk(LevelChunk(x, z)).setPopulated(true);
+            }
         }
         for (int32_t x = -24; x <= 24; ++x) {
             for (int32_t z = -24; z <= 24; ++z)

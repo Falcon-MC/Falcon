@@ -122,7 +122,8 @@ namespace {
     // a bolt on a pig: no damage, then a zombified piglin after the half second delay
     void pigStruckByLightning() {
         Arena arena(DimensionType::Overworld);
-        MobActor &pig = arena.spawn("minecraft:pig", Vector3f(0.5f, 64.0f, 0.5f), "minecraft:entity_spawned");
+        // spawn_adult: entity_spawned makes one pig in twenty a baby
+        MobActor &pig = arena.spawn("minecraft:pig", Vector3f(0.5f, 64.0f, 0.5f), "minecraft:spawn_adult");
         arena.mOwner.strikeLightning(arena.mLevel, pig.getPosition());
         require(pig.hasComponentGroup("minecraft:pig_transform"), "the bolt did not start the pig's transformation");
         arena.ticks(5);
@@ -133,6 +134,20 @@ namespace {
         MobActor *zombified = arena.first("minecraft:zombie_pigman");
         require(zombified->hasComponentGroup("minecraft:pig_zombie_adult"), "the adult pig gave a baby");
     }
+
+    // entity_transformed reads is_baby on the pig: a baby pig gives a baby zombified piglin
+    void babyPigStruckByLightning() {
+        Arena arena(DimensionType::Overworld);
+        MobActor &pig = arena.spawn("minecraft:pig", Vector3f(0.5f, 64.0f, 0.5f), "minecraft:entity_born");
+        arena.mOwner.strikeLightning(arena.mLevel, pig.getPosition());
+        arena.ticks(15);
+        require(arena.countOf("minecraft:pig") == 0 && arena.countOf("minecraft:zombie_pigman") == 1,
+                "the baby pig did not become a zombified piglin");
+        MobActor *zombified = arena.first("minecraft:zombie_pigman");
+        require(zombified->hasComponentGroup("minecraft:pig_zombie_baby")
+                        && !zombified->hasComponentGroup("minecraft:pig_zombie_adult"),
+                "the baby pig gave an adult");
+    }
 }
 
 int main() {
@@ -140,6 +155,7 @@ int main() {
         EntityDefinitions::initialize();
         groupAnger();
         pigStruckByLightning();
+        babyPigStruckByLightning();
     } catch (const std::exception &error) {
         std::cout << "FAILED: " << error.what() << std::endl;
         return 1;

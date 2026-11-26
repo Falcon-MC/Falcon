@@ -26,6 +26,9 @@ public:
 
     int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 
+    // only while nobody has it open
+    bool seatsPet(Level &level, const Vector3i &position, const BlockState &state) const override;
+
     static ChestBlockActor &getOrCreate(Level &level, const Vector3i &position);
 
     static void pair(Level &level, const Vector3i &position);

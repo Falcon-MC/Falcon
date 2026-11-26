@@ -34,6 +34,9 @@ public:
 
     int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 
+    // the lit furnace only
+    bool seatsPet(Level &level, const Vector3i &position, const BlockState &state) const override;
+
     int getFuelTime() const {
         return 0;
     }
