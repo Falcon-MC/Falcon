@@ -7,7 +7,6 @@
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
-#include "World/Level/Block/Systems/CommandBlockSystem.h"
 #include "World/Level/Block/Systems/FallingBlockSystem.h"
 #include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
@@ -155,10 +154,8 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
                                                                                          : OTHER)
                          .first;
 
-    if (system->second == PISTON) {
-        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            PistonSystem::onRedstoneUpdate(owner, *this, position, state);
-    } else if (system->second == FIRE) {
+    // pistons, command blocks and pack consumers hear the circuit, not their neighbours
+    if (system->second == FIRE) {
         if (type == BlockUpdateType::Normal)
             FireSystem::onNormalUpdate(owner, *this, position, state);
     } else if (system->second == FALLING) {
@@ -166,19 +163,8 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
             FallingBlockSystem::onNormalUpdate(owner, *this, position, state, changed);
         else if (type == BlockUpdateType::Scheduled)
             FallingBlockSystem::onScheduledUpdate(owner, *this, position, state);
-    } else if (system->second == COMMAND) {
-        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            CommandBlockSystem::setPowered(owner, *this, position,
-                                           RedstoneSystem::isGettingPower(owner, *this, position));
-    } else {
+    } else if (system->second == OTHER) {
         RedstoneSystem::onRedstoneUpdate(owner, *this, position, state, type);
-        const CustomBlockDefinition *custom = shapedBlock == nullptr && type != BlockUpdateType::Scheduled
-                                                      ? CustomContentRegistry::getInstance().findBlock(identifier)
-                                                      : nullptr;
-        if (custom != nullptr && custom->mRedstoneConsumer)
-            owner.getScriptEngine().onCustomBlockRedstone(
-                    *this, identifier, position,
-                    RedstoneSystem::isBlockIndirectlyGettingPowered(owner, *this, position));
     }
 
     if (type == BlockUpdateType::Normal || type == BlockUpdateType::Scheduled) {
@@ -288,20 +274,24 @@ void Level::onBlockPlaced(const Vector3i &position, const BlockState &state) {
     if (placed != nullptr)
         placed->onPlacedInLevel(owner, *this, position, state);
 
-    if (FallingBlockSystem::matches(state.mName)) {
-        updateAround(position);
-        RedstoneSystem::updateAroundRedstone(owner, *this, position);
+    updateAround(position);
+    if (FallingBlockSystem::matches(state.mName))
         FallingBlockSystem::onBlockPlaced(owner, *this, position, state);
-        return;
-    }
-
-    RedstoneSystem::onRedstonePlaced(owner, *this, position, state);
 }
 
 void Level::onBlockBroken(const Vector3i &position, const BlockState &previous) {
     if (mOwner == nullptr)
         return;
 
+    (void) previous;
     cancelUpdate(position);
-    RedstoneSystem::onRedstoneBroken(*mOwner, *this, position, previous);
+    // six neighbours no update does anything to, the usual case under an explosion: none is run
+    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
+        const Vector3i side = RedstoneFace::relative(position, face);
+        const BlockState *neighbour = peekBlockPtr(side.x, side.y, side.z);
+        if (neighbour == nullptr || !BlockUpdates::ignores(*neighbour)) {
+            updateAround(position);
+            return;
+        }
+    }
 }

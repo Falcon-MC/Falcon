@@ -1068,6 +1068,7 @@ void ServerNetworkHandler::tick(bool paused) {
 
     mProfiler.beginSection(ProfilerSection::Redstone);
     for (Level *level: levels) {
+        RedstoneSystem::tickCircuit(*this, *level);
         level->tickBlockUpdates();
         RedstoneSystem::tick(*this, *level);
         PistonSystem::tick(*this, *level);

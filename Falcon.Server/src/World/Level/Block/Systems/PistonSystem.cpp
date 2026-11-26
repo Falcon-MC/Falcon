@@ -17,6 +17,7 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "World/Level/Block/BlockNames.h"
 
+#include <map>
 #include <unordered_map>
 #include <algorithm>
 #include <array>
@@ -121,6 +122,14 @@ namespace {
 
     // per level: worlds share dimension ids
     std::unordered_map<const Level *, std::vector<PendingMove>> gPendingMoves;
+
+    // the pistons whose power asks for a move they could not make yet: blocked, cancelled or still moving. The
+    // circuit sends a steady strength only once, so each tick looks at them again
+    std::unordered_map<const Level *, std::map<int64_t, Vector3i>> gWaiting;
+
+    int64_t waitKey(const Vector3i &position) {
+        return ((int64_t) position.x << 38) ^ ((int64_t) (position.z & 0x3FFFFFF) << 12) ^ (int64_t) (position.y & 0xFFF);
+    }
 
     bool contains(const std::unordered_set<std::string> &set, const std::string &value) {
         return set.find(value) != set.end();
@@ -376,19 +385,11 @@ bool PistonSystem::isExtended(Level &level, const Vector3i &position, const Bloc
     return isArmCollision(ahead.mName) && getPistonFace(ahead) == face;
 }
 
+// the piston's circuit component takes no power through its face
 bool PistonSystem::isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                   const BlockState &state) {
-    const int face = getPistonFace(state);
-
-    for (int side = 0; side < RedstoneFace::COUNT; ++side) {
-        if (side == face)
-            continue;
-
-        if (RedstoneSystem::isSidePowered(owner, level, relative(position, side), side))
-            return true;
-    }
-
-    return false;
+    (void) state;
+    return RedstoneSystem::isGettingPower(owner, level, position);
 }
 
 void PistonSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -408,17 +409,22 @@ void PistonSystem::onBlockBroken(ServerNetworkHandler &owner, Level &level, cons
 
 bool PistonSystem::_checkState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                const BlockState &state, bool powered) {
-    const PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(position);
-    if (arm != nullptr && arm->isMoving())
-        return false;
-
     const bool extended = isExtended(level, position, state);
-
-    if (powered && !extended)
-        return _doMove(owner, level, position, state, true);
-    if (!powered && extended)
-        return _doMove(owner, level, position, state, false);
-
+    const PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(position);
+    const bool moving = arm != nullptr && arm->isMoving();
+    if (powered == extended && !moving) {
+        const auto found = gWaiting.find(&level);
+        if (found != gWaiting.end())
+            found->second.erase(waitKey(position));
+        return false;
+    }
+    if (!moving && _doMove(owner, level, position, state, powered)) {
+        const auto found = gWaiting.find(&level);
+        if (found != gWaiting.end())
+            found->second.erase(waitKey(position));
+        return true;
+    }
+    gWaiting[&level][waitKey(position)] = position;
     return false;
 }
 
@@ -550,6 +556,21 @@ namespace {
 }
 
 void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
+    const auto waiting = gWaiting.find(&level);
+    if (waiting != gWaiting.end() && !waiting->second.empty()) {
+        std::vector<Vector3i> positions;
+        for (const auto &entry: waiting->second)
+            positions.push_back(entry.second);
+        waiting->second.clear();
+        for (const Vector3i &position: positions) {
+            if (!level.isChunkResident(position.x >> 4, position.z >> 4))
+                continue;
+            const BlockState state = stateAt(level, position);
+            if (isPiston(state.mName))
+                _checkState(owner, level, position, state, isGettingPower(owner, level, position, state));
+        }
+    }
+
     const auto found = gPendingMoves.find(&level);
     if (found == gPendingMoves.end() || found->second.empty())
         return;
@@ -603,6 +624,7 @@ void PistonSystem::finishMoves(ServerNetworkHandler &owner, Level &level, const 
 
 void PistonSystem::forgetLevel(const Level &level) {
     gPendingMoves.erase(&level);
+    gWaiting.erase(&level);
 }
 
 // the game fills each destination with a moving_block, which nothing can be placed into

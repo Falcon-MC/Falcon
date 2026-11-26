@@ -1,3 +1,4 @@
+#include "CircuitTicks.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BigDripleafBlock.h"
@@ -62,6 +63,7 @@ namespace {
 
         block.onStepOn(server, player, leaf, at(level, leaf));
         level.setBlock(Vector3i(3, 100, 2), BlockState("minecraft:redstone_block"), false);
+        settleCircuit(server, level);
         block.onScheduledUpdate(server, level, leaf, at(level, leaf));
         require(BigDripleafBlock::getTilt(at(level, leaf)) == Tilt::None, "power did not hold the leaf flat");
         level.setBlock(Vector3i(3, 100, 2), BlockState("minecraft:air"), false);
@@ -156,6 +158,7 @@ int main() {
     try {
         ServerNetworkHandler server("Dripleaf", "", 1);
         Level &level = server.getWorlds().getDefault().getOverworld();
+        level.setOwner(&server);
         level.insertChunk(LevelChunk(0, 0));
         const auto *big = VanillaBlocks::getAs<BigDripleafBlock>(BigDripleafBlock::IDENTIFIER);
         const auto *small = VanillaBlocks::getAs<SmallDripleafBlock>("minecraft:small_dripleaf_block");

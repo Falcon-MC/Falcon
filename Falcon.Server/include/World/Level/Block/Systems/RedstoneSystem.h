@@ -11,6 +11,7 @@
 #include <unordered_set>
 
 class Actor;
+class CircuitSystem;
 class Level;
 class LevelChunk;
 class ServerNetworkHandler;
@@ -42,7 +43,8 @@ namespace RedstoneFace {
     int fromName(const std::string &name);
 }
 
-// unloaded chunks read as unpowered air
+// the blocks' side of the game's circuit: every redstone block holds a component of the level's circuit,
+// which evaluates every second tick and hands each changed component its new strength
 class RedstoneSystem {
 public:
     static constexpr int MAX_SIGNAL = 15;
@@ -57,45 +59,35 @@ public:
 
     static bool isPowerSource(const BlockState &state);
 
+    static CircuitSystem &circuitOf(Level &level);
+
+    // the strength of the component at `position`, 0 without one
+    static int getStrength(Level &level, const Vector3i &position);
+
+    // the signal the source at `position` sends towards `face`; strong only reaches through a block it is on
     static int getWeakPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
     static int getStrongPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
-    static int getStrongPowerAround(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
-
     static int getRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
-    static bool isSidePowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
-
-    static bool isBlockPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
-
+    // the strength the consumer at `position` receives; elsewhere, the strongest power its neighbours give it
     static int isBlockIndirectlyGettingPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     static bool isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static void updateAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                     int ignoredFace = RedstoneFace::NONE);
+    // the source at `position` now gives another signal: its component takes it
+    static void updateAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    static void updateAllAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                        int ignoredFace = RedstoneFace::NONE);
-
-    static void updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
-
-    // the game's observer: a change in the cell an observer watches schedules its pulse, unless it is already
-    // lit or waiting to be
-    static void onBlockChanged(Level &level, const Vector3i &position);
+    // every block change: components follow the block, and the sources around search again
+    static void onBlockChanged(Level &level, const Vector3i &position, const BlockState &previous,
+                               const BlockState &current);
 
     // an observer a piston has just set down lights at once
     static void onObserverMoved(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, BlockUpdateType type);
-
-    static void onRedstonePlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                 const BlockState &state);
-
-    static void onRedstoneBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                 const BlockState &previous);
 
     static void onChunkLoaded(ServerNetworkHandler &owner, Level &level, const LevelChunk &chunk);
 
@@ -120,10 +112,13 @@ public:
 
     static int getComparatorOutput(Level &level, const Vector3i &position);
 
-    static void setComparatorOutput(Level &level, const Vector3i &position, int output);
-
+    // a block's comparator signal or emitted power changed without a state change
     static void queueRedstoneNotification(Level &level, const Vector3i &position);
 
+    // before the level's scheduled ticks: the circuit evaluates every second tick
+    static void tickCircuit(ServerNetworkHandler &owner, Level &level);
+
+    // after them: components hear their strength, actors press plates, the graph takes the changes
     static void tick(ServerNetworkHandler &owner, Level &level);
 
 private:

@@ -1826,7 +1826,7 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
 
     mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), 0, previous);
     if (mOwner != nullptr)
-        RedstoneSystem::onBlockChanged(*this, Vector3i(x, y, z));
+        RedstoneSystem::onBlockChanged(*this, Vector3i(x, y, z), previous, state);
 }
 
 void Level::removeForeignBlockActor(const Vector3i &position, const BlockState &state) {
