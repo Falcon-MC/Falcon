@@ -72,15 +72,29 @@ namespace {
         }
     };
 
-    // knockback_strength 3, scaled to motion as the roar's strengths are
+    // knockback_strength 3, scaled to motion as the roar's strengths are: only a bite that does not stun pushes
     void blockerPushedOff() {
         Arena arena;
         ServerPlayer &player = arena.blocker(1, Vector3f(0.5f, 64.0f, 0.5f));
-        MobActor &ravager = arena.spawn(RAVAGER, Vector3f(0.5f, 64.0f, 3.5f), "minecraft:entity_spawned");
-        ravager.onAttackBlocked(arena.mOwner, player);
-        const Vector3f motion = player.getMotion();
-        require(std::fabs(motion.x) < 0.001f && std::fabs(motion.z + 1.2f) < 0.001f,
-                "the blocker was not pushed away from the ravager, z " + std::to_string(motion.z));
+        bool pushed = false;
+        bool stunned = false;
+        for (int32_t attempt = 0; attempt < 64 && !(pushed && stunned); attempt++) {
+            player.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+            MobActor &ravager = arena.spawn(RAVAGER, Vector3f(0.5f, 64.0f, 3.5f), "minecraft:entity_spawned");
+            ravager.onAttackBlocked(arena.mOwner, player);
+            const Vector3f motion = player.getMotion();
+            if (ravager.hasComponentGroup("stunned")) {
+                stunned = true;
+                require(motion.x == 0.0f && motion.y == 0.0f && motion.z == 0.0f,
+                        "a ravager stunned by the shield also pushed the blocker");
+            } else {
+                pushed = true;
+                require(std::fabs(motion.x) < 0.001f && std::fabs(motion.z + 1.2f) < 0.001f,
+                        "the blocker was not pushed away from the ravager, z " + std::to_string(motion.z));
+            }
+            arena.mOwner.removeActor(ravager.getUniqueId());
+        }
+        require(pushed && stunned, "64 blocked bites never both stunned and pushed");
 
         // without minecraft:ravager_blocked a blocked hit pushes nothing and fires nothing
         player.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
@@ -89,7 +103,7 @@ namespace {
         require(player.getMotion().z == 0.0f, "a zombie's blocked hit pushed the blocker");
     }
 
-    // reaction_choices: become_stunned or nothing, one weight each
+    // reaction_choices: become_stunned or the push, one weight each
     void reactionsAreAnEvenDraw() {
         Arena arena;
         ServerPlayer &player = arena.blocker(1, Vector3f(0.5f, 64.0f, 0.5f));

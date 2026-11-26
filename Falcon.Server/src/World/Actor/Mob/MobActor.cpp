@@ -2899,15 +2899,21 @@ void MobActor::onAttackBlocked(ServerNetworkHandler &owner, Actor &blocker) {
     if (blocked == nullptr)
         return;
 
+    // one reaction per blocked bite: a choice with a value fires it (the ravager's stun), the one without
+    // pushes the blocker off
+    const json::Value *choices = blocked->get("reaction_choices");
+    const json::Value *reaction = choices != nullptr && choices->isArray() && !choices->mArray.empty()
+                                          ? weightedPick(*choices).get("value")
+                                          : nullptr;
+    if (reaction != nullptr) {
+        EntityEvents::fireTrigger(owner, *this, reaction, &blocker);
+        return;
+    }
+
     const Vector3f self = getPosition();
     const Vector3f other = blocker.getPosition();
     owner.knockBack(blocker, other.x - self.x, other.z - self.z,
                     numberIn(blocked, "knockback_strength", 0.0f) * BLOCKED_KNOCKBACK_SCALE);
-
-    // a choice without a value does nothing
-    const json::Value *choices = blocked->get("reaction_choices");
-    if (choices != nullptr && choices->isArray() && !choices->mArray.empty())
-        EntityEvents::fireTrigger(owner, *this, weightedPick(*choices).get("value"), &blocker);
 }
 
 float MobActor::getAttackDamage() const {
