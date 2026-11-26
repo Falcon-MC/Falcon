@@ -26,5 +26,14 @@
 /Falcon.Server/banned-players.json
 /Falcon.Server/benchmarks/
 /Falcon.Server/docs/
+# local tools, kept out of the repository
+/Falcon.Server/tools/NetworkBenchmark/
+/Falcon.Server/tools/BlockMaterials/
+/Falcon.Server/tools/gen_block_materials.py
+/Falcon.Server/tools/gen_block_names.py
+/Falcon.Server/tools/gen_script_surface.py
+/Falcon.Server/tools/benchmark_startup.py
+/Falcon.Server/tools/script_api_coverage.py
+/Falcon.Server/tools/verify_structure.py
 __pycache__/
 .DS_Store
