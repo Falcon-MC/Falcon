@@ -1,3 +1,10 @@
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 #include "Network/NetherNet/NetherNetInstance.h"
 
 #include "Core/Debug/BedrockLog.h"
@@ -7,6 +14,8 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <random>
@@ -25,6 +34,41 @@ namespace {
     // a failed refresh holds back one offer at most per this many seconds
     const int CREDENTIALS_RETRY_SECONDS = 30;
     const char *IDENTITY_DOMAIN = "self";
+
+    struct CandidateSubnet {
+        int family = AF_UNSPEC;
+        std::array<unsigned char, 16> address{};
+    };
+
+    CandidateSubnet candidateSubnet(rtc::Candidate candidate) {
+        CandidateSubnet subnet;
+        if (!candidate.resolve())
+            return subnet;
+
+        subnet.family = candidate.family() == rtc::Candidate::Family::Ipv4 ? AF_INET : AF_INET6;
+        if (inet_pton(subnet.family, candidate.address().value().c_str(), subnet.address.data()) != 1)
+            subnet.family = AF_UNSPEC;
+        return subnet;
+    }
+
+    std::pair<bool, int> candidateSubnetScore(const CandidateSubnet &local, const std::vector<CandidateSubnet> &remote) {
+        std::pair<bool, int> best;
+        if (local.family == AF_UNSPEC)
+            return best;
+
+        const int subnetBytes = local.family == AF_INET ? 3 : 8;
+        for (const CandidateSubnet &peer: remote) {
+            if (local.family != peer.family)
+                continue;
+
+            int common = 0;
+            while (common < subnetBytes && local.address[common] == peer.address[common])
+                ++common;
+
+            best = std::max(best, std::make_pair(common == subnetBytes, common + 1));
+        }
+        return best;
+    }
 
     unsigned long long randomNetworkID() {
         std::random_device device;
@@ -152,9 +196,9 @@ bool NetherNetInstance::host(const ConnectionDefinition &definition) {
 
     const nethernet::DiscoveryListener::OfferHandler lanHandler =
             [this](const std::string &networkID, const std::string &offer, std::string &answer, int &errorCode,
-                   bool localSender) {
+                   bool localSender, size_t answerBudget) {
                 return _negotiate(networkID, offer, answer, errorCode, std::string(),
-                                  localSender && mAnonymousLanClientsAllowed);
+                                  localSender && mAnonymousLanClientsAllowed, answerBudget);
             };
 
     mDiscovery.start(mNetworkId, dataProvider, lanHandler);
@@ -383,10 +427,11 @@ void NetherNetInstance::_addRemoteCandidate(const std::string &signalKey, const 
 }
 
 bool NetherNetInstance::_negotiate(const std::string &networkID, const std::string &offer, std::string &answer,
-                                   int &errorCode, const std::string &signalKey, bool anonymousAllowed) {
+                                   int &errorCode, const std::string &signalKey, bool anonymousAllowed,
+                                   size_t lanAnswerBudget) {
     int clientCheck = 0;
     const bool accepted = _negotiateOffer(networkID, offer, answer, errorCode, signalKey, clientCheck,
-                                          anonymousAllowed);
+                                          anonymousAllowed, lanAnswerBudget);
     if (!accepted && mNegotiationFailureObserver)
         mNegotiationFailureObserver(errorCode, clientCheck);
     return accepted;
@@ -394,7 +439,7 @@ bool NetherNetInstance::_negotiate(const std::string &networkID, const std::stri
 
 bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std::string &offer, std::string &answer,
                                         int &errorCode, const std::string &signalKey, int &clientCheck,
-                                        bool anonymousAllowed) {
+                                        bool anonymousAllowed, size_t lanAnswerBudget) {
     const int offerCheck = mUnofficialClientsAllowed ? 0 : nethernet::Description::inspectOffer(offer);
     if (offerCheck != 0) {
         LOG_WARN(LogAreaID::Network, "NetherNet offer from %s rejected: client check %d", networkID.c_str(),
@@ -532,8 +577,14 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
         gatherSignal->notify_all();
     });
 
+    std::vector<CandidateSubnet> remoteSubnets;
     try {
-        peerConnection->setRemoteDescription(rtc::Description(offer, rtc::Description::Type::Offer));
+        rtc::Description remoteDescription(offer, rtc::Description::Type::Offer);
+        if (lanAnswerBudget != 0) {
+            for (const rtc::Candidate &candidate: remoteDescription.candidates())
+                remoteSubnets.push_back(candidateSubnet(candidate));
+        }
+        peerConnection->setRemoteDescription(std::move(remoteDescription));
     } catch (const std::exception &error) {
         LOG_WARN(LogAreaID::Network, "Failed to apply the NetherNet offer: %s", error.what());
         connection->close();
@@ -618,36 +669,39 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
 
     const std::vector<nethernet::Fingerprint> localFingerprints(1, answerFingerprint);
 
-    if (!mIdentity.issueToken()) {
-        LOG_ERROR(LogAreaID::Network, "Failed to issue the NetherNet server token");
-        connection->close();
-        errorCode = nethernet::ErrorCodeIdentityVerificationFailed;
-        return false;
-    }
-
-    const std::string localPayload = nethernet::Description::generateFingerprintsPayload(localFingerprints);
-    const std::string assertion = mIdentity.signDetached(localPayload);
-
-    if (assertion.empty()) {
-        LOG_ERROR(LogAreaID::Network, "Failed to sign the NetherNet DTLS fingerprints");
-        connection->close();
-        errorCode = nethernet::ErrorCodeIdentityVerificationFailed;
-        return false;
-    }
-
-    nethernet::IdentityData localIdentity;
-    localIdentity.mAssertionFingerprints = assertion;
-    localIdentity.mAssertionToken = mIdentity.getToken();
-    localIdentity.mIdpDomain = mIdentity.getDomain();
-    localIdentity.mIdpProtocol = "default";
-
     nethernet::AnswerParameters parameters;
     parameters.mSessionId = randomNetworkID();
     parameters.mUsernameFragment = localDescription.iceUfrag().value();
     parameters.mPassword = localDescription.icePwd().value();
     parameters.mFingerprints = localFingerprints;
     parameters.mSetupRole = setupRoleName(localDescription.role());
-    parameters.mEncodedIdentity = nethernet::Description::encodeIdentity(localIdentity);
+
+    if (lanAnswerBudget == 0) {
+        if (!mIdentity.issueToken()) {
+            LOG_ERROR(LogAreaID::Network, "Failed to issue the NetherNet server token");
+            connection->close();
+            errorCode = nethernet::ErrorCodeIdentityVerificationFailed;
+            return false;
+        }
+
+        const std::string localPayload = nethernet::Description::generateFingerprintsPayload(localFingerprints);
+        const std::string assertion = mIdentity.signDetached(localPayload);
+
+        if (assertion.empty()) {
+            LOG_ERROR(LogAreaID::Network, "Failed to sign the NetherNet DTLS fingerprints");
+            connection->close();
+            errorCode = nethernet::ErrorCodeIdentityVerificationFailed;
+            return false;
+        }
+
+        nethernet::IdentityData localIdentity;
+        localIdentity.mAssertionFingerprints = assertion;
+        localIdentity.mAssertionToken = mIdentity.getToken();
+        localIdentity.mIdpDomain = mIdentity.getDomain();
+        localIdentity.mIdpProtocol = "default";
+
+        parameters.mEncodedIdentity = nethernet::Description::encodeIdentity(localIdentity);
+    }
 
     for (const rtc::Candidate &candidate: localDescription.candidates())
         parameters.mCandidates.push_back(candidate.candidate());
@@ -676,12 +730,36 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
         return false;
     }
 
+    answer = nethernet::Description::buildAnswer(parameters);
+    if (lanAnswerBudget != 0 && answer.size() > lanAnswerBudget) {
+        // keep addresses on the peer's subnet ahead of VPN and other interfaces
+        std::vector<std::pair<std::pair<bool, int>, std::string>> ranked;
+        ranked.reserve(parameters.mCandidates.size());
+        for (std::string &candidate: parameters.mCandidates) {
+            const auto score = candidateSubnetScore(candidateSubnet(rtc::Candidate(candidate)), remoteSubnets);
+            ranked.emplace_back(score, std::move(candidate));
+        }
+        std::stable_sort(ranked.begin(), ranked.end(), [](const auto &left, const auto &right) {
+            return left.first > right.first;
+        });
+        for (size_t i = 0; i < ranked.size(); ++i)
+            parameters.mCandidates[i] = std::move(ranked[i].second);
+
+        while (answer.size() > lanAnswerBudget && parameters.mCandidates.size() > 1) {
+            parameters.mCandidates.pop_back();
+            answer = nethernet::Description::buildAnswer(parameters);
+        }
+
+        if (answer.size() > lanAnswerBudget)
+            LOG_WARN(LogAreaID::Network, "NetherNet LAN answer SDP exceeds its datagram budget (%zu > %zu bytes)",
+                     answer.size(), lanAnswerBudget);
+    }
+
     {
         std::lock_guard<std::mutex> lock(mMutex);
         mPending.push_back(connection);
     }
 
-    answer = nethernet::Description::buildAnswer(parameters);
     return true;
 }
 
