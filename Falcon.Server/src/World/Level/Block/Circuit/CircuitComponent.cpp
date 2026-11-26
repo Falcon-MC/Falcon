@@ -472,10 +472,96 @@ bool PistonConsumerComponent::addSource(CircuitSceneGraph &graph, const CircuitT
     return false;
 }
 
+RedstoneTorchCapacitor::~RedstoneTorchCapacitor() {
+    _setNextOrder(nullptr);
+    // a torch linked to this one skips it, as removeSource does
+    const std::vector<RedstoneTorchCapacitor *> linked = mLinkedFrom;
+    for (RedstoneTorchCapacitor *torch: linked)
+        torch->_setNextOrder(torch->mNextOrder == this ? nullptr : torch->mNextOrder);
+}
+
+void RedstoneTorchCapacitor::_setNextOrder(RedstoneTorchCapacitor *next) {
+    if (mNextOrder == next)
+        return;
+    if (mNextOrder != nullptr) {
+        std::vector<RedstoneTorchCapacitor *> &from = mNextOrder->mLinkedFrom;
+        from.erase(std::remove(from.begin(), from.end(), this), from.end());
+    }
+    mNextOrder = next;
+    if (next != nullptr)
+        next->mLinkedFrom.push_back(this);
+}
+
 void RedstoneTorchCapacitor::removeSource(const Vector3i &position, const BaseCircuitComponent *component) {
     BaseCircuitComponent::removeSource(position, component);
     if (mNextOrder != nullptr && mNextOrder == component)
-        mNextOrder = mNextOrder->mNextOrder;
+        _setNextOrder(mNextOrder->mNextOrder == mNextOrder ? nullptr : mNextOrder->mNextOrder);
+}
+
+// wall torches on the sides of one block, dust on that block and a block over each torch: the torches feed the
+// block in turn, so the game links them into a ring that passes one lit torch around
+void RedstoneTorchCapacitor::updateDependencies(CircuitSceneGraph &graph, const Vector3i &position) {
+    (void) position;
+    const auto live = [&graph](const Vector3i &at) {
+        BaseCircuitComponent *component = graph.getComponent(at);
+        return component != nullptr && !component->isRemoved() ? component : nullptr;
+    };
+    bool linked = false;
+    // gathered over every source of the torch, as the game does
+    std::map<int64_t, RedstoneTorchCapacitor *> ring;
+    for (const CircuitSourceItem &item: mSources) {
+        if (item.mComponent == nullptr)
+            continue;
+        const BaseCircuitComponent *above = live(Vector3i(item.mPos.x, item.mPos.y + 1, item.mPos.z));
+        if (above == nullptr || above->getBaseType() != CircuitComponentType::Transporter)
+            continue;
+        const CircuitComponentType base = item.mComponent->getBaseType();
+        if (base != CircuitComponentType::PoweredBlock && base != CircuitComponentType::Consumer)
+            continue;
+
+        for (const CircuitSourceItem &sub: item.mComponent->getSources()) {
+            if (!sub.mDirectlyPowered || sub.mComponent == nullptr
+                || sub.mComponent->getInstanceType() != CircuitComponentType::Torch)
+                continue;
+            const uint8_t attached = sub.mComponent->getDirection();
+            if (attached == CircuitFace::DOWN || CircuitFace::relative(sub.mPos, attached) != item.mPos)
+                continue;
+            const BaseCircuitComponent *cover = live(Vector3i(sub.mPos.x, sub.mPos.y + 1, sub.mPos.z));
+            if (cover == nullptr
+                || (cover->getBaseType() != CircuitComponentType::PoweredBlock
+                    && cover->getBaseType() != CircuitComponentType::Consumer))
+                continue;
+            ring.emplace(CircuitSceneGraph::key(sub.mPos),
+                         static_cast<RedstoneTorchCapacitor *>(const_cast<BaseCircuitComponent *>(sub.mComponent)));
+        }
+        if (ring.size() <= 1)
+            continue;
+
+        // the light goes round north, west, south, east of the block
+        std::vector<RedstoneTorchCapacitor *> order;
+        const Vector3i around[4] = {Vector3i(item.mPos.x, item.mPos.y, item.mPos.z - 1),
+                                    Vector3i(item.mPos.x - 1, item.mPos.y, item.mPos.z),
+                                    Vector3i(item.mPos.x, item.mPos.y, item.mPos.z + 1),
+                                    Vector3i(item.mPos.x + 1, item.mPos.y, item.mPos.z)};
+        for (const Vector3i &at: around) {
+            const auto found = ring.find(CircuitSceneGraph::key(at));
+            if (found != ring.end())
+                order.push_back(found->second);
+        }
+        if (!order.empty()) {
+            RedstoneTorchCapacitor *last = order.back();
+            order.front()->mSelfPowerCount = 0;
+            last->_setNextOrder(order.front());
+            last->mSelfPowerCount = 0;
+            for (size_t index = 0; index + 1 < order.size(); ++index) {
+                order[index]->_setNextOrder(order[index + 1]);
+                last->mSelfPowerCount = 16;
+            }
+        }
+        linked = true;
+    }
+    if (!linked)
+        _setNextOrder(nullptr);
 }
 
 bool RedstoneTorchCapacitor::addSource(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, int &dampening,
@@ -526,6 +612,46 @@ bool RedstoneTorchCapacitor::evaluate(CircuitSystem &system, const Vector3i &pos
 
 void RedstoneTorchCapacitor::cacheValues(CircuitSystem &system, const Vector3i &position) {
     (void) system;
+    if (mNextOrder != nullptr) {
+        // in a ring: any other power on the torches' block keeps them all lit
+        for (const CircuitSourceItem &item: mSources) {
+            const BaseCircuitComponent *source = item.mComponent;
+            if (source == nullptr)
+                continue;
+            const CircuitComponentType base = source->getBaseType();
+            if (base != CircuitComponentType::PoweredBlock && base != CircuitComponentType::Consumer)
+                continue;
+            for (const CircuitSourceItem &sub: source->getSources()) {
+                if (!sub.mDirectlyPowered || sub.mComponent == nullptr
+                    || sub.mComponent->getInstanceType() == CircuitComponentType::Torch)
+                    continue;
+                if (sub.mComponent->getStrength() > sub.mDampening) {
+                    mNextOn = true;
+                    mNextHalfPulse = false;
+                    mNextChanged = !mOn;
+                    mSelfPowerCount = -1;
+                    return;
+                }
+            }
+        }
+        mNextHalfPulse = false;
+        if (mSelfPowerCount == 0) {
+            // this torch takes the light; the next one takes it on the following evaluation, the rest wait
+            mNextOn = true;
+            mNextChanged = !mOn;
+            RedstoneTorchCapacitor *next = mNextOrder;
+            next->mSelfPowerCount = -1;
+            next = next->mNextOrder;
+            for (int step = 0; step < 4 && next != nullptr && next != this; ++step) {
+                next->mSelfPowerCount = 1;
+                next = next->mNextOrder;
+            }
+        } else {
+            mNextOn = false;
+            mNextChanged = mOn;
+        }
+        return;
+    }
     int best = 0;
     const CircuitSourceItem *strongest = nullptr;
     const CircuitSourceItem *self = nullptr;

@@ -438,6 +438,8 @@ public:
 
 class RedstoneTorchCapacitor : public CapacitorComponent {
 public:
+    ~RedstoneTorchCapacitor() override;
+
     int getStrength() const override {
         return mOn ? 15 : 0;
     }
@@ -452,6 +454,8 @@ public:
     bool evaluate(CircuitSystem &system, const Vector3i &position) override;
 
     void cacheValues(CircuitSystem &system, const Vector3i &position) override;
+
+    void updateDependencies(CircuitSceneGraph &graph, const Vector3i &position) override;
 
     uint8_t getCircuitFlags() const override {
         return CircuitFlags::CACHE_VALUES;
@@ -481,8 +485,17 @@ public:
         return mBurnedOut;
     }
 
+    // the next torch of a torch ring, null when the torch is in none
+    const RedstoneTorchCapacitor *getNextOrder() const {
+        return mNextOrder;
+    }
+
 private:
+    // the links are raw pointers: each torch knows the torches linked to it, so none outlives what it points to
+    void _setNextOrder(RedstoneTorchCapacitor *next);
+
     RedstoneTorchCapacitor *mNextOrder = nullptr;
+    std::vector<RedstoneTorchCapacitor *> mLinkedFrom;
     int mSelfPowerCount = 0;
     bool mOn = false;
     bool mHalfPulse = false;
