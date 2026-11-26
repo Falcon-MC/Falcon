@@ -9,6 +9,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/NoteBlockActor.h"
+#include "CircuitTicks.h"
 #include "World/Level/Block/NoteBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
@@ -122,33 +123,37 @@ namespace {
         require(level.getBlockState(placed.x, placed.y, placed.z).mName == "minecraft:noteblock",
                 "the placement did not set a note block");
 
+        // the circuit's first update of a new note block is skipped: the power it finds there is no edge
         NoteBlockActor *note = level.getBlockActors().find<NoteBlockActor>(placed);
-        require(note != nullptr && note->isPowered(), "a note block placed beside a source started unpowered");
-        block.onRedstonePower(server, level, placed, level.getBlockState(placed.x, placed.y, placed.z));
-        require(note->isPowered(), "a steady power read as an edge");
+        require(note != nullptr, "a placed note block has no block actor");
+        settleCircuit(server, level);
+        require(!note->isPowered(), "a note block placed beside a source took its first update as an edge");
     }
 
-    // a note block set by a command has no actor: its first update records the power, as the game's does
+    // a note block with no actor met by a later update records the power without playing
     void checkFirstUpdate(ServerNetworkHandler &server, Level &level, const NoteBlock &block) {
         const Vector3i set(8, 100, 14);
         level.setBlock(set, BlockState("minecraft:noteblock"), false);
+        settleCircuit(server, level);
         level.setBlock(Vector3i(set.x + 1, set.y, set.z), BlockState("minecraft:redstone_block"), false);
         level.getBlockActors().remove(set);
-        block.onRedstonePower(server, level, set, level.getBlockState(set.x, set.y, set.z));
+        settleCircuit(server, level);
         NoteBlockActor *note = level.getBlockActors().find<NoteBlockActor>(set);
-        require(note != nullptr && note->isPowered(), "the first update did not record the power");
+        require(note != nullptr && note->isPowered(), "the update did not record the power");
+        (void) block;
     }
 
     void checkRedstone(ServerNetworkHandler &server, Level &level, const NoteBlock &block) {
         NoteBlockActor &note = level.getBlockActors().getOrCreate<NoteBlockActor>(NOTE);
         note.setPowered(false);
-        const BlockState state = level.getBlockState(NOTE.x, NOTE.y, NOTE.z);
+        settleCircuit(server, level);
         level.setBlock(Vector3i(NOTE.x + 1, NOTE.y, NOTE.z), BlockState("minecraft:redstone_block"), false);
-        block.onRedstonePower(server, level, NOTE, state);
+        settleCircuit(server, level);
         require(note.isPowered(), "power did not reach the note block");
         level.setBlock(Vector3i(NOTE.x + 1, NOTE.y, NOTE.z), BlockState("minecraft:air"), false);
-        block.onRedstonePower(server, level, NOTE, state);
+        settleCircuit(server, level);
         require(!note.isPowered(), "the note block stayed powered");
+        (void) block;
     }
 }
 
@@ -163,6 +168,7 @@ int main() {
         server.getScriptEngine().startup();
         EntityDefinitions::initialize();
         Level &level = server.getWorlds().getDefault().getOverworld();
+        level.setOwner(&server);
         level.insertChunk(LevelChunk(0, 0)).setPopulated(true);
         const auto *block = VanillaBlocks::getAs<NoteBlock>("minecraft:noteblock");
         require(block != nullptr, "the note block was not registered");

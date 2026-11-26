@@ -376,19 +376,11 @@ bool PistonSystem::isExtended(Level &level, const Vector3i &position, const Bloc
     return isArmCollision(ahead.mName) && getPistonFace(ahead) == face;
 }
 
+// the piston's circuit component takes no power through its face
 bool PistonSystem::isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                   const BlockState &state) {
-    const int face = getPistonFace(state);
-
-    for (int side = 0; side < RedstoneFace::COUNT; ++side) {
-        if (side == face)
-            continue;
-
-        if (RedstoneSystem::isSidePowered(owner, level, relative(position, side), side))
-            return true;
-    }
-
-    return false;
+    (void) state;
+    return RedstoneSystem::isGettingPower(owner, level, position);
 }
 
 void PistonSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

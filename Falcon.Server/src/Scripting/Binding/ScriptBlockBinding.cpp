@@ -32,6 +32,7 @@
 #include "World/Level/Block/Systems/PrecipitationSystem.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Systems/CircuitComponents.h"
+#include "World/Level/Block/Circuit/CircuitSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -1210,24 +1211,29 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    // the faces the block's producer connects through, whatever its power
     JSValue redstoneGetConnectedFaces(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         JSValue array = JS_NewArray(ctx);
-        uint32_t index = 0;
-        for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-            if (RedstoneSystem::getWeakPower(at.mApi->host(), *at.mLevel, at.mPosition, face) > 0)
-                JS_SetPropertyUint32(ctx, array, index++, JS_NewString(ctx, DIRECTIONS[face]));
-        }
+        const BaseCircuitComponent *component = RedstoneSystem::circuitOf(*at.mLevel).findComponent(at.mPosition);
+        if (component == nullptr || component->getBaseType() != CircuitComponentType::Producer)
+            return array;
+        for (uint32_t face = 0; face < (uint32_t) RedstoneFace::COUNT; ++face)
+            JS_SetPropertyUint32(ctx, array, face, JS_NewString(ctx, DIRECTIONS[face]));
         return array;
     }
 
+    // the face of the block the producer hangs on, which it powers strongly
     JSValue redstoneGetStronglyPoweredFace(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
-        for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-            if (RedstoneSystem::getStrongPower(at.mApi->host(), *at.mLevel, at.mPosition, face) > 0)
-                return JS_NewString(ctx, DIRECTIONS[face]);
-        }
-        return JS_UNDEFINED;
+        const BaseCircuitComponent *component = RedstoneSystem::circuitOf(*at.mLevel).findComponent(at.mPosition);
+        if (component == nullptr || component->getBaseType() != CircuitComponentType::Producer)
+            return JS_UNDEFINED;
+        const auto *producer = static_cast<const ProducerComponent *>(component);
+        const uint8_t face = producer->getDirection();
+        if (!producer->allowsAttachments() || face >= RedstoneFace::COUNT)
+            return JS_UNDEFINED;
+        return JS_NewString(ctx, DIRECTIONS[face]);
     }
 
     JSValue precipitationAccumulatesSnow(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {

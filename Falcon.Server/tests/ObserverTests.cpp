@@ -64,7 +64,9 @@ namespace {
         }
 
         void step() {
+            RedstoneSystem::tickCircuit(mOwner, mLevel);
             mLevel.tickBlockUpdates();
+            RedstoneSystem::tick(mOwner, mLevel);
             PistonSystem::tick(mOwner, mLevel);
         }
 
@@ -214,9 +216,11 @@ namespace {
         fixture.mLevel.setBlock(piston, state, false);
         // powers the cell above the piston, never the piston itself
         fixture.mLevel.setBlock(Vector3i(14, 65, 5), fixture.block("minecraft:redstone_block"), false);
+        fixture.settle();
         require(!PistonSystem::isGettingPower(fixture.mOwner, fixture.mLevel, piston, state),
                 "a piston took power through the block above it");
         fixture.mLevel.setBlock(Vector3i(14, 64, 5), fixture.block("minecraft:redstone_block"), false);
+        fixture.settle();
         require(PistonSystem::isGettingPower(fixture.mOwner, fixture.mLevel, piston, state),
                 "a piston beside a redstone block took no power");
     }

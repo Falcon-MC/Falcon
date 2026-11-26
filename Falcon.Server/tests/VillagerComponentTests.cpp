@@ -1,3 +1,4 @@
+#include "CircuitTicks.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
@@ -126,7 +127,7 @@ namespace {
 
         MobActor &villager = arena.adult(Vector3f(-4.5f, 65.0f, -4.5f));
         arena.mLevel->setBlockState(piston.x + 1, piston.y, piston.z, BlockState("minecraft:redstone_block"));
-        PistonSystem::onRedstoneUpdate(arena.mOwner, *arena.mLevel, piston, state);
+        settleCircuit(arena.mOwner, *arena.mLevel);
         require(villager.getPosition().y == 66.0f, "the extending piston did not push the villager up");
     }
 

@@ -1,3 +1,4 @@
+#include "CircuitTicks.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
@@ -282,8 +283,7 @@ namespace {
 
         const Block *power = VanillaBlocks::fromIdentifier("minecraft:redstone_block");
         arena.mLevel->setBlockState(piston.x - 1, piston.y, piston.z, power->toBlockState());
-        PistonSystem::onRedstoneUpdate(arena.mOwner, *arena.mLevel, piston,
-                                       arena.mLevel->getBlockState(piston.x, piston.y, piston.z));
+        settleCircuit(arena.mOwner, *arena.mLevel);
         for (int32_t tick = 0; tick < 10; ++tick) {
             PistonSystem::tick(arena.mOwner, *arena.mLevel);
             arena.tick();

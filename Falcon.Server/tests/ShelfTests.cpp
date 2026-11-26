@@ -1,3 +1,4 @@
+#include "CircuitTicks.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -42,6 +43,7 @@ int main() {
     try {
         ServerNetworkHandler server("Shelf", "", 1);
         Level &level = server.getWorlds().getDefault().getOverworld();
+        level.setOwner(&server);
         level.insertChunk(LevelChunk(0, 0));
         BlockState state;
         require(SetBlockCommand::resolveBlock("minecraft:oak_shelf", state), "no oak shelf");
@@ -106,7 +108,7 @@ int main() {
         const auto power = [&](const Vector3i &at, bool on) {
             const char *below = on ? "minecraft:redstone_block" : "minecraft:stone";
             level.setBlock(Vector3i(at.x, at.y - 1, at.z), BlockState(below), false);
-            block->onRedstonePower(server, level, at, level.getBlockState(at.x, at.y, at.z));
+            settleCircuit(server, level);
         };
         const auto rowType = [&](const Vector3i &at) {
             const BlockState now = level.getBlockState(at.x, at.y, at.z);
@@ -148,6 +150,7 @@ int main() {
         level.setBlock(Vector3i(placed.x, placed.y - 1, placed.z), BlockState("minecraft:redstone_block"), false);
         level.setBlock(placed, state, false);
         level.onBlockPlaced(placed, state);
+        settleCircuit(server, level);
         require(rowType(placed) == 0, "a shelf placed on a redstone block was not powered");
 
         // an end whose partner sits in a chunk not loaded keeps its place in the row
@@ -157,7 +160,7 @@ int main() {
         end.mStates.putInt("powered_shelf_type", 1);
         level.setBlock(Vector3i(edge.x, edge.y - 1, edge.z), BlockState("minecraft:redstone_block"), false);
         level.setBlock(edge, end, false);
-        block->onRedstonePower(server, level, edge, end);
+        settleCircuit(server, level);
         require(rowType(edge) == 1, "a row end left its row because the next chunk was not loaded");
         std::cout << "shelf checks passed\n";
     } catch (const std::exception &error) {
