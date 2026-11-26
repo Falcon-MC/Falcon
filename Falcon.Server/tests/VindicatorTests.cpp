@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Types/StartGameTypes.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/AI/Navigation/PathFinder.h"
@@ -68,9 +69,10 @@ namespace {
             }
         }
 
-        // a creative player names the mob with a name tag, as the game does it
+        // a creative player names the mob with a name tag, as the game does it; mobs never target it
         void name(MobActor &mob, const std::string &name) {
             ServerPlayer &namer = player(9000, Vector3f(-10.5f, 64.0f, -10.5f));
+            namer.setGameType((int32_t) GameType::Creative);
             ItemStack tag = mOwner.createItemStack("minecraft:name_tag", 1);
             Tag display = Tag::ofCompound();
             display.putString("Name", name);
