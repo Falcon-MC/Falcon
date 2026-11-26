@@ -315,6 +315,35 @@ namespace {
         }
     }
 
+    // the game's producer setups: a lever or button stops dust stepping down past it, a plate does not; the lever
+    // and the plate strongly power the block they sit on
+    void producerSetups() {
+        Fixture fixture;
+        const Vector3i lever = ORIGIN;
+        const Vector3i plate = east(ORIGIN, 2);
+        const Vector3i button = east(ORIGIN, 4);
+        BlockState leverState = fixture.lever(false);
+        leverState.mStates.putString("lever_direction", "up_east_west");
+        fixture.set(lever, leverState);
+        fixture.set(plate, fixture.block("minecraft:stone_pressure_plate"));
+        BlockState buttonState = fixture.block("minecraft:stone_button");
+        buttonState.mStates.putInt("facing_direction", 1);
+        fixture.set(button, buttonState);
+        fixture.run(4);
+        CircuitSystem &circuit = RedstoneSystem::circuitOf(fixture.mLevel);
+        const BaseCircuitComponent *leverComponent = circuit.getComponent(lever);
+        const BaseCircuitComponent *plateComponent = circuit.getComponent(plate);
+        const BaseCircuitComponent *buttonComponent = circuit.getComponent(button);
+        require(leverComponent != nullptr && plateComponent != nullptr && buttonComponent != nullptr,
+                "a lever, plate or button had no circuit component");
+        require(leverComponent->blocksWireStepDown() && buttonComponent->blocksWireStepDown(),
+                "a lever or button let dust step down past it");
+        require(!plateComponent->blocksWireStepDown(), "a pressure plate stopped dust stepping down past it");
+        require(leverComponent->getDirection() == CircuitFace::DOWN && plateComponent->getDirection() == CircuitFace::DOWN
+                        && buttonComponent->getDirection() == CircuitFace::DOWN,
+                "a lever, plate or button on the floor did not strongly power the block under it");
+    }
+
     // the game's movable table: what a piston pushes, pulls, breaks or stops at
     void pistonMovableTable() {
         const auto movement = [](const char *name) { return PistonMovable::of(name).mMovement; };
@@ -437,6 +466,7 @@ int main() {
         powerAtAirCell();
         conductivity();
         strongPowerThroughConductors();
+        producerSetups();
         pistonMovableTable();
         pistonMoves();
         std::cout << "circuit checks passed\n";

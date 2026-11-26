@@ -421,8 +421,11 @@ namespace {
             shape.mDirection = (uint8_t) RedstoneFace::opposite(leverPointing(state));
         } else if (dynamic_cast<const ButtonBlock *>(block) != nullptr) {
             shape.mDirection = (uint8_t) RedstoneFace::opposite(buttonFacing(state));
-        } else if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr
-                   || dynamic_cast<const TrappedChestBlock *>(block) != nullptr
+        } else if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr) {
+            // a plate strongly powers the block under it and, unlike a lever or button, lets dust step down past it
+            shape.mDirection = CircuitFace::DOWN;
+            shape.mNoWireStepDown = false;
+        } else if (dynamic_cast<const TrappedChestBlock *>(block) != nullptr
                    || dynamic_cast<const DetectorRailBlock *>(block) != nullptr
                    || dynamic_cast<const SculkSensorBlock *>(block) != nullptr) {
             shape.mDirection = CircuitFace::DOWN;
