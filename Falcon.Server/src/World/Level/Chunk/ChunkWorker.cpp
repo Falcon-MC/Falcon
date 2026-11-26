@@ -14,6 +14,11 @@
 #include <pthread/qos.h>
 #endif
 #include <sched.h>
+#ifdef __linux__
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
 
 namespace {
     // lower quarter of the scheduling range: generation and storage never starve the tick thread
@@ -22,6 +27,11 @@ namespace {
         // the scheduler picks cores by class there: below the tick, still on the fast cores; utility kept the
         // workers on the efficiency cores and halved generation
         if (pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0) == 0)
+            return;
+#endif
+#ifdef __linux__
+        // normal threads have a 0..0 priority range there: the code below changes nothing; nice is per thread
+        if (setpriority(PRIO_PROCESS, (id_t) syscall(SYS_gettid), 10) == 0)
             return;
 #endif
         sched_param parameters;
