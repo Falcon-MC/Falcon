@@ -225,7 +225,7 @@ namespace {
     class PortalBuilder {
     public:
         PortalBuilder(const ChunkGenerator &generator, int32_t startX, int32_t startZ, TerrainCache *cache,
-                      bool populated = false)
+                      GeneratorChunkSource *populated = nullptr)
                 : mGenerator(generator), mTerrain(generator, cache, populated), mWorld(mTerrain, generator.getDimensionType()),
                   mRandom(StructureFeature::createPostProcessRandom(generator.getSeed(), startX, startZ)),
                   mOriginX(startX * 16), mOriginZ(startZ * 16),
@@ -634,29 +634,12 @@ RuinedPortalStructure::plan(const ChunkGenerator &generator, int32_t startX, int
 
     std::shared_ptr<const Plan> built;
     if (const auto *nether = dynamic_cast<const NetherGenerator *>(&generator)) {
-        TerrainCache populated(generator);
-        GeneratorChunkSource source(generator.getSeed(), DimensionType::Nether, populated,
-                                    [nether](Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) {
-            nether->decorateBeforePortal(level, chunk, overflow);
+        TerrainCache populated(generator, [nether](Level &level, LevelChunk &chunk) {
+            nether->decorateBeforePortal(level, chunk, nullptr);
         });
-        // replay the feature pass with a halo for writes from neighbouring chunks
-        constexpr int32_t radius = REACH + 1;
-        for (int32_t z = startZ - radius; z <= startZ + radius; ++z) {
-            for (const int32_t pass: {0, 1}) {
-                for (int32_t x = startX - radius; x <= startX + radius; ++x) {
-                    if ((TerrainCache::decorationClass(x, z) & 1) != pass)
-                        continue;
-                    LevelChunk chunk(x, z);
-                    chunk.setDimension(DimensionType::Nether);
-                    std::vector<GeneratedBlockChange> overflow;
-                    std::vector<Tag> blockActors;
-                    std::vector<Tag> entities;
-                    uint64_t base = 0;
-                    source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
-                }
-            }
-        }
-        built = PortalBuilder(generator, startX, startZ, &populated, true).build();
+        GeneratorChunkSource source(generator.getSeed(), DimensionType::Nether, populated);
+        // the terrain it reads holds every feature, decorated as the workers decorate
+        built = PortalBuilder(generator, startX, startZ, &populated, &source).build();
     } else {
         built = PortalBuilder(generator, startX, startZ, cache).build();
     }

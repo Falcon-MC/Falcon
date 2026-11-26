@@ -1,7 +1,6 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
-#include "World/Level/Chunk/GeneratedBlockChange.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
@@ -35,30 +34,16 @@ namespace {
         return columns;
     }
 
-    // every chunk of the area decorated, in the order of the generation workers
+    // chunks with every decoration reaching them, as the generation workers make them
     struct DecoratedArea {
-        DecoratedArea(int64_t seed, int32_t minX, int32_t minZ, int32_t maxX, int32_t maxZ)
+        explicit DecoratedArea(int64_t seed)
                 : mGenerator(DimensionFactory::createGenerator(DimensionType::Overworld, seed)), mCache(*mGenerator),
-                  mSource(seed, DimensionType::Overworld, mCache) {
-            for (int32_t decorationClass = 0; decorationClass < 4; decorationClass++) {
-                for (int32_t chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
-                    for (int32_t chunkX = minX; chunkX <= maxX; chunkX++) {
-                        if (TerrainCache::decorationClass(chunkX, chunkZ) != decorationClass)
-                            continue;
-                        LevelChunk chunk(chunkX, chunkZ);
-                        chunk.setDimension(DimensionType::Overworld);
-                        std::vector<GeneratedBlockChange> overflow;
-                        std::vector<Tag> blockActors;
-                        std::vector<Tag> entities;
-                        uint64_t base = 0;
-                        mSource.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
-                    }
-                }
-            }
-        }
+                  mSource(seed, DimensionType::Overworld, mCache) {}
 
         int32_t kelpAt(int32_t chunkX, int32_t chunkZ) {
-            return kelpColumns(mCache.neighbour(chunkX, chunkZ));
+            std::vector<Tag> blockActors;
+            std::vector<Tag> entities;
+            return kelpColumns(mSource.generate(chunkX, chunkZ, blockActors, entities));
         }
 
         std::unique_ptr<ChunkGenerator> mGenerator;
@@ -69,7 +54,7 @@ namespace {
     // columns counted in a BDS world of seed 777 around the monument at chunk (47, -45): the kelp rule right after
     // the seagrass scatter reads variable.origin* where the scatter left them
     void kelpFollowsTheSeagrassOrigin() {
-        DecoratedArea area(777, 45, -46, 49, -42);
+        DecoratedArea area(777);
         const int32_t full = area.kelpAt(46, -44);
         require(full == 30, "chunk (46, -44) has " + std::to_string(full) + " kelp columns instead of 30");
         const int32_t few = area.kelpAt(48, -44);
@@ -79,7 +64,7 @@ namespace {
     // a BDS 1.26.61 world of seed 5002596503772886084: with the pumpkin and brown mushroom rules between the
     // seagrass and the kelp, the deep oceans read the kelp noise at the chunk origin
     void kelpReadsTheChunkOrigin() {
-        DecoratedArea area(5002596503772886084LL, 60, 63, 64, 66);
+        DecoratedArea area(5002596503772886084LL);
         const int32_t none = area.kelpAt(61, 64);
         require(none == 0, "chunk (61, 64) has " + std::to_string(none) + " kelp columns instead of none");
         const int32_t many = area.kelpAt(63, 65);

@@ -24,33 +24,18 @@ namespace {
         return hash ^ (value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2));
     }
 
-    // every block of the decorated area, in the workers' decoration order
+    // every block of the area, each chunk with every decoration reaching it
     uint64_t generateArea(int32_t originX, int32_t originZ, int32_t size) {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
                                                                                          SEED);
         TerrainCache cache(*generator);
         GeneratorChunkSource source(SEED, DimensionType::Overworld, cache);
-        for (int32_t chunkZ = originZ; chunkZ < originZ + size; chunkZ++) {
-            for (const int32_t pass: {0, 1}) {
-                for (int32_t chunkX = originX; chunkX < originX + size; chunkX++) {
-                    if ((TerrainCache::decorationClass(chunkX, chunkZ) & 1) != pass)
-                        continue;
-                    LevelChunk chunk(chunkX, chunkZ);
-                    chunk.setDimension(DimensionType::Overworld);
-                    std::vector<GeneratedBlockChange> overflow;
-                    std::vector<Tag> blockActors;
-                    std::vector<Tag> entities;
-                    uint64_t base = 0;
-                    source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
-                    cache.put(std::move(chunk));
-                }
-            }
-        }
-
         uint64_t hash = 0;
         for (int32_t chunkZ = originZ; chunkZ < originZ + size; chunkZ++) {
             for (int32_t chunkX = originX; chunkX < originX + size; chunkX++) {
-                const LevelChunk chunk = cache.neighbour(chunkX, chunkZ);
+                std::vector<Tag> blockActors;
+                std::vector<Tag> entities;
+                const LevelChunk chunk = source.generate(chunkX, chunkZ, blockActors, entities);
                 for (int x = 0; x < 16; x++) {
                     for (int z = 0; z < 16; z++) {
                         for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; y++) {

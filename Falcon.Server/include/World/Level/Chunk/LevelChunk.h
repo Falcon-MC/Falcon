@@ -27,6 +27,28 @@ struct LevelChunkInstance {
     uint64_t mId;
 };
 
+// one block a decoration changed; states interned (SubChunk::intern): compared by address
+struct ChunkWrite {
+    // x | z << 4 | (y - LevelChunk::MIN_Y) << 8 | layer << 17
+    uint32_t mIndex = 0;
+    const BlockState *mBefore = nullptr;
+    const BlockState *mAfter = nullptr;
+};
+
+// never copied: a copy of a logged chunk is not logged
+struct ChunkWriteLog {
+    ChunkWriteLog() = default;
+
+    ChunkWriteLog(const ChunkWriteLog &) {}
+
+    ChunkWriteLog &operator=(const ChunkWriteLog &) {
+        mWrites = nullptr;
+        return *this;
+    }
+
+    std::vector<ChunkWrite> *mWrites = nullptr;
+};
+
 // main thread once resident; workers only see copies; network encodings cached per sub-chunk
 class LevelChunk {
 public:
@@ -66,18 +88,9 @@ public:
         mPopulated = populated;
     }
 
-    // in memory only, this session's TerrainCache order: see decorationHolds
-    uint64_t getDecorationSequence() const {
-        return mDecorationSequence;
-    }
-
-    uint64_t getBaseSequence() const {
-        return mBaseSequence;
-    }
-
-    void setDecorationSequence(uint64_t base, uint64_t own) {
-        mBaseSequence = base;
-        mDecorationSequence = own;
+    // every setBlock from now on is appended to `writes`; nullptr stops
+    void setWriteLog(std::vector<ChunkWrite> *writes) {
+        mWriteLog.mWrites = writes;
     }
 
     const BlockState &getBlock(int x, int32_t y, int z) const;
@@ -274,8 +287,7 @@ private:
     std::string mNamedTicks;
     ChunkStructureBounds mStructureBounds;
     bool mNeedsLiquidMigration = false;
-    uint64_t mBaseSequence = 0;
-    uint64_t mDecorationSequence = 0;
+    ChunkWriteLog mWriteLog;
     // mutable: const reads unpack a packed chunk first
     mutable std::vector<SubChunk> mSubChunks;
     std::vector<int16_t> mHeightmap;

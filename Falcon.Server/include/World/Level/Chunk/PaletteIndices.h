@@ -102,14 +102,27 @@ private:
         return (count + perWord - 1) / perWord;
     }
 
+    // word by word: generation widens sections often, a set() per index made it a hot spot
     void _widen(uint32_t widthLog2) {
-        PaletteIndices wider;
-        wider.mCount = mCount;
-        wider.mWidthLog2 = widthLog2;
-        wider.mWords.assign(_wordCount(mCount, widthLog2), 0);
-        for (size_t index = 0; index < mCount; ++index)
-            wider.set(index, (*this)[index]);
-        *this = std::move(wider);
+        std::vector<uint32_t> wider(_wordCount(mCount, widthLog2), 0);
+        const uint32_t oldBits = 1u << mWidthLog2;
+        const uint32_t oldMask = _mask(mWidthLog2);
+        const size_t perOld = (size_t) 1 << (5 - mWidthLog2);
+        const uint32_t newLog2 = 5 - widthLog2;
+        const size_t newSlot = ((size_t) 1 << newLog2) - 1;
+        for (size_t word = 0; word < mWords.size(); ++word) {
+            const uint32_t packed = mWords[word];
+            if (packed == 0)
+                continue;
+            for (size_t slot = 0; slot < perOld; ++slot) {
+                const size_t index = word * perOld + slot;
+                const uint32_t value = (packed >> (slot * oldBits)) & oldMask;
+                if (value != 0 && index < mCount)
+                    wider[index >> newLog2] |= value << ((index & newSlot) << widthLog2);
+            }
+        }
+        mWords = std::move(wider);
+        mWidthLog2 = widthLog2;
     }
 
     std::vector<uint32_t> mWords;

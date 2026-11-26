@@ -42,13 +42,9 @@ namespace {
         int32_t bricks = 0;
         for (int32_t chunkZ = 55; chunkZ <= 57; chunkZ++) {
             for (int32_t chunkX = 53; chunkX <= 54; chunkX++) {
-                LevelChunk chunk(chunkX, chunkZ);
-                chunk.setDimension(DimensionType::Overworld);
-                std::vector<GeneratedBlockChange> overflow;
                 std::vector<Tag> blockActors;
                 std::vector<Tag> entities;
-                uint64_t base = 0;
-                source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
+                const LevelChunk chunk = source.generate(chunkX, chunkZ, blockActors, entities);
                 for (int32_t x = 0; x < 16; x++) {
                     for (int32_t z = 0; z < 16; z++) {
                         for (int32_t y = -55; y <= -15; y++) {
