@@ -43,11 +43,3 @@ bool FenceGateBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
 
     return OpenableBlock::toggle(owner, level, position, BlockState(state.mName, states), &player);
 }
-
-void FenceGateBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                              const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) usedItem;
-    (void) blockFace;
-
-    OpenableBlock::openOnPlace(owner, owner.getLevelFor(player), position, state);
-}

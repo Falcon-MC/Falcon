@@ -5,7 +5,6 @@
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/DoorBlock.h"
 #include "World/Level/Block/DoubleBlock.h"
-#include "World/Level/Block/OpenableBlock.h"
 #include "World/Level/Block/Components/BlockPlacementComponent.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
@@ -63,18 +62,6 @@ bool DoorOrientationBlock::onWindBurst(ServerNetworkHandler &owner, Level &level
 bool DoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                       const BlockState &state) const {
     return DoorBlock::toggle(owner, owner.getLevelFor(player), position, state, &player);
-}
-
-void DoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                                    const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) usedItem;
-    (void) blockFace;
-
-    Level &level = owner.getLevelFor(player);
-    if (OpenableBlock::isOpen(state) || !DoorBlock::isGettingPower(owner, level, position, state))
-        return;
-
-    DoorBlock::setOpen(owner, level, position, state, true);
 }
 
 std::vector<Vector3i> DoorOrientationBlock::getAffectedBlocks(Level &level, const Vector3i &position,
