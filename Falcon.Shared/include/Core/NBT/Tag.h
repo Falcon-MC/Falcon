@@ -117,6 +117,10 @@ public:
 
     void put(const std::string &key, Tag value);
 
+    // the caller guarantees the key isn't there yet: no lookup, for building from a map whose keys are unique;
+    // put() looks every key up, quadratic on a large compound
+    void append(const std::string &key, Tag value);
+
     bool remove(const std::string &key);
 
     void putByte(const std::string &key, int8_t value) {
