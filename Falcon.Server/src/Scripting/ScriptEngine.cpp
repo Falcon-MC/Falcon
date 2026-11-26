@@ -22,6 +22,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
+#include "World/Actor/Misc/NpcSceneRegistry.h"
 #include "World/Actor/Trade/TradeTableRegistry.h"
 #include "Protocol/Packets/SyncWorldClocksPacket.h"
 #include "Server/ServerPaths.h"
@@ -483,10 +484,11 @@ size_t ScriptEngine::loadPacks(const std::vector<BehaviorPack> &packs) {
     for (auto pack = packs.rbegin(); pack != packs.rend(); ++pack)
         mSounds.addPack(pack->mPath);
     for (const BehaviorPack &pack: packs) {
-        // structures, loot and trade tables come from every pack, scripted or not
+        // structures, loot and trade tables and dialogue scenes come from every pack, scripted or not
         mStructures.addPack(pack.mPath);
         LootTableRegistry::getInstance().addPack(pack.mPath);
         TradeTableRegistry::getInstance().addPack(pack.mPath);
+        NpcSceneRegistry::getInstance().addPack(pack.mPath);
         if (pack.hasScript() && _loadPack(pack))
             loaded++;
     }

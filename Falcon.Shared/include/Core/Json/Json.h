@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -422,5 +423,63 @@ namespace json {
         }
 
         return escaped;
+    }
+
+    // a json string literal: quotes, backslashes and control characters escaped
+    inline std::string quote(const std::string &value) {
+        static const char *const DIGITS = "0123456789abcdef";
+        std::string text = "\"";
+        text.reserve(value.size() + 2);
+        for (const char character: value) {
+            const unsigned char code = (unsigned char) character;
+            if (character == '"' || character == '\\') {
+                text.push_back('\\');
+                text.push_back(character);
+            } else if (character == '\n') {
+                text += "\\n";
+            } else if (character == '\r') {
+                text += "\\r";
+            } else if (character == '\t') {
+                text += "\\t";
+            } else if (code < 0x20) {
+                text += "\\u00";
+                text.push_back(DIGITS[code >> 4]);
+                text.push_back(DIGITS[code & 0x0F]);
+            } else {
+                text.push_back(character);
+            }
+        }
+        return text + "\"";
+    }
+
+    // compact text the parser reads back, keys in their order
+    inline std::string stringify(const Value &value) {
+        switch (value.mType) {
+            case Value::Type::Boolean:
+                return value.mBoolean ? "true" : "false";
+            case Value::Type::Number: {
+                std::ostringstream number;
+                number.precision(17);
+                number << value.mNumber;
+                return number.str();
+            }
+            case Value::Type::String:
+                return quote(value.mString);
+            case Value::Type::Array: {
+                std::string text = "[";
+                for (size_t index = 0; index < value.mArray.size(); ++index)
+                    text += (index == 0 ? "" : ",") + stringify(*value.mArray[index]);
+                return text + "]";
+            }
+            case Value::Type::Object: {
+                std::string text = "{";
+                for (size_t index = 0; index < value.mKeys.size(); ++index)
+                    text += (index == 0 ? "" : ",") + quote(value.mKeys[index]) + ":"
+                            + stringify(*value.get(value.mKeys[index]));
+                return text + "}";
+            }
+            default:
+                return "null";
+        }
     }
 }

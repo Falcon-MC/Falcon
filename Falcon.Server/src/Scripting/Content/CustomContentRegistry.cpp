@@ -129,36 +129,6 @@ namespace {
         readVec3(value->get("size"), box.mSize);
     }
 
-    std::string stringify(const json::Value &value) {
-        switch (value.mType) {
-            case json::Value::Type::Boolean:
-                return value.mBoolean ? "true" : "false";
-            case json::Value::Type::Number: {
-                std::ostringstream number;
-                number.precision(17);
-                number << value.mNumber;
-                return number.str();
-            }
-            case json::Value::Type::String:
-                return "\"" + json::escape(value.mString) + "\"";
-            case json::Value::Type::Array: {
-                std::string text = "[";
-                for (size_t index = 0; index < value.mArray.size(); ++index)
-                    text += (index == 0 ? "" : ",") + stringify(*value.mArray[index]);
-                return text + "]";
-            }
-            case json::Value::Type::Object: {
-                std::string text = "{";
-                for (size_t index = 0; index < value.mKeys.size(); ++index)
-                    text += (index == 0 ? "\"" : ",\"") + json::escape(value.mKeys[index])
-                            + "\":" + stringify(*value.get(value.mKeys[index]));
-                return text + "}";
-            }
-            default:
-                return "null";
-        }
-    }
-
     // the components the client draws and collides with; the block's own, then each permutation's over them
     void applyBlockComponents(const json::Value &components, CustomBlockDefinition &definition) {
         const json::Value *destructible = components.get("minecraft:destructible_by_mining");
@@ -303,7 +273,7 @@ namespace {
         for (const std::string &key: components.mKeys) {
             if (key.find(':') == std::string::npos || key.compare(0, 10, "minecraft:") == 0)
                 continue;
-            uses.push_back({key, stringify(*components.get(key))});
+            uses.push_back({key, json::stringify(*components.get(key))});
         }
         return uses;
     }
@@ -1492,7 +1462,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                 const json::Value *permutationComponents = entry->get("components");
                 if (permutationComponents != nullptr && permutationComponents->isObject()) {
                     permutation.mCustomComponents = readCustomComponents(*permutationComponents);
-                    permutation.mComponents = stringify(*permutationComponents);
+                    permutation.mComponents = json::stringify(*permutationComponents);
                 }
                 definition.mPermutations.push_back(std::move(permutation));
             }

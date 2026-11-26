@@ -14,6 +14,7 @@
 #include "Server/Commands/ClearCommand.h"
 #include "Server/Commands/CommandOrigin.h"
 #include "Server/Commands/DamageCommand.h"
+#include "Server/Commands/DialogueCommand.h"
 #include "Server/Commands/DayLockCommand.h"
 #include "Server/Commands/DefaultGameModeCommand.h"
 #include "Server/Commands/DeopCommand.h"
@@ -262,16 +263,19 @@ namespace {
         if (selector.size() < 2 || selector[0] != '@')
             return filter;
 
-        filter.mKind = selector[1];
-        if (selector.size() == 2) {
+        // @initiator: the player who talked to the npc running the command
+        static const std::string INITIATOR = "@initiator";
+        const size_t length = selector.compare(0, INITIATOR.size(), INITIATOR) == 0 ? INITIATOR.size() : 2;
+        filter.mKind = length == 2 ? selector[1] : 'i';
+        if (selector.size() == length) {
             filter.mValid = true;
             return filter;
         }
 
-        if (selector[2] != '[' || selector.back() != ']')
+        if (selector[length] != '[' || selector.back() != ']')
             return filter;
 
-        const std::string body = selector.substr(3, selector.size() - 4);
+        const std::string body = selector.substr(length + 1, selector.size() - length - 2);
         size_t start = 0;
         while (start <= body.size()) {
             size_t comma = start;
@@ -447,6 +451,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<StopSoundCommand>(*this));
     mCommands.registerCommand(std::make_shared<ParticleCommand>(*this));
     mCommands.registerCommand(std::make_shared<DamageCommand>(*this));
+    mCommands.registerCommand(std::make_shared<DialogueCommand>(*this));
     mCommands.registerCommand(std::make_shared<DayLockCommand>(*this));
     mCommands.registerCommand(std::make_shared<TestForCommand>(*this));
     mCommands.registerCommand(std::make_shared<TestForBlockCommand>());
@@ -523,8 +528,8 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
     if (!filter.mValid || !matchesType(filter, "minecraft:player"))
         return targets;
 
-    if (filter.mKind == 's') {
-        ServerPlayer *self = sender.asPlayer();
+    if (filter.mKind == 's' || filter.mKind == 'i') {
+        ServerPlayer *self = filter.mKind == 's' ? sender.asPlayer() : sender.getInitiator();
         if (self != nullptr && matchesName(filter, self->getName()) && matchesScores(filter, mScoreboard, *self))
             targets.push_back(self);
         return targets;
