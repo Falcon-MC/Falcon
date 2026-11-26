@@ -64,6 +64,35 @@ namespace {
         return std::max(min - value, value - max);
     }
 
+    // the beard kernel on the box widened by 2, weighed by the distance to the box centre: the height is measured
+    // from the ground below it, from the top above it, and is 0 between, which empties the piece
+    double shaver(const TerrainBeard::Piece &piece, int32_t x, int32_t y, int32_t z) {
+        const int32_t ground = piece.mMinY + piece.mGroundLevelDelta;
+        int32_t nearestY = y > ground ? y : ground;
+        if (y > piece.mMaxY)
+            nearestY = piece.mMaxY;
+        const int32_t dy = y - nearestY;
+        const int32_t dx = std::max(outside(x, piece.mMinX - 2, piece.mMaxX + 2), 0);
+        const int32_t dz = std::max(outside(z, piece.mMinZ - 2, piece.mMaxZ + 2), 0);
+        if (dx > 11 || (uint32_t) (dy + 12) > 23u || dz > 11)
+            return 0.0;
+
+        // the reach grows by 1 at and under the ground, by 5 over it
+        const int32_t sizeX = piece.mMaxX - piece.mMinX + 5;
+        const int32_t sizeZ = piece.mMaxZ - piece.mMinZ + 5;
+        const float radius = (y > ground ? 5.0f : 1.0f) + std::fmax((float) sizeZ * 0.5f, (float) sizeX * 0.5f);
+        if (!(radius > 0.0f))
+            return 0.0;
+
+        const float awayX = (float) (x - (piece.mMinX - 2 + sizeX / 2));
+        const float awayZ = (float) (z - (piece.mMinZ - 2 + sizeZ / 2));
+        const float distance = std::sqrt(awayZ * awayZ + ((float) dy * (float) dy + awayX * awayX));
+        if (!(distance <= radius))
+            return 0.0;
+
+        return (double) ((float) beard(dx, dz, dy, dy) * (1.5f - distance / radius));
+    }
+
     // max(0, 1 - length / 6) on half steps, stored as a float
     double bury(double x, double y, double z) {
         const double length = std::sqrt(x * x + y * y + z * z) * 0.16666666666666666;
@@ -72,9 +101,12 @@ namespace {
 }
 
 void TerrainBeard::addPiece(int32_t chunkX, int32_t chunkZ, const Piece &piece) {
+    // the shaver widens the box by 2 on x and z
+    const int32_t margin = piece.mAdaptation == Adaptation::BeardAndShaver ? 2 : 0;
     const int32_t minX = chunkX * 16;
     const int32_t minZ = chunkZ * 16;
-    if (piece.mMaxX < minX - 12 || piece.mMinX > minX + 27 || piece.mMaxZ < minZ - 12 || piece.mMinZ > minZ + 27)
+    if (piece.mMaxX + margin < minX - 12 || piece.mMinX - margin > minX + 27 || piece.mMaxZ + margin < minZ - 12
+        || piece.mMinZ - margin > minZ + 27)
         return;
 
     mPieces.push_back(piece);
@@ -148,6 +180,9 @@ double TerrainBeard::compute(int32_t x, int32_t y, int32_t z) const {
                                    * 0.8;
                 break;
             }
+            case Adaptation::BeardAndShaver:
+                contribution = shaver(piece, x, y, z);
+                break;
         }
         total = total + contribution;
     }

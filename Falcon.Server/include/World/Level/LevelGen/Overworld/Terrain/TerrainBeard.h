@@ -18,8 +18,9 @@ public:
         int32_t mMaxZ;
     };
 
-    // a structure's terrain_adaptation, for each of its rigid pieces
-    enum class Adaptation : uint8_t { Bury, BeardThin, Encapsulate };
+    // a structure's terrain_adaptation, for each of its rigid pieces; BeardAndShaver: the ancient city's, which fills
+    // under the piece and empties it above its ground
+    enum class Adaptation : uint8_t { Bury, BeardThin, Encapsulate, BeardAndShaver };
 
     struct Piece {
         int32_t mMinX;
