@@ -155,6 +155,7 @@ namespace {
     const char *const SPELL_EFFECTS_COMPONENT = "minecraft:spell_effects";
     const char *const INSTANT_DESPAWN_COMPONENT = "minecraft:instant_despawn";
     const char *const BODY_ROTATION_BLOCKED_COMPONENT = "minecraft:body_rotation_blocked";
+    const char *const IS_ILLAGER_CAPTAIN_COMPONENT = "minecraft:is_illager_captain";
     const char *const KNOCKBACK_RESISTANCE_COMPONENT = "minecraft:knockback_resistance";
     const char *const KNOCKBACK_RESISTANCE_ATTRIBUTE = "minecraft:knockback_resistance";
     const char *const BOUNCINESS_COMPONENT = "minecraft:bounciness";
@@ -2473,6 +2474,7 @@ void MobActor::_syncBody(ServerNetworkHandler &owner) {
     _setFlag(owner, ActorFlag::Baby, getComponent("minecraft:is_baby") != nullptr);
     _setFlag(owner, ActorFlag::Sheared, getComponent("minecraft:is_sheared") != nullptr);
     _setFlag(owner, ActorFlag::BodyRotationBlocked, getComponent(BODY_ROTATION_BLOCKED_COMPONENT) != nullptr);
+    _setFlag(owner, ActorFlag::IsIllagerCaptain, getComponent(IS_ILLAGER_CAPTAIN_COMPONENT) != nullptr);
     RideControlSystem::syncFlags(owner, *this);
     getAttributes().setClamped(KNOCKBACK_RESISTANCE_ATTRIBUTE,
                                numberIn(getComponent(KNOCKBACK_RESISTANCE_COMPONENT), "value", 0.0f));

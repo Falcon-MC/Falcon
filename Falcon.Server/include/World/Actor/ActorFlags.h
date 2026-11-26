@@ -53,6 +53,7 @@ enum class ActorFlag : int {
     WantsToWake = 77,
     // a trader holds up what it would give for the item a player holds
     TradeInterest = 78,
+    IsIllagerCaptain = 82,
     Roaring = 84,
     DelayedAttacking = 85,
     FacingTargetToRangeAttack = 88,
