@@ -471,8 +471,7 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
 
                             if (beardCellY) {
                                 value = (float) (beard->compute(worldX, y, worldZ) + (double) value);
-                                if (value <= 0.0f)
-                                    value += beard->buried(worldX, y, worldZ);
+                                value = beard->adjust(worldX, y, worldZ, value) + value;
                             }
 
                             OverworldAquifer::Substance substance;

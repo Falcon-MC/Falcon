@@ -25,6 +25,9 @@ public:
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;
 
+    // the foot of the bed
+    bool seatsPet(Level &level, const Vector3i &position, const BlockState &state) const override;
+
     std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,
                                             const BlockState &state) const override;
 };

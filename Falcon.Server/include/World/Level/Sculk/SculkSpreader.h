@@ -10,6 +10,7 @@
 class BlockState;
 class Level;
 class ServerNetworkHandler;
+class SculkWorld;
 
 // one charge on its way through the sculk
 struct SculkChargeCursor {
@@ -64,6 +65,12 @@ public:
     void updateCursors(ServerNetworkHandler *owner, Level &level, const Vector3i &origin, std::mt19937 &random,
                        bool convertBlocks);
 
+    void updateCursors(SculkWorld &world, const Vector3i &origin, std::mt19937 &random, bool convertBlocks);
+
+    void clearCursors() {
+        mCursors.clear();
+    }
+
     // what sculk can grow over
     bool isReplaceable(const BlockState &state) const;
 
@@ -74,10 +81,10 @@ public:
     void load(const Tag &data);
 
 private:
-    void _updateCursor(ServerNetworkHandler *owner, Level &level, const Vector3i &origin, std::mt19937 &random,
-                       bool convertBlocks, SculkChargeCursor &cursor);
+    void _updateCursor(SculkWorld &world, const Vector3i &origin, std::mt19937 &random, bool convertBlocks,
+                       SculkChargeCursor &cursor);
 
-    bool _findMovement(Level &level, const Vector3i &from, std::mt19937 &random, Vector3i &to) const;
+    bool _findMovement(SculkWorld &world, const Vector3i &from, std::mt19937 &random, Vector3i &to) const;
 
     Settings mSettings;
     std::vector<SculkChargeCursor> mCursors;
@@ -95,14 +102,12 @@ namespace SculkBehaviours {
 
     bool canChangeBlockStateOnSpread(Kind kind);
 
-    bool attemptSpreadVein(Kind kind, ServerNetworkHandler *owner, Level &level, const Vector3i &position,
-                           int32_t facings, bool worldGeneration);
+    bool attemptSpreadVein(Kind kind, SculkWorld &world, const Vector3i &position, int32_t facings);
 
-    int32_t attemptUseCharge(Kind kind, ServerNetworkHandler *owner, Level &level, const Vector3i &origin,
-                             const SculkChargeCursor &cursor, std::mt19937 &random, const SculkSpreader &spreader,
-                             bool convertBlocks);
+    int32_t attemptUseCharge(Kind kind, SculkWorld &world, const Vector3i &origin, const SculkChargeCursor &cursor,
+                             std::mt19937 &random, const SculkSpreader &spreader, bool convertBlocks);
 
-    void onDischarged(Kind kind, Level &level, const Vector3i &position);
+    void onDischarged(Kind kind, SculkWorld &world, const Vector3i &position);
 
     // a vein's faces as multi_face_direction_bits, by face 0 to 5 (down, up, north, south, west, east)
     int32_t faceBit(int32_t face);
@@ -111,4 +116,6 @@ namespace SculkBehaviours {
 
     // veins over every face of position, from each of its faces toward every direction
     int32_t spreadVeinsAll(Level &level, const Vector3i &position, bool samePositionOnly);
+
+    int32_t spreadVeinsAll(SculkWorld &world, const Vector3i &position, bool samePositionOnly);
 }

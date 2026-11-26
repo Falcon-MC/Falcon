@@ -25,7 +25,6 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PaleMossPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/PumpkinFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/ReedsFeature.h"
-#include "World/Level/LevelGen/Overworld/Feature/Decoration/SculkPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SeaAnemoneFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SeaPickleFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSnowLayerFeature.h"
@@ -66,7 +65,6 @@ void registerDecorationFeatures() {
     GenerateFeatureRegistry::registerFeature(std::make_shared<PaleMossPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<PumpkinFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<ReedsFeature>());
-    GenerateFeatureRegistry::registerFeature(std::make_shared<SculkPatchFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SeaAnemoneFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<SeaPickleFeature>());
     GenerateFeatureRegistry::registerFeature(std::make_shared<IceCavesSurfaceFeature>());

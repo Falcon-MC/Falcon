@@ -1,4 +1,3 @@
-#include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/BlockSupport.h"
@@ -7,6 +6,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/Sculk/SculkSpreader.h"
+#include "World/Level/Sculk/SculkWorld.h"
 
 #include <algorithm>
 #include <array>
@@ -60,17 +60,8 @@ namespace {
         return face ^ 1;
     }
 
-    BlockState blockAt(Level &level, const Vector3i &position) {
-        return level.getBlockState(position.x, position.y, position.z);
-    }
-
     bool isAir(const BlockState &state) {
         return state.mName == BlockNames::AIR;
-    }
-
-    bool isWaterSource(Level &level, const Vector3i &position) {
-        const LiquidInfo liquid = level.getLiquidInfo(position.x, position.y, position.z);
-        return liquid.water && liquid.source;
     }
 
     BlockState veinWith(int32_t bits) {
@@ -86,9 +77,9 @@ namespace {
     }
 
     // a vein can take this block's place: a water source, or anything replaceable that is not lava or fire
-    bool veinCanReplace(Level &level, const Vector3i &position, const BlockState &state) {
+    bool veinCanReplace(SculkWorld &world, const Vector3i &position, const BlockState &state) {
         if (state.mName == BlockNames::WATER || state.mName == BlockNames::FLOWING_WATER)
-            return level.getLiquidInfo(position.x, position.y, position.z).source;
+            return world.isWaterSource(position);
         return BlockSupport::isReplaceable(state) && state.mName != BlockNames::LAVA
                && state.mName != BlockNames::FLOWING_LAVA && state.mName.find("fire") == std::string::npos;
     }
@@ -102,23 +93,23 @@ namespace {
         return state.mName != BlockNames::SCULK_VEIN;
     }
 
-    bool canSpreadInto(Level &level, const Vector3i &position, int32_t face) {
-        const BlockState support = blockAt(level, add(position, faceStep(face)));
+    bool canSpreadInto(SculkWorld &world, const Vector3i &position, int32_t face) {
+        const BlockState &support = world.getBlock(add(position, faceStep(face)));
         if (support.mName == BlockNames::SCULK_CATALYST || support.mName == BlockNames::MOVING_BLOCK
             || support.mName == BlockNames::SCULK)
             return false;
-        const BlockState state = blockAt(level, position);
-        if (veinCanReplace(level, position, state))
+        const BlockState &state = world.getBlock(position);
+        if (veinCanReplace(world, position, state))
             return true;
-        return state.mName == BlockNames::SCULK_VEIN || isAir(state) || isWaterSource(level, position);
+        return state.mName == BlockNames::SCULK_VEIN || isAir(state) || world.isWaterSource(position);
     }
 
     // the state with face added, or the same state when the face is there already or has nothing to hold
-    BlockState placementWith(Level &level, const BlockState &existing, const Vector3i &position, int32_t face) {
+    BlockState placementWith(SculkWorld &world, const BlockState &existing, const Vector3i &position, int32_t face) {
         const bool vein = existing.mName == BlockNames::SCULK_VEIN;
         if (vein && SculkBehaviours::hasFace(existing, face))
             return existing;
-        if (!PlacementHelpers::hasSolidFace(blockAt(level, add(position, faceStep(face))), opposite(face)))
+        if (!PlacementHelpers::hasSolidFace(world.getBlock(add(position, faceStep(face))), opposite(face)))
             return existing;
         const int32_t bits = vein ? existing.mStates.getInt(STATE_FACES, 0) : 0;
         return veinWith(bits | SculkBehaviours::faceBit(face));
@@ -128,8 +119,9 @@ namespace {
         return a.mName != b.mName || !(a.mStates == b.mStates);
     }
 
-    // MultifaceSpreader::getSpreadFromFaceTowardDirection
-    bool spreadTarget(Level &level, const BlockState &state, const Vector3i &position, int32_t from, int32_t to,
+    // where a vein on face from of position spreads toward to: the same block, the next one on that plane, or
+    // around the edge
+    bool spreadTarget(SculkWorld &world, const BlockState &state, const Vector3i &position, int32_t from, int32_t to,
                       bool samePositionOnly, Vector3i &target, int32_t &targetFace) {
         if (!canSpreadFrom(state, from) || to == from || to == opposite(from))
             return false;
@@ -150,10 +142,10 @@ namespace {
                 candidate = add(add(position, faceStep(to)), faceStep(from));
                 face = opposite(to);
             }
-            if (!canSpreadInto(level, candidate, face))
+            if (!canSpreadInto(world, candidate, face))
                 continue;
-            const BlockState current = blockAt(level, candidate);
-            if (!differs(placementWith(level, current, candidate, face), current))
+            const BlockState &current = world.getBlock(candidate);
+            if (!differs(placementWith(world, current, candidate, face), current))
                 continue;
             target = candidate;
             targetFace = face;
@@ -162,51 +154,52 @@ namespace {
         return false;
     }
 
-    int32_t spreadFromFace(Level &level, const Vector3i &position, int32_t from, bool samePositionOnly) {
+    int32_t spreadFromFace(SculkWorld &world, const Vector3i &position, int32_t from, bool samePositionOnly) {
         int32_t placed = 0;
         for (int32_t to: SPREAD_ORDER) {
-            const BlockState state = blockAt(level, position);
+            const BlockState &state = world.getBlock(position);
             Vector3i target;
             int32_t face = 0;
-            if (!spreadTarget(level, state, position, from, to, samePositionOnly, target, face))
+            if (!spreadTarget(world, state, position, from, to, samePositionOnly, target, face))
                 continue;
-            const BlockState current = blockAt(level, target);
-            const BlockState placedState = placementWith(level, current, target, face);
+            const BlockState &current = world.getBlock(target);
+            const BlockState placedState = placementWith(world, current, target, face);
             if (differs(placedState, current)) {
-                level.setBlock(target, placedState, true);
+                world.setBlock(target, placedState);
                 ++placed;
             }
         }
         return placed;
     }
 
-    // a vein loses the faces it lays on sculk with; with none left it is gone
-    void dischargeVein(Level &level, const Vector3i &position) {
-        for (int32_t face = 0; face < 6; ++face) {
-            const BlockState state = blockAt(level, position);
+    // a vein loses the faces it lays on sculk with; with none left it is gone, and the water it held comes back
+    // to its block
+    void dischargeVein(SculkWorld &world, const Vector3i &position) {
+        for (int32_t face: SPREAD_ORDER) {
+            const BlockState &state = world.getBlock(position);
             if (state.mName != BlockNames::SCULK_VEIN || !SculkBehaviours::hasFace(state, face))
                 continue;
-            if (blockAt(level, add(position, faceStep(face))).mName != BlockNames::SCULK)
+            if (world.getBlock(add(position, faceStep(face))).mName != BlockNames::SCULK)
                 continue;
             const int32_t bits = state.mStates.getInt(STATE_FACES, 0) & ~SculkBehaviours::faceBit(face);
             if (bits == 0)
-                level.setBlock(position, BlockState(BlockNames::AIR), true);
+                world.setBlock(position, BlockState(BlockNames::AIR));
             else
-                level.setBlock(position, veinWith(bits), true);
+                world.setBlock(position, veinWith(bits));
         }
     }
 
     // room for a sensor or a shrieker above the sculk, with few of them around
-    bool canPlaceGrowth(Level &level, const Vector3i &position) {
+    bool canPlaceGrowth(SculkWorld &world, const Vector3i &position) {
         const Vector3i above(position.x, position.y + 1, position.z);
-        const BlockState state = blockAt(level, above);
+        const BlockState &state = world.getBlock(above);
         if (!isAir(state) && state.mName != BlockNames::WATER)
             return false;
         int32_t growths = 0;
         for (int32_t x = above.x - GROWTH_HORIZONTAL_RANGE; x <= above.x + GROWTH_HORIZONTAL_RANGE; ++x) {
             for (int32_t y = above.y - 1; y <= above.y + 1; ++y) {
                 for (int32_t z = above.z - GROWTH_HORIZONTAL_RANGE; z <= above.z + GROWTH_HORIZONTAL_RANGE; ++z) {
-                    const std::string name = level.getBlockState(x, y, z).mName;
+                    const std::string &name = world.getBlock(Vector3i(x, y, z)).mName;
                     if (name == BlockNames::SCULK_SENSOR || name == BlockNames::SCULK_SHRIEKER)
                         ++growths;
                 }
@@ -215,8 +208,8 @@ namespace {
         return growths < MAX_NEARBY_GROWTHS;
     }
 
-    int32_t sculkUseCharge(ServerNetworkHandler *owner, Level &level, const Vector3i &origin,
-                           const SculkChargeCursor &cursor, std::mt19937 &random, const SculkSpreader &spreader) {
+    int32_t sculkUseCharge(SculkWorld &world, const Vector3i &origin, const SculkChargeCursor &cursor,
+                           std::mt19937 &random, const SculkSpreader &spreader) {
         const SculkSpreader::Settings &settings = spreader.getSettings();
         const int32_t charge = cursor.mCharge;
         if (nextInt(random, settings.mChargeDecayRate) != 0)
@@ -228,7 +221,7 @@ namespace {
         const float dz = (float) position.z - (float) origin.z;
         const float distanceSquared = dx * dx + dy * dy + dz * dz;
         const float radiusSquared = (float) settings.mNoGrowthRadius * (float) settings.mNoGrowthRadius;
-        if (radiusSquared <= distanceSquared && canPlaceGrowth(level, position)) {
+        if (radiusSquared <= distanceSquared && canPlaceGrowth(world, position)) {
             if (nextInt(random, settings.mGrowthSpawnCost) < charge) {
                 const Vector3i above(position.x, position.y + 1, position.z);
                 const bool shrieker = nextInt(random, SHRIEKER_CHANCE) == 0;
@@ -236,17 +229,11 @@ namespace {
                     const BlockState base = VanillaBlocks::SCULK_SHRIEKER().toBlockState();
                     Tag states = base.mStates;
                     states.putByte(STATE_CAN_SUMMON, settings.mWorldGeneration ? 1 : 0);
-                    const BlockState growth(base.mName, states);
-                    level.setBlock(above, growth, true);
-                    level.onBlockPlaced(above, growth);
+                    world.placeGrowth(above, BlockState(base.mName, states));
                 } else {
-                    const BlockState growth = VanillaBlocks::SCULK_SENSOR().toBlockState();
-                    level.setBlock(above, growth, true);
-                    level.onBlockPlaced(above, growth);
+                    world.placeGrowth(above, VanillaBlocks::SCULK_SENSOR().toBlockState());
                 }
-                if (owner != nullptr)
-                    owner->playLevelSound(level, shrieker ? SOUND_SHRIEKER_PLACE : SOUND_SENSOR_PLACE,
-                                          Vector3f((float) position.x, (float) position.y, (float) position.z));
+                world.playSound(shrieker ? SOUND_SHRIEKER_PLACE : SOUND_SENSOR_PLACE, position);
             }
             return std::max(0, charge - settings.mGrowthSpawnCost);
         }
@@ -273,33 +260,32 @@ namespace {
         return charge - penalty;
     }
 
-    int32_t veinUseCharge(ServerNetworkHandler *owner, Level &level, const SculkChargeCursor &cursor,
-                          std::mt19937 &random, const SculkSpreader &spreader, bool convertBlocks) {
+    int32_t veinUseCharge(SculkWorld &world, const SculkChargeCursor &cursor, std::mt19937 &random,
+                          const SculkSpreader &spreader, bool convertBlocks) {
         const int32_t charge = cursor.mCharge;
         const Vector3i &position = cursor.mPosition;
         if (convertBlocks) {
-            std::array<int32_t, 6> faces = {0, 1, 2, 3, 4, 5};
+            // the game shuffles its faces from up, down, north, south, west, east
+            std::array<int32_t, 6> faces = SPREAD_ORDER;
             for (size_t index = 1; index < faces.size(); ++index) {
                 const size_t swap = (size_t) (random() % (uint32_t) (index + 1));
                 if (swap != index)
                     std::swap(faces[index], faces[swap]);
             }
-            const BlockState state = blockAt(level, position);
+            const BlockState &state = world.getBlock(position);
             for (int32_t face: faces) {
                 if (!SculkBehaviours::hasFace(state, face))
                     continue;
                 const Vector3i sculk = add(position, faceStep(face));
-                if (!spreader.isReplaceable(blockAt(level, sculk)))
+                if (!spreader.isReplaceable(world.getBlock(sculk)))
                     continue;
-                level.setBlock(sculk, sculkState(), true);
-                if (owner != nullptr)
-                    owner->playLevelSound(level, SOUND_SPREAD,
-                                          Vector3f((float) position.x, (float) position.y, (float) position.z));
-                for (int32_t around = 0; around < 6; ++around) {
+                world.setBlock(sculk, sculkState());
+                world.playSound(SOUND_SPREAD, position);
+                for (int32_t around: SPREAD_ORDER) {
                     if (around != opposite(face))
-                        dischargeVein(level, add(sculk, faceStep(around)));
+                        dischargeVein(world, add(sculk, faceStep(around)));
                 }
-                SculkBehaviours::spreadVeinsAll(level, sculk, false);
+                SculkBehaviours::spreadVeinsAll(world, sculk, false);
                 return charge - 1;
             }
         }
@@ -346,41 +332,42 @@ namespace SculkBehaviours {
     }
 
     int32_t spreadVeinsAll(Level &level, const Vector3i &position, bool samePositionOnly) {
+        LevelSculkWorld world(nullptr, level);
+        return spreadVeinsAll(world, position, samePositionOnly);
+    }
+
+    int32_t spreadVeinsAll(SculkWorld &world, const Vector3i &position, bool samePositionOnly) {
         int32_t placed = 0;
         for (int32_t from: SPREAD_ORDER)
-            placed += spreadFromFace(level, position, from, samePositionOnly);
+            placed += spreadFromFace(world, position, from, samePositionOnly);
         return placed;
     }
 
-    bool attemptSpreadVein(Kind kind, ServerNetworkHandler *owner, Level &level, const Vector3i &position,
-                           int32_t facings, bool worldGeneration) {
-        (void) owner;
-        (void) worldGeneration;
+    bool attemptSpreadVein(Kind kind, SculkWorld &world, const Vector3i &position, int32_t facings) {
         if (kind != Kind::Default || facings == SculkChargeCursor::SCULK_FACES)
-            return spreadVeinsAll(level, position, false) > 0;
+            return spreadVeinsAll(world, position, false) > 0;
         if (facings == SculkChargeCursor::ALL_FACES)
-            return spreadVeinsAll(level, position, true) > 0;
-        if (!veinCanReplace(level, position, blockAt(level, position)))
+            return spreadVeinsAll(world, position, true) > 0;
+        if (!veinCanReplace(world, position, world.getBlock(position)))
             return false;
-        level.setBlock(position, veinWith(facings), true);
+        world.setBlock(position, veinWith(facings));
         return true;
     }
 
-    int32_t attemptUseCharge(Kind kind, ServerNetworkHandler *owner, Level &level, const Vector3i &origin,
-                             const SculkChargeCursor &cursor, std::mt19937 &random, const SculkSpreader &spreader,
-                             bool convertBlocks) {
+    int32_t attemptUseCharge(Kind kind, SculkWorld &world, const Vector3i &origin, const SculkChargeCursor &cursor,
+                             std::mt19937 &random, const SculkSpreader &spreader, bool convertBlocks) {
         switch (kind) {
             case Kind::Sculk:
-                return sculkUseCharge(owner, level, origin, cursor, random, spreader);
+                return sculkUseCharge(world, origin, cursor, random, spreader);
             case Kind::Vein:
-                return veinUseCharge(owner, level, cursor, random, spreader, convertBlocks);
+                return veinUseCharge(world, cursor, random, spreader, convertBlocks);
             default:
                 return cursor.mDecayDelay > 0 ? cursor.mCharge : 0;
         }
     }
 
-    void onDischarged(Kind kind, Level &level, const Vector3i &position) {
+    void onDischarged(Kind kind, SculkWorld &world, const Vector3i &position) {
         if (kind == Kind::Vein)
-            dischargeVein(level, position);
+            dischargeVein(world, position);
     }
 }

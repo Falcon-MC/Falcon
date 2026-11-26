@@ -1,4 +1,6 @@
 #include "World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.h"
+
+#include <cmath>
 #include "World/Actor/Movement/PlayerMovementContext.h"
 #include "World/Actor/Movement/PlayerMovementValidator.h"
 #include "World/Actor/Movement/Systems/PlayerPredictionSystem.h"
@@ -51,6 +53,16 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
         }
         context.player.clearMovementSimulation();
         return false;
+    }
+    // still where the teleport put it: the client may be waiting for the chunk and doesn't fall meanwhile
+    if (context.player.isSettlingAfterTeleport()) {
+        const Vector3f &reported = *context.prediction.feetPosition;
+        if (std::fabs(reported.x - state.start.x) < 0.0001f && std::fabs(reported.y - state.start.y) < 0.0001f
+            && std::fabs(reported.z - state.start.z) < 0.0001f) {
+            context.player.clearMovementSimulation();
+            return false;
+        }
+        context.player.finishTeleportSettle();
     }
 
     return true;
