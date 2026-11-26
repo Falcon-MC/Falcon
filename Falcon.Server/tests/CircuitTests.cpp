@@ -197,6 +197,105 @@ namespace {
         require(on != 0 && on <= 4, "a torch did not light again within two evaluations");
     }
 
+    // wall torches on the four sides of a block, a block over each torch and dust on the block: the game links the
+    // torches into a ring, and a torch taken out of the ring leaves no torch pointing at it
+    void torchRing() {
+        Fixture fixture;
+        const Vector3i centre(8, 64, 8);
+        fixture.set(centre, fixture.block("minecraft:stone"));
+        // each torch hangs on the centre block: its facing names the side its support is on
+        const Vector3i torches[4] = {Vector3i(8, 64, 7), Vector3i(7, 64, 8), Vector3i(8, 64, 9), Vector3i(9, 64, 8)};
+        const char *facing[4] = {"south", "east", "north", "west"};
+        for (int index = 0; index < 4; ++index) {
+            const Vector3i &at = torches[index];
+            fixture.set(Vector3i(at.x, at.y + 1, at.z), fixture.block("minecraft:stone"));
+            BlockState torch = fixture.block("minecraft:redstone_torch");
+            torch.mStates.putString("torch_facing_direction", facing[index]);
+            fixture.set(at, torch);
+        }
+        fixture.set(Vector3i(centre.x, centre.y + 1, centre.z), fixture.block("minecraft:redstone_wire"));
+        fixture.run(10);
+
+        CircuitSystem &circuit = RedstoneSystem::circuitOf(fixture.mLevel);
+        const auto torchAt = [&circuit](const Vector3i &at) {
+            const BaseCircuitComponent *component = circuit.getComponent(at);
+            require(component != nullptr && component->getInstanceType() == CircuitComponentType::Torch,
+                    "a ring torch had no torch component");
+            return static_cast<const RedstoneTorchCapacitor *>(component);
+        };
+        const RedstoneTorchCapacitor *first = torchAt(torches[0]);
+        const RedstoneTorchCapacitor *next = first;
+        for (int step = 0; step < 4; ++step) {
+            require(next->getNextOrder() != nullptr, "a torch of the ring was not linked to the next one");
+            next = next->getNextOrder();
+        }
+        require(next == first, "the four torches did not form one ring");
+        require(torchAt(torches[0])->getNextOrder() == torchAt(torches[1]),
+                "the light did not go from the north torch to the west one");
+
+        const RedstoneTorchCapacitor *gone = torchAt(torches[1]);
+        fixture.set(torches[1], BlockState(BlockNames::AIR));
+        fixture.run(10);
+        for (int index = 0; index < 4; ++index) {
+            if (index == 1)
+                continue;
+            const RedstoneTorchCapacitor *torch = torchAt(torches[index]);
+            for (int step = 0; step < 4 && torch != nullptr; ++step) {
+                require(torch != gone, "a torch still pointed at a torch taken out of the ring");
+                torch = torch->getNextOrder();
+            }
+        }
+        // the rebuilt ring goes north, south, east and back to north
+        require(torchAt(torches[0])->getNextOrder() == torchAt(torches[2])
+                        && torchAt(torches[2])->getNextOrder() == torchAt(torches[3])
+                        && torchAt(torches[3])->getNextOrder() == torchAt(torches[0]),
+                "the three torches left did not form one ring in order");
+    }
+
+    // the ring's block powered from outside the ring: the game lights every torch of the ring
+    void torchRingOutsidePower() {
+        Fixture fixture;
+        const Vector3i centre(8, 64, 8);
+        fixture.set(centre, fixture.block("minecraft:stone"));
+        const Vector3i torches[4] = {Vector3i(8, 64, 7), Vector3i(7, 64, 8), Vector3i(8, 64, 9), Vector3i(9, 64, 8)};
+        const char *facing[4] = {"south", "east", "north", "west"};
+        for (int index = 0; index < 4; ++index) {
+            const Vector3i &at = torches[index];
+            fixture.set(Vector3i(at.x, at.y + 1, at.z), fixture.block("minecraft:stone"));
+            BlockState torch = fixture.block("minecraft:redstone_torch");
+            torch.mStates.putString("torch_facing_direction", facing[index]);
+            fixture.set(at, torch);
+        }
+        fixture.set(Vector3i(centre.x, centre.y + 1, centre.z), fixture.block("minecraft:redstone_wire"));
+        // a lever hanging under the centre block strongly powers it
+        BlockState lever = fixture.lever(true);
+        lever.mStates.putString("lever_direction", "down_east_west");
+        fixture.set(Vector3i(centre.x, centre.y - 1, centre.z), lever);
+        fixture.run(12);
+        for (int tick = 0; tick < 6; ++tick) {
+            fixture.run(1);
+            for (const Vector3i &at: torches)
+                require(fixture.at(at).mName == "minecraft:redstone_torch",
+                        "a ring torch was off while the ring's block was powered from outside");
+        }
+
+        lever.mStates.putByte("open_bit", 0);
+        fixture.set(Vector3i(centre.x, centre.y - 1, centre.z), lever);
+        fixture.run(10);
+        unsigned litTorches = 0;
+        for (int tick = 0; tick < 12; ++tick) {
+            fixture.run(1);
+            unsigned litThisTick = 0;
+            for (unsigned index = 0; index < 4; ++index) {
+                if (fixture.at(torches[index]).mName == "minecraft:redstone_torch")
+                    litThisTick |= 1u << index;
+            }
+            if (litThisTick != 0 && (litThisTick & (litThisTick - 1)) == 0)
+                litTorches |= litThisTick;
+        }
+        require(litTorches == 15, "the light did not go around the ring again after outside power fell");
+    }
+
     // the lamp lights with the evaluation and goes out four ticks after it loses power
     void lampTurnsOffLate() {
         Fixture fixture;
@@ -459,6 +558,8 @@ int main() {
         dustDampening();
         repeaterDelay();
         torchInverts();
+        torchRing();
+        torchRingOutsidePower();
         lampTurnsOffLate();
         pistonNoQuasiConnectivity();
         chunkBorder();
