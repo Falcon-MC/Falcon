@@ -414,12 +414,17 @@ bool RailTransporterComponent::allowConnection(CircuitSceneGraph &graph, const C
     const BaseCircuitComponent *next = info.mCurrent.mComponent;
     if (next == nullptr || next->getInstanceType() != CircuitComponentType::RailTransporter)
         return false;
-    if (static_cast<const RailTransporterComponent *>(next)->mGolden != mGolden)
+    const auto *nextRail = static_cast<const RailTransporterComponent *>(next);
+    if (nextRail->mGolden != mGolden)
         return false;
     const uint8_t axis = getDirection();
     if (next->getDirection() != axis)
         return false;
-    return info.mCurrent.mDirection == axis || info.mCurrent.mDirection == CircuitFace::opposite(axis);
+    const uint8_t face = info.mCurrent.mDirection;
+    if (face != axis && face != CircuitFace::opposite(axis))
+        return false;
+    const int rise = (mUphill == face ? 1 : 0) - (nextRail->mUphill == CircuitFace::opposite(face) ? 1 : 0);
+    return info.mCurrent.mPos.y - info.mNearest.mPos.y == rise;
 }
 
 bool RailTransporterComponent::evaluate(CircuitSystem &system, const Vector3i &position) {

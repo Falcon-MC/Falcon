@@ -28,15 +28,20 @@ namespace {
         ServerNetworkHandler mOwner{"Projectile impacts", "", 1};
         Level *mLevel = nullptr;
 
-        // the spawn chunk keeps its generated terrain, whose height changes with the seed: tests stay out of it
         explicit Arena(const std::filesystem::path &directory) {
             const std::filesystem::path path = directory / "normal.properties";
             std::ofstream(path) << "difficulty=normal\n";
             mOwner.setProperties(PropertiesSettings(path.string()));
             mLevel = &mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
-            for (int32_t x = -3; x <= 3; x++) {
-                for (int32_t z = -3; z <= 3; z++)
+            // wide: a homing bullet's random legs can carry it 100 blocks off, and a chunk it reads out of memory
+            // would be generated with terrain
+            for (int32_t x = -8; x <= 8; x++) {
+                for (int32_t z = -8; z <= 8; z++) {
+                    // the opened world has generated the chunk its random seed spawns in, and an existing chunk
+                    // wins the insert
+                    mLevel->dropChunk(x, z);
                     mLevel->insertChunk(LevelChunk(x, z)).setPopulated(true);
+                }
             }
         }
 
@@ -204,7 +209,9 @@ namespace {
         bullet.setOwnerUniqueId(shulker.getUniqueId());
         bullet.launchAt(arena.mOwner, shulker, cow);
         const int64_t id = bullet.getUniqueId();
-        for (int32_t tick = 0; tick < 300 && arena.alive(id); ++tick)
+        // most bullets land in 40 ticks; lined up with the cow on two axes, the next leg is random and can fly the
+        // other way: 1 in 250 takes over 300 ticks, 2400 leave a miss under 1e-8
+        for (int32_t tick = 0; tick < 2400 && arena.alive(id); ++tick)
             arena.mOwner.tickActors();
         require(!arena.alive(id), "the shulker bullet never reached the cow");
         require(cow.hasEffect(MobEffectId::Levitation),

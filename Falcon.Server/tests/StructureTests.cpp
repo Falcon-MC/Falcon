@@ -497,15 +497,16 @@ namespace {
                 "A lying end rod faces the wrong side");
     }
 
-    // the fill the game adds near a buried stronghold piece: full inside, falling to nothing six blocks out
+    // the fill the game adds near a buried stronghold piece where the terrain is empty: full inside, falling to
+    // nothing six blocks out
     void checkStrongholdBury() {
         TerrainBeard beard;
         beard.addBuriedBox(0, 0, {0, 10, 0, 4, 14, 4});
         beard.addBuriedBox(0, 0, {100, 10, 100, 104, 14, 104});
-        require(beard.buried(2, 12, 2) == 1.0f, "A buried piece does not fill its own box");
-        require(beard.buried(7, 12, 2) == 0.5f, "A buried piece fills three blocks out wrongly");
-        require(beard.buried(10, 12, 2) == 0.0f, "A buried piece fills six blocks out");
-        require(beard.buried(2, 20, 2) == 0.5f, "A buried piece fills six blocks above wrongly");
+        require(beard.adjust(2, 12, 2, -1.0f) == 1.0f, "A buried piece does not fill its own box");
+        require(beard.adjust(7, 12, 2, -1.0f) == 0.5f, "A buried piece fills three blocks out wrongly");
+        require(beard.adjust(10, 12, 2, -1.0f) == 0.0f, "A buried piece fills six blocks out");
+        require(beard.adjust(2, 20, 2, -1.0f) == 0.5f, "A buried piece fills six blocks above wrongly");
         require(beard.getMinY() == -2 && beard.getMaxY() == 25, "A buried piece reaches the wrong cells");
     }
 

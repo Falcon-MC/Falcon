@@ -515,6 +515,21 @@ namespace {
         return eastWest ? CircuitFace::WEST : CircuitFace::SOUTH;
     }
 
+    uint8_t railUphill(const BlockState &state) {
+        switch (stateInt(state, "rail_direction", BaseRailBlock::STRAIGHT_NORTH_SOUTH)) {
+            case BaseRailBlock::ASCENDING_EAST:
+                return CircuitFace::EAST;
+            case BaseRailBlock::ASCENDING_WEST:
+                return CircuitFace::WEST;
+            case BaseRailBlock::ASCENDING_NORTH:
+                return CircuitFace::NORTH;
+            case BaseRailBlock::ASCENDING_SOUTH:
+                return CircuitFace::SOUTH;
+            default:
+                return CircuitFace::NONE;
+        }
+    }
+
     void setupComponent(Level &level, const Vector3i &position, const BlockState &state) {
         CircuitSystem &circuit = *stateOf(level).mCircuit;
         switch (kindOf(state)) {
@@ -588,6 +603,7 @@ namespace {
                 auto *rail = circuit.create<RailTransporterComponent>(position, railAxis(state));
                 if (rail != nullptr) {
                     rail->setGolden(state.mName == "minecraft:golden_rail");
+                    rail->setUphill(railUphill(state));
                     if (stateBool(state, PoweredRailBlock::STATE_POWERED, false))
                         rail->setStrength(RedstoneSystem::MAX_SIGNAL);
                 }
@@ -617,6 +633,7 @@ namespace {
                 break;
             case CircuitKind::Rail:
                 component->setDirection(railAxis(state));
+                static_cast<RailTransporterComponent *>(component)->setUphill(railUphill(state));
                 break;
             default:
                 break;

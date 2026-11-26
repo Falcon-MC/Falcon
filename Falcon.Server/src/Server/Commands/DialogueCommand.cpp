@@ -59,10 +59,10 @@ bool DialogueCommand::_open(CommandOrigin &sender, NpcActor &npc, const std::vec
 
     std::vector<ServerPlayer *> opened;
     // the game names every player out of range in one message
-    std::vector<ServerPlayer *> far;
+    std::vector<ServerPlayer *> distant;
     for (ServerPlayer *player: players) {
         if (!NpcHandler::isInRange(mHandler, npc, *player)) {
-            far.push_back(player);
+            distant.push_back(player);
             continue;
         }
         const std::string &scene = arguments.size() > 3 ? arguments[3] : npc.getSceneFor(player->getUniqueId());
@@ -72,8 +72,8 @@ bool DialogueCommand::_open(CommandOrigin &sender, NpcActor &npc, const std::vec
         }
         opened.push_back(player);
     }
-    if (!far.empty())
-        sender.sendTranslation("commands.dialogue.npcNotInRange", {joinPlayerNames(far)});
+    if (!distant.empty())
+        sender.sendTranslation("commands.dialogue.npcNotInRange", {joinPlayerNames(distant)});
     if (opened.empty())
         return false;
     sender.sendTranslation("commands.dialogue.success", {joinPlayerNames(opened)});

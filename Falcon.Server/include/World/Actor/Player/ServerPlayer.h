@@ -1115,6 +1115,7 @@ public:
         awaitMovementChange();
         const uint64_t teleport = ++mTeleportCount;
         mAwaitingTeleport = true;
+        mSettlingAfterTeleport = true;
         mAcknowledgements.add([this, teleport]() {
             if (mTeleportCount == teleport)
                 mAwaitingTeleport = false;
@@ -1125,6 +1126,19 @@ public:
     // back; bounded by the grace in case the ack never comes
     bool isAwaitingTeleport() const {
         return mAwaitingTeleport && std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
+    }
+
+    // the client holds still after a teleport, gravity included, until it has built the chunk it landed in;
+    // replaying that wait as a fall corrects a client that can't move and kicks it as a disabler. Until it first
+    // moves, inputs at the teleport position aren't replayed; bounded so standing there can't last
+    static constexpr std::chrono::milliseconds TELEPORT_SETTLE_LIMIT{10000};
+
+    bool isSettlingAfterTeleport() const {
+        return mSettlingAfterTeleport && std::chrono::steady_clock::now() - mLastTeleport < TELEPORT_SETTLE_LIMIT;
+    }
+
+    void finishTeleportSettle() {
+        mSettlingAfterTeleport = false;
     }
 
     bool changedSkinWithin(int seconds) const {
@@ -1478,6 +1492,7 @@ private:
     int32_t mPendingMovementChanges = 0;
     static constexpr int32_t MAX_INPUTS_WHILE_PENDING = 20;
     bool mAwaitingTeleport = false;
+    bool mSettlingAfterTeleport = false;
     uint64_t mTeleportCount = 0;
     int32_t mInputsWhilePending = 0;
     bool mHasPendingKnockback = false;

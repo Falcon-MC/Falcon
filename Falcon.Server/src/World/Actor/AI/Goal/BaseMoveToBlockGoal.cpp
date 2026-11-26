@@ -124,7 +124,7 @@ void BaseMoveToBlockGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     mLastPathStart = here;
 }
 
-bool BaseMoveToBlockGoal::_canReach(ServerNetworkHandler &owner, MobActor &mob, const Vector3i &position) const {
+bool BaseMoveToBlockGoal::canReach(ServerNetworkHandler &owner, MobActor &mob, const Vector3i &position) const {
     const Vector3f point((float) position.x, (float) position.y + 1.0f, (float) position.z);
     Path path;
     if (!PathFinder::get().findPath(owner.getLevelFor(mob), mob, point, mob.getNavigation().getOptions(), path)
@@ -142,7 +142,7 @@ bool BaseMoveToBlockGoal::_tryCandidate(ServerNetworkHandler &owner, MobActor &m
     const float dy = (float) (origin.y - position.y);
     const float dz = (float) (origin.z - position.z);
     const float distance = dx * dx + dy * dy + dz * dz;
-    if (distance >= best || !_canReach(owner, mob, position))
+    if (distance >= best || !canReach(owner, mob, position))
         return false;
 
     best = distance;

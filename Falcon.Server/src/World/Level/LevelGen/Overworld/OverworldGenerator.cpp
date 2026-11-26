@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/BiomeZoom.h"
 #include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
+#include "World/Level/LevelGen/Structure/AncientCityStructure.h"
 #include "World/Level/LevelGen/Structure/BuriedTreasureStructure.h"
 #include "World/Level/LevelGen/Structure/DesertPyramidStructure.h"
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
@@ -151,6 +152,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     // created right after the village in createGenerator
     StrongholdStructure::place(*this, level, chunk);
     MineshaftStructure::place(*this, level, chunk);
+    AncientCityStructure::place(*this, level, chunk);
     MansionStructure::place(*this, level, chunk);
     // after the mansion, as in createGenerator: a mansion over the sea keeps its foundation only below the monument
     MonumentStructure::place(*this, level, chunk);
@@ -183,6 +185,7 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap,
     VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     JigsawStructures::get().addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     StrongholdStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
+    AncientCityStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed
