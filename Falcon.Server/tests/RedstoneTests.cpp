@@ -270,6 +270,85 @@ namespace {
                 "a hopper placed beside a redstone block was not locked");
     }
 
+    // a door, trapdoor or fence gate placed beside power stays as placed: the trapdoor's first circuit update is
+    // skipped, and doors and gates ignore theirs. The next rising edge opens it
+    void openablePlacedPowered() {
+        const auto open = [](RedstoneFixture &fixture, const Vector3i &position) {
+            return fixture.at(position).mStates.getByte("open_bit", 0) != 0;
+        };
+        const Vector3i power(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z);
+        const auto edge = [&power](RedstoneFixture &fixture) {
+            fixture.set(power, BlockState(BlockNames::AIR));
+            fixture.run(6);
+            fixture.set(power, VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+            fixture.run(6);
+        };
+
+        {
+            RedstoneFixture fixture;
+            const Vector3i upper(ORIGIN.x, ORIGIN.y + 1, ORIGIN.z);
+            BlockState door = VanillaBlocks::IRON_DOOR().toBlockState();
+            door.mStates.putByte("upper_block_bit", 0);
+            BlockState top = door;
+            top.mStates.putByte("upper_block_bit", 1);
+            fixture.set(power, VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+            fixture.run(4);
+            fixture.set(ORIGIN, door);
+            fixture.set(upper, top);
+            fixture.run(6);
+            require(!open(fixture, ORIGIN) && !open(fixture, upper), "a door placed beside a redstone block opened");
+            edge(fixture);
+            require(open(fixture, ORIGIN) && open(fixture, upper),
+                    "a door placed beside a redstone block ignored the next rising edge");
+        }
+
+        const BlockState placed[] = {VanillaBlocks::IRON_TRAPDOOR().toBlockState(),
+                                     VanillaBlocks::FENCE_GATE().toBlockState()};
+        for (const BlockState &state: placed) {
+            RedstoneFixture fixture;
+            fixture.set(power, VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+            fixture.run(4);
+            fixture.set(ORIGIN, state);
+            fixture.run(6);
+            require(!open(fixture, ORIGIN), state.mName + " placed beside a redstone block opened");
+            edge(fixture);
+            require(open(fixture, ORIGIN), state.mName + " placed beside a redstone block ignored the next rising edge");
+        }
+    }
+
+    // a chunk load rebuilds the circuit: a hopper takes that first update, a trapdoor skips it and keeps its
+    // saved state
+    void circuitReload() {
+        RedstoneFixture fixture;
+        const auto withByte = [](const Block &block, const char *key, int8_t value) {
+            BlockState state = block.toBlockState();
+            state.mStates.putByte(key, value);
+            return state;
+        };
+        const auto byte = [&fixture](const Vector3i &position, const char *key) {
+            return fixture.at(position).mStates.getByte(key, 0);
+        };
+        const Vector3i lockedHopper(2, 64, 2);
+        const Vector3i freeHopper(2, 64, 6);
+        const Vector3i shutTrapdoor(10, 64, 2);
+        const Vector3i openTrapdoor(10, 64, 6);
+        // saved in the wrong state for the power around them
+        fixture.set(lockedHopper, withByte(VanillaBlocks::HOPPER(), "toggle_bit", 0));
+        fixture.set(Vector3i(lockedHopper.x + 1, 64, lockedHopper.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        fixture.set(freeHopper, withByte(VanillaBlocks::HOPPER(), "toggle_bit", 1));
+        fixture.set(shutTrapdoor, withByte(VanillaBlocks::IRON_TRAPDOOR(), "open_bit", 0));
+        fixture.set(Vector3i(shutTrapdoor.x + 1, 64, shutTrapdoor.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        fixture.set(openTrapdoor, withByte(VanillaBlocks::IRON_TRAPDOOR(), "open_bit", 1));
+        LevelChunk saved = fixture.mLevel.extractChunk(0, 0);
+        fixture.mLevel.insertChunk(std::move(saved));
+        fixture.run(6);
+
+        require(byte(lockedHopper, "toggle_bit") == 1, "a powered hopper was not locked after a chunk load");
+        require(byte(freeHopper, "toggle_bit") == 0, "an unpowered hopper stayed locked after a chunk load");
+        require(byte(shutTrapdoor, "open_bit") == 0, "a shut trapdoor beside power opened after a chunk load");
+        require(byte(openTrapdoor, "open_bit") == 1, "an open unpowered trapdoor shut after a chunk load");
+    }
+
     void copperBulb() {
         RedstoneFixture fixture;
 
@@ -343,6 +422,8 @@ int main() {
         comparatorStateIsLevelScoped();
         hopperLock();
         hopperPlacedPowered();
+        openablePlacedPowered();
+        circuitReload();
         lightningRod();
         copperBulb();
         detectorRail();

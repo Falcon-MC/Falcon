@@ -27,9 +27,6 @@ public:
     // block_open or block_close, once per door, gate or trapdoor
     static void postToggled(Level &level, const Vector3i &position, bool open, Actor *source);
 
-    static void openOnPlace(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                            const BlockState &state);
-
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
 };

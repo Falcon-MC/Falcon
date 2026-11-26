@@ -38,11 +38,3 @@ bool TrapDoorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
                                const BlockState &state) const {
     return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state, &player);
 }
-
-void TrapDoorBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                             const BlockState &state, const ItemStack &usedItem, int blockFace) const {
-    (void) usedItem;
-    (void) blockFace;
-
-    OpenableBlock::openOnPlace(owner, owner.getLevelFor(player), position, state);
-}
