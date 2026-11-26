@@ -1,13 +1,7 @@
 name: CI
 
-# pull requests run the tests job only, so a broken change is caught before it reaches dev without the full
-# build matrix filling the queue ahead of dev's runs. A branch can still be fully built with workflow_dispatch
 on:
   push:
-    branches:
-      - main
-      - dev
-  pull_request:
     branches:
       - main
       - dev
@@ -16,19 +10,14 @@ on:
     types:
       - upstream-updated
 
-# on dev and main the run in progress is left to finish and only the newest waiting one is kept: with
-# cancelling, a burst of merges meant no run of dev ever reached its end. A pull request's new push replaces
-# its older run
+# let a running build finish even when several changes land close together
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
-# pull requests target dev, and a run can only restore caches from its own branch,
-# its base branch and the default branch. without a warm cache on dev every pull
-# request recompiles the dependencies from scratch, so dev is built on push to seed it.
 # content keeps hits across runner images whose compiler mtime differs.
 env:
   CCACHE_COMPILERCHECK: content
@@ -37,7 +26,6 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.name }}
-    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -192,7 +180,6 @@ jobs:
 
   internal-plugins:
     name: Internal plugins linux-x64
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     continue-on-error: true
 
@@ -254,7 +241,6 @@ jobs:
 
   dotnet-plugins:
     name: .NET plugins linux-x64
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     continue-on-error: true
 
@@ -310,7 +296,6 @@ jobs:
 
   java-plugins:
     name: Java plugins linux-x64
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     continue-on-error: true
 
