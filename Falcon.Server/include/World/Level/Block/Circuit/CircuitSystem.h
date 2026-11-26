@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <memory>
+#include <unordered_set>
 
 // strength is the component's, previous the one the last update saw
 using CircuitBlockUpdate = std::function<void(const Vector3i &position, int strength, int previous, bool firstTime)>;
@@ -66,9 +67,16 @@ public:
         return mSceneGraph;
     }
 
+    // a chunk leaving: its components go, and the chunks within 32 blocks wait for it to come back
     void removeChunk(int32_t chunkX, int32_t chunkZ);
 
+    void onChunkLoaded(int32_t chunkX, int32_t chunkZ);
+
+    // the chunks around an unloaded one, within 32 blocks, are not evaluated
+    static constexpr int WAIT_RADIUS_CHUNKS = 2;
+
 private:
+    bool _isNearUnloaded(int64_t chunk) const;
     BaseCircuitComponent *_create(const Vector3i &position, uint8_t direction,
                                   std::unique_ptr<BaseCircuitComponent> component);
 
@@ -78,4 +86,6 @@ private:
     CircuitSceneGraph mSceneGraph;
     bool mHasBeenEvaluated = true;
     int mTickCounter = TICK_RATE;
+    // chunks that unloaded and have not come back, kept while a chunk with components is near them
+    std::unordered_set<int64_t> mUnloadedChunks;
 };

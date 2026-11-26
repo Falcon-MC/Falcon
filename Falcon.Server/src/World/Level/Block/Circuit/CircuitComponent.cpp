@@ -166,14 +166,6 @@ bool ProducerComponent::evaluate(CircuitSystem &system, const Vector3i &position
     return false;
 }
 
-bool FacedProducerComponent::allowConnection(CircuitSceneGraph &graph, const CircuitTrackingInfo &info,
-                                             bool &directlyPowered) {
-    const uint8_t face = info.mCurrent.mDirection;
-    if (face != CircuitFace::NONE && (face >= CircuitFace::NONE || (mFaceMask & (1u << face)) == 0))
-        return false;
-    return ProducerComponent::allowConnection(graph, info, directlyPowered);
-}
-
 int PoweredBlockComponent::getStrength() const {
     int strength = 0;
     for (const CircuitSourceItem &item: mSources) {
@@ -295,8 +287,7 @@ bool TransporterComponent::allowConnection(CircuitSceneGraph &graph, const Circu
             const BaseCircuitComponent *above = graph.getComponent(Vector3i(current.x, current.y + 1, current.z));
             if (above != nullptr && !above->isRemoved() && !above->blocksWireStepDown())
                 return false;
-            const BaseCircuitComponent *support = graph.getComponent(Vector3i(nearest.x, nearest.y - 1, nearest.z));
-            return support == nullptr || support->isRemoved() || support->allowsWireStepDownBelow();
+            return true;
         }
         if (current.y == nearest.y)
             return true;
@@ -368,27 +359,6 @@ bool TransporterComponent::evaluate(CircuitSystem &system, const Vector3i &posit
     const bool changed = (int16_t) mNextStrength != mStrength;
     mStrength = (int16_t) mNextStrength;
     return changed;
-}
-
-bool ConsumerComponent::needsBlockUpdate() {
-    if (!mNeedsUpdate)
-        return false;
-    if (mHandled) {
-        mNeedsUpdate = false;
-        return false;
-    }
-    for (ConsumerComponent *other: mGroup) {
-        if (other == this)
-            continue;
-        if (other->mNeedsUpdate && other->mStrength >= mStrength) {
-            mNeedsUpdate = false;
-            mHandled = true;
-            return false;
-        }
-        other->mNeedsUpdate = false;
-        other->mHandled = true;
-    }
-    return true;
 }
 
 bool ConsumerComponent::addSource(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, int &dampening,
@@ -479,7 +449,6 @@ bool ConsumerComponent::evaluate(CircuitSystem &system, const Vector3i &position
     }
     const int16_t previous = mStrength;
     mStrength = (int16_t) strength;
-    mHandled = false;
     return mIsFirstTime || previous != mStrength;
 }
 
@@ -824,11 +793,6 @@ void ComparatorCapacitor::updateDependencies(CircuitSceneGraph &graph, const Vec
     (void) graph, (void) position;
     const uint8_t rear = CircuitFace::opposite(getDirection());
     for (auto it = mSources.begin(); it != mSources.end();) {
-        if (it->mComponent != nullptr && it->mComponent->canStopPower()) {
-            it->mComponent->forgetDestination(this);
-            it = mSources.erase(it);
-            continue;
-        }
         if (it->mDirection == rear) {
             ++it;
             continue;
@@ -844,8 +808,6 @@ void ComparatorCapacitor::updateDependencies(CircuitSceneGraph &graph, const Vec
 
 void ComparatorCapacitor::cacheValues(CircuitSystem &system, const Vector3i &position) {
     (void) system, (void) position;
-    if (!mEnabled)
-        return;
     mRearStrength = 0;
     mSideStrength = 0;
     for (const CircuitSourceItem &item: mSources) {
@@ -862,9 +824,7 @@ bool ComparatorCapacitor::evaluate(CircuitSystem &system, const Vector3i &positi
     const int16_t previous = mStrength;
     mCachedStrength = previous;
     const int rear = mRearAnalogStrength == -1 ? mRearStrength : mRearAnalogStrength;
-    int side = mSideStrength;
-    if ((mSideAnalogStrengthLeft & mSideAnalogStrengthRight) != -1)
-        side = std::max(mSideAnalogStrengthLeft, mSideAnalogStrengthRight);
+    const int side = mSideStrength;
     int output;
     if (mSubtract)
         output = std::max(rear - side, 0);

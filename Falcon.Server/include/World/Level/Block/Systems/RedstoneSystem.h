@@ -71,7 +71,7 @@ public:
 
     static int getRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face);
 
-    // the strength the consumer at `position` receives
+    // the strength the consumer at `position` receives; elsewhere, the strongest power its neighbours give it
     static int isBlockIndirectlyGettingPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     static bool isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position);

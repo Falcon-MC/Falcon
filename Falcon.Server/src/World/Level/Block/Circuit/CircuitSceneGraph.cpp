@@ -142,7 +142,26 @@ void CircuitSceneGraph::_scheduleSourcesOf(const BaseCircuitComponent *component
 
 void CircuitSceneGraph::_insert(const Vector3i &position, std::unique_ptr<BaseCircuitComponent> component) {
     component->setPosition(position);
+    if (component->getInstanceType() == CircuitComponentType::Comparator)
+        mComparators[key(position)] = component.get();
     mAllComponents[key(position)] = std::move(component);
+    mComponentsPerChunk[chunkKey(position.x >> 4, position.z >> 4)].insert(key(position));
+}
+
+std::unique_ptr<BaseCircuitComponent> CircuitSceneGraph::_erase(const Vector3i &position) {
+    const auto found = mAllComponents.find(key(position));
+    if (found == mAllComponents.end())
+        return nullptr;
+    std::unique_ptr<BaseCircuitComponent> owned = std::move(found->second);
+    mAllComponents.erase(found);
+    mComparators.erase(key(position));
+    const auto chunk = mComponentsPerChunk.find(chunkKey(position.x >> 4, position.z >> 4));
+    if (chunk != mComponentsPerChunk.end()) {
+        chunk->second.erase(key(position));
+        if (chunk->second.empty())
+            mComponentsPerChunk.erase(chunk);
+    }
+    return owned;
 }
 
 void CircuitSceneGraph::_processRemoves() {
@@ -152,13 +171,14 @@ void CircuitSceneGraph::_processRemoves() {
         const auto found = mAllComponents.find(key(position));
         if (found == mAllComponents.end() || found->second.get() != component)
             continue;
-        std::unique_ptr<BaseCircuitComponent> owned = std::move(found->second);
-        mAllComponents.erase(found);
+        std::unique_ptr<BaseCircuitComponent> owned = _erase(position);
         if (owned->getBaseType() != CircuitComponentType::PoweredBlock)
             mPowerAssociationMap.erase(key(position));
 
-        for (auto &chunk: mActiveComponentsPerChunk) {
-            std::vector<ChunkEntry> &entries = chunk.second.mEntries;
+        // only the list of the chunk holding it can have it
+        const auto list = mActiveComponentsPerChunk.find(chunkKey(position.x >> 4, position.z >> 4));
+        if (list != mActiveComponentsPerChunk.end()) {
+            std::vector<ChunkEntry> &entries = list->second.mEntries;
             entries.erase(std::remove_if(entries.begin(), entries.end(),
                                          [&](const ChunkEntry &entry) { return samePosition(entry.mPos, position); }),
                           entries.end());
@@ -228,11 +248,17 @@ void CircuitSceneGraph::_processAdds() {
         if (existing != nullptr && !replacing)
             continue;
         if (replacing) {
-            for (auto &entry: mAllComponents) {
-                if (entry.second.get() != existing && entry.second->hasSource(*existing))
-                    entry.second->removeSource(position, existing);
+            // as a removal: whoever took power from it forgets it, and its own sources forget it
+            const std::map<BaseCircuitComponent *, int> destinations = existing->getDestinations();
+            for (const auto &destination: destinations) {
+                destination.first->removeSource(position, existing);
+                destination.first->removeFromAnySourceList(existing);
             }
-            mAllComponents.erase(key(position));
+            for (const CircuitSourceItem &item: existing->getSources()) {
+                if (item.mComponent != nullptr)
+                    item.mComponent->forgetDestination(existing);
+            }
+            _erase(position);
         }
 
         BaseCircuitComponent *component = pending.mComponent.get();
@@ -432,10 +458,13 @@ void CircuitSceneGraph::update(CircuitBlockSource *region) {
 }
 
 void CircuitSceneGraph::removeChunk(int32_t chunkX, int32_t chunkZ) {
-    for (auto &entry: mAllComponents) {
-        const Vector3i &position = entry.second->getPosition();
-        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ && !entry.second->isRemoved())
-            remove(position, entry.second.get());
+    const auto chunk = mComponentsPerChunk.find(chunkKey(chunkX, chunkZ));
+    if (chunk == mComponentsPerChunk.end())
+        return;
+    for (const int64_t at: chunk->second) {
+        BaseCircuitComponent *component = mAllComponents.at(at).get();
+        if (!component->isRemoved())
+            remove(component->getPosition(), component);
     }
 }
 

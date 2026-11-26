@@ -71,6 +71,11 @@ public:
     // the wire at `position` points at the block `delta` away: a dot points everywhere
     bool isWirePointingAt(const Vector3i &position, const Vector3i &delta) const;
 
+    // the comparators, which read the block behind them every tick
+    const std::unordered_map<int64_t, BaseCircuitComponent *> &getComparators() const {
+        return mComparators;
+    }
+
     std::map<int64_t, ChunkList> &getChunkLists() {
         return mActiveComponentsPerChunk;
     }
@@ -111,7 +116,13 @@ private:
 
     void _insert(const Vector3i &position, std::unique_ptr<BaseCircuitComponent> component);
 
+    // drops the component at `position` from the maps; the caller holds what it returns
+    std::unique_ptr<BaseCircuitComponent> _erase(const Vector3i &position);
+
     std::unordered_map<int64_t, std::unique_ptr<BaseCircuitComponent>> mAllComponents;
+    // the positions of every component of each chunk, powered blocks included, for a chunk unload
+    std::unordered_map<int64_t, std::unordered_set<int64_t>> mComponentsPerChunk;
+    std::unordered_map<int64_t, BaseCircuitComponent *> mComparators;
     std::map<int64_t, ChunkList> mActiveComponentsPerChunk;
     // every component a source reached on its last search
     std::unordered_map<int64_t, std::vector<CircuitSourceItem>> mPowerAssociationMap;

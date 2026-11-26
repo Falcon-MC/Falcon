@@ -870,15 +870,58 @@ int RedstoneSystem::getStrength(Level &level, const Vector3i &position) {
     return std::max(stateOf(level).mCircuit->getStrength(position), 0);
 }
 
+// what the component at `position` gives the cell on its `face` side, from that cell's side: a producer powers every
+// side, a torch every side but its support, a diode or observer only the side it points to, and dust the block under it
+// and the sides it points into. Consumers, powered blocks and rails give no power
 int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
-    (void) owner, (void) face;
-    const BaseCircuitComponent *component = stateOf(level).mCircuit->findComponent(position);
+    (void) owner;
+    if (face < 0 || face >= RedstoneFace::COUNT)
+        return 0;
+    CircuitSystem &circuit = *stateOf(level).mCircuit;
+    const BaseCircuitComponent *component = circuit.findComponent(position);
     if (component == nullptr)
         return 0;
-    const CircuitComponentType base = component->getBaseType();
-    if (base == CircuitComponentType::Consumer || base == CircuitComponentType::PoweredBlock)
-        return 0;
-    return std::clamp(component->getStrength(), 0, MAX_SIGNAL);
+    // the direction from the source to the cell asking
+    const auto towards = (uint8_t) RedstoneFace::opposite(face);
+    const int strength = std::clamp(component->getStrength(), 0, MAX_SIGNAL);
+    switch (component->getBaseType()) {
+        case CircuitComponentType::Producer:
+            return strength;
+        case CircuitComponentType::Capacitor:
+            if (component->getInstanceType() == CircuitComponentType::Torch)
+                return component->getDirection() != towards ? strength : 0;
+            return component->getPoweroutDirection() == towards ? strength : 0;
+        case CircuitComponentType::Transporter: {
+            if (towards == CircuitFace::DOWN)
+                return strength;
+            if (towards == CircuitFace::UP)
+                return 0;
+            // a dot powers every side; a line only the side it points straight into
+            bool connected[CircuitFace::NONE] = {};
+            bool any = false;
+            for (uint8_t side = CircuitFace::NORTH; side <= CircuitFace::EAST; ++side) {
+                const Vector3i next = CircuitFace::relative(position, side);
+                for (int dy = -1; dy <= 1 && !connected[side]; ++dy) {
+                    const BaseCircuitComponent *other = circuit.findComponent(Vector3i(next.x, next.y + dy, next.z));
+                    if (other == nullptr)
+                        continue;
+                    const CircuitComponentType base = other->getBaseType();
+                    connected[side] = dy == 0 ? base == CircuitComponentType::Transporter
+                                                        || base == CircuitComponentType::Producer
+                                                        || base == CircuitComponentType::Capacitor
+                                              : base == CircuitComponentType::Transporter;
+                }
+                any = any || connected[side];
+            }
+            if (!any)
+                return strength;
+            const auto left = (uint8_t) RedstoneFace::rotateYCounterClockwise(towards);
+            const auto right = (uint8_t) RedstoneFace::rotateY(towards);
+            return connected[towards] && !connected[left] && !connected[right] ? strength : 0;
+        }
+        default:
+            return 0;
+    }
 }
 
 // only through the block a producer hangs on, or the one a capacitor or wire points into
@@ -908,10 +951,19 @@ int RedstoneSystem::getRedstonePower(ServerNetworkHandler &owner, Level &level, 
     return getWeakPower(owner, level, position, face);
 }
 
+// a consumer or powered block takes the strength the circuit gave it; any other cell, such as the air an armor stand
+// stands in, the strongest power its six neighbours give it from their side
 int RedstoneSystem::isBlockIndirectlyGettingPowered(ServerNetworkHandler &owner, Level &level,
                                                     const Vector3i &position) {
-    (void) owner;
-    return std::clamp(stateOf(level).mCircuit->getStrength(position), 0, MAX_SIGNAL);
+    // placed or still waiting for the graph: a new consumer has no strength yet
+    const BaseCircuitComponent *component = stateOf(level).mCircuit->findComponent(position);
+    if (component != nullptr && (component->getBaseType() == CircuitComponentType::Consumer
+                                 || component->getBaseType() == CircuitComponentType::PoweredBlock))
+        return std::clamp(component->getStrength(), 0, MAX_SIGNAL);
+    int power = 0;
+    for (int face = 0; face < RedstoneFace::COUNT && power < MAX_SIGNAL; ++face)
+        power = std::max(power, getRedstonePower(owner, level, RedstoneFace::relative(position, face), face));
+    return power;
 }
 
 bool RedstoneSystem::isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
@@ -1002,6 +1054,7 @@ void RedstoneSystem::onChunkLoaded(ServerNetworkHandler &owner, Level &level, co
     (void) owner;
     scanChunk(level, chunk);
     stateOf(level).mCircuit->getSceneGraph().onChunkLoaded(chunk.getX(), chunk.getZ());
+    stateOf(level).mCircuit->onChunkLoaded(chunk.getX(), chunk.getZ());
 }
 
 void RedstoneSystem::onChunkUnloaded(Level &level, int32_t chunkX, int32_t chunkZ) {
@@ -1144,17 +1197,15 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
     DetectorSystem::tick(owner, level, actorInWire);
 
     // the comparator block reads the block behind it every tick
-    for (auto &chunk: circuit.getSceneGraph().getChunkLists()) {
-        for (const CircuitSceneGraph::ChunkEntry &entry: chunk.second.mEntries) {
-            if (entry.mComponent == nullptr || entry.mComponent->isRemoved()
-                || entry.mComponent->getInstanceType() != CircuitComponentType::Comparator
-                || !isChunkReady(level, entry.mPos))
-                continue;
-            const BlockState state = stateAt(level, entry.mPos);
-            if (isA<RedstoneComparatorBlock>(state))
-                static_cast<ComparatorCapacitor *>(entry.mComponent)
-                        ->setRearAnalogStrength(comparatorAnalogInput(level, entry.mPos, state));
-        }
+    for (const auto &entry: circuit.getSceneGraph().getComparators()) {
+        BaseCircuitComponent *comparator = entry.second;
+        const Vector3i &position = comparator->getPosition();
+        if (comparator->isRemoved() || !isChunkReady(level, position))
+            continue;
+        const BlockState state = stateAt(level, position);
+        if (isA<RedstoneComparatorBlock>(state))
+            static_cast<ComparatorCapacitor *>(comparator)
+                    ->setRearAnalogStrength(comparatorAnalogInput(level, position, state));
     }
 
     std::vector<int64_t> chunks;
