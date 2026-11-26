@@ -59,8 +59,6 @@ enum class BlockTraversal { None, Scaffolding, PowderSnow };
 
 enum class PathHazard { None, Damaging, Portal };
 
-enum class PistonMoveReaction { Normal, Break, PushOnly };
-
 class Block {
 public:
     virtual ~Block() = default;
@@ -554,10 +552,6 @@ public:
     virtual int getLightEmission(const BlockState &state, int dataEmission) const {
         (void) state;
         return dataEmission;
-    }
-
-    virtual PistonMoveReaction getPistonMoveReaction() const {
-        return PistonMoveReaction::Normal;
     }
 
     // VibrationProperties flags: the BlockVibrationPropertiesComponent the game gives wool and carpets

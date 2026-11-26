@@ -25,10 +25,6 @@ bool SkullBlock::matches(const std::string &identifier) {
                                        "minecraft:wither_skeleton_skull", "minecraft:zombie_head"});
 }
 
-PistonMoveReaction SkullBlock::getPistonMoveReaction() const {
-    return PistonMoveReaction::Break;
-}
-
 const char *SkullBlock::getBlockActorId() const {
     return SkullBlockActor::BLOCK_ACTOR_ID;
 }

@@ -6,7 +6,7 @@
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
-#include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/PistonMovable.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Inventory/InventoryManager.h"
@@ -32,72 +32,6 @@ namespace {
     const char *PISTON_ARM_COLLISION = "minecraft:piston_arm_collision";
     const char *STICKY_PISTON_ARM_COLLISION = "minecraft:sticky_piston_arm_collision";
     using BlockNames::AIR;
-
-    const std::unordered_set<std::string> UNPUSHABLE = {"minecraft:bedrock",
-                                                        "minecraft:obsidian",
-                                                        "minecraft:crying_obsidian",
-                                                        "minecraft:glowingobsidian",
-                                                        "minecraft:beacon",
-                                                        "minecraft:barrier",
-                                                        "minecraft:allow",
-                                                        "minecraft:deny",
-                                                        "minecraft:border_block",
-                                                        "minecraft:command_block",
-                                                        "minecraft:chain_command_block",
-                                                        "minecraft:repeating_command_block",
-                                                        "minecraft:ender_chest",
-                                                        "minecraft:end_gateway",
-                                                        "minecraft:end_portal",
-                                                        "minecraft:end_portal_frame",
-                                                        "minecraft:frog_spawn",
-                                                        "minecraft:invisible_bedrock",
-                                                        "minecraft:jigsaw",
-                                                        "minecraft:lodestone",
-                                                        "minecraft:mob_spawner",
-                                                        "minecraft:moving_block",
-                                                        "minecraft:pointed_dripstone",
-                                                        "minecraft:portal",
-                                                        "minecraft:respawn_anchor",
-                                                        "minecraft:sculk_catalyst",
-                                                        "minecraft:sculk_shrieker",
-                                                        "minecraft:structure_block",
-                                                        "minecraft:structure_void",
-                                                        "minecraft:trial_spawner",
-                                                        "minecraft:vault",
-                                                        "minecraft:creaking_heart"};
-
-    const std::unordered_set<std::string> UNPULLABLE_EXTRA = {"minecraft:campfire", "minecraft:soul_campfire",
-                                                              "minecraft:heavy_core"};
-
-    const std::unordered_set<std::string> BREAKS_WHEN_MOVED = {"minecraft:bamboo",
-                                                               "minecraft:bed",
-                                                               "minecraft:budding_amethyst",
-                                                               "minecraft:cactus",
-                                                               "minecraft:cake",
-                                                               "minecraft:campfire",
-                                                               "minecraft:soul_campfire",
-                                                               "minecraft:candle_cake",
-                                                               "minecraft:chorus_flower",
-                                                               "minecraft:chorus_plant",
-                                                               "minecraft:cocoa",
-                                                               "minecraft:dragon_egg",
-                                                               "minecraft:ladder",
-                                                               "minecraft:lever",
-                                                               "minecraft:glow_lichen",
-                                                               "minecraft:melon_block",
-                                                               "minecraft:pumpkin",
-                                                               "minecraft:snow_layer",
-                                                               "minecraft:standing_banner",
-                                                               "minecraft:wall_banner",
-                                                               "minecraft:undyed_shulker_box",
-                                                               "minecraft:vine",
-                                                               "minecraft:frame",
-                                                               "minecraft:glow_frame"};
-
-    const std::unordered_set<std::string> NEVER_BREAKS = {
-            "minecraft:rail",           "minecraft:golden_rail",  "minecraft:detector_rail",
-            "minecraft:activator_rail", "minecraft:sculk_sensor", "minecraft:calibrated_sculk_sensor",
-            "minecraft:sculk_shrieker", "minecraft:heavy_core"};
 
     struct PendingMove {
         Vector3i mPiston;
@@ -129,27 +63,6 @@ namespace {
 
     int64_t waitKey(const Vector3i &position) {
         return ((int64_t) position.x << 38) ^ ((int64_t) (position.z & 0x3FFFFFF) << 12) ^ (int64_t) (position.y & 0xFFF);
-    }
-
-    bool contains(const std::unordered_set<std::string> &set, const std::string &value) {
-        return set.find(value) != set.end();
-    }
-
-    PistonMoveReaction moveReactionOf(const BlockState &state) {
-        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-        if (block == nullptr)
-            return PistonMoveReaction::Normal;
-
-        return block->getPistonMoveReaction();
-    }
-
-    bool isFlowable(const BlockState &state) {
-        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-        if (block == nullptr)
-            return false;
-
-        const BlockData *data = block->getData();
-        return data != nullptr && !data->mSolid;
     }
 
     BlockState stateAt(Level &level, const Vector3i &position) {
@@ -240,7 +153,15 @@ namespace {
             return position.y >= mLevel.getMinY() && position.y <= mLevel.getMaxY();
         }
 
-        // _checkAttachedBlocks starts the walk with the piston's facing as the branch
+        // a piston's block actor lets it be moved only while it is retracted and still
+        bool isHeldPiston(const Vector3i &position, const BlockState &state) const {
+            if (!PistonSystem::isPiston(state.mName))
+                return false;
+            const PistonArmBlockActor *arm = mLevel.getBlockActors().find<PistonArmBlockActor>(position);
+            return (arm != nullptr && arm->isMoving()) || PistonSystem::isExtended(mLevel, position, state);
+        }
+
+        // the walk starts with the piston's facing as the branch: ahead when pushing, behind when pulling
         bool resolve(const Vector3i &origin, int facing) {
             return walk(origin, facing) && mToMove.size() <= (size_t) PistonSystem::MOVE_BLOCK_LIMIT;
         }
@@ -254,9 +175,9 @@ namespace {
                 return true;
 
             const bool ahead = branch == mDirection;
-            // the game keeps a block with a piston block actor (type 18) in place unless its actor allows the move,
-            // the moving piston included
-            if (position == mPiston || !PistonSystem::canBePushed(state))
+            // the moving piston, an immovable block and a piston that is out or moving hold: they stop a push and
+            // stay behind on a pull
+            if (position == mPiston || !PistonSystem::canBePushed(state) || isHeldPiston(position, state))
                 return !ahead;
 
             if (PistonSystem::canSticksBlock(state)) {
@@ -336,47 +257,19 @@ int PistonSystem::getStoredFacing(const BlockState &state) {
 }
 
 bool PistonSystem::canBePushed(const BlockState &state) {
-    if (isAir(state))
-        return true;
-    if (contains(UNPUSHABLE, state.mName) || isArmCollision(state.mName))
-        return false;
-
-    return true;
+    return isAir(state) || PistonMovable::of(state.mName).mMovement != PistonMovement::Immovable;
 }
 
 bool PistonSystem::canBePulled(const BlockState &state) {
-    if (!canBePushed(state))
-        return false;
-
-    return !contains(UNPULLABLE_EXTRA, state.mName) && moveReactionOf(state) != PistonMoveReaction::PushOnly;
+    return !isAir(state) && PistonMovable::of(state.mName).mMovement == PistonMovement::PushPull;
 }
 
 bool PistonSystem::breaksWhenMoved(const BlockState &state) {
-    if (isAir(state))
-        return false;
-    if (contains(NEVER_BREAKS, state.mName))
-        return false;
-    if (contains(BREAKS_WHEN_MOVED, state.mName))
-        return true;
-    if (moveReactionOf(state) == PistonMoveReaction::Break)
-        return true;
-
-    return isFlowable(state);
-}
-
-bool PistonSystem::sticksToPiston(const BlockState &state) {
-    if (contains(NEVER_BREAKS, state.mName))
-        return true;
-    if (contains(BREAKS_WHEN_MOVED, state.mName))
-        return false;
-    if (moveReactionOf(state) != PistonMoveReaction::Normal)
-        return false;
-
-    return !isFlowable(state);
+    return !isAir(state) && PistonMovable::of(state.mName).mMovement == PistonMovement::Popped;
 }
 
 bool PistonSystem::canSticksBlock(const BlockState &state) {
-    return state.mName == "minecraft:slime" || state.mName == "minecraft:honey_block";
+    return PistonMovable::of(state.mName).mSticky;
 }
 
 bool PistonSystem::isExtended(Level &level, const Vector3i &position, const BlockState &state) {
@@ -440,27 +333,13 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
 
     if (extending || sticky) {
         const Vector3i origin = extending ? relative(position, face) : relative(position, face, 2);
-        const BlockState originState = stateAt(level, origin);
-
-        if (!isAir(originState)) {
-            const bool pushable = extending ? canBePushed(originState) : canBePulled(originState);
-            if (!pushable) {
-                if (extending)
-                    return false;
-            } else if (breaksWhenMoved(originState)) {
-                if (extending || sticksToPiston(originState))
-                    toDestroy.push_back(origin);
-            } else {
-                MoveResolver resolver{level, position, armPosition, !extending, moveDirection, toMove, toDestroy};
-                if (!resolver.resolve(origin, face)) {
-                    if (extending)
-                        return false;
-                    // the game still retracts a sticky piston whose blocks cannot be
-                    // pulled: it drops the collected blocks and pulls nothing
-                    toMove.clear();
-                    toDestroy.clear();
-                }
-            }
+        MoveResolver resolver{level, position, armPosition, !extending, moveDirection, toMove, toDestroy};
+        if (!resolver.resolve(origin, face)) {
+            if (extending)
+                return false;
+            // the game still retracts a sticky piston whose blocks cannot be pulled: it pulls nothing
+            toMove.clear();
+            toDestroy.clear();
         }
     }
 

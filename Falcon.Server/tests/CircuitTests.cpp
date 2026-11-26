@@ -3,6 +3,7 @@
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/Circuit/CircuitSystem.h"
+#include "World/Level/Block/PistonMovable.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -314,6 +315,97 @@ namespace {
         }
     }
 
+    // the game's movable table: what a piston pushes, pulls, breaks or stops at
+    void pistonMovableTable() {
+        const auto movement = [](const char *name) { return PistonMovable::of(name).mMovement; };
+        require(movement("minecraft:obsidian") == PistonMovement::Immovable
+                        && movement("minecraft:jukebox") == PistonMovement::Immovable
+                        && movement("minecraft:enchanting_table") == PistonMovement::Immovable
+                        && movement("minecraft:grindstone") == PistonMovement::Immovable,
+                "a block the game never moves was movable");
+        require(movement("minecraft:oak_leaves") == PistonMovement::Popped
+                        && movement("minecraft:white_shulker_box") == PistonMovement::Popped
+                        && movement("minecraft:campfire") == PistonMovement::Popped
+                        && movement("minecraft:moss_block") == PistonMovement::Popped
+                        && movement("minecraft:lava") == PistonMovement::Popped,
+                "a block the game breaks on a push was moved");
+        require(movement("minecraft:white_glazed_terracotta") == PistonMovement::Push
+                        && movement("minecraft:heavy_core") == PistonMovement::Push,
+                "a push-only block could be pulled");
+        require(movement("minecraft:chest") == PistonMovement::PushPull
+                        && movement("minecraft:stone") == PistonMovement::PushPull
+                        && movement("minecraft:white_carpet") == PistonMovement::PushPull,
+                "a block without a movable component did not push and pull");
+        require(PistonMovable::of("minecraft:slime").mSticky && PistonMovable::of("minecraft:honey_block").mSticky
+                        && !PistonMovable::of("minecraft:stone").mSticky,
+                "the sticky blocks were wrong");
+    }
+
+    // a piston facing east at x 1, powered from behind by a redstone block at x 0
+    struct PistonLine {
+        Fixture mFixture;
+        Vector3i mPiston = Vector3i(1, ORIGIN.y, ORIGIN.z);
+
+        explicit PistonLine(bool sticky) {
+            BlockState piston = mFixture.block(sticky ? "minecraft:sticky_piston" : "minecraft:piston");
+            // the stored facing is reversed on the horizontal axes: west stored faces east
+            piston.mStates.putInt("facing_direction", 4);
+            mFixture.set(mPiston, piston);
+        }
+
+        void power(bool on) {
+            mFixture.set(Vector3i(0, mPiston.y, mPiston.z),
+                         on ? mFixture.block("minecraft:redstone_block") : BlockState(BlockNames::AIR));
+            mFixture.run(12);
+        }
+
+        bool extended() {
+            return PistonSystem::isExtended(mFixture.mLevel, mPiston, mFixture.at(mPiston));
+        }
+    };
+
+    void pistonMoves() {
+        {
+            PistonLine line(false);
+            line.mFixture.set(east(line.mPiston, 1), line.mFixture.block("minecraft:jukebox"));
+            line.power(true);
+            require(!line.extended() && line.mFixture.at(east(line.mPiston, 1)).mName == "minecraft:jukebox",
+                    "a piston pushed a jukebox");
+        }
+        {
+            PistonLine line(false);
+            line.mFixture.set(east(line.mPiston, 1), line.mFixture.block("minecraft:white_shulker_box"));
+            line.power(true);
+            require(line.extended() && line.mFixture.at(east(line.mPiston, 2)).mName == "minecraft:air",
+                    "a pushed shulker box was not broken");
+        }
+        {
+            PistonLine line(true);
+            line.mFixture.set(east(line.mPiston, 1), line.mFixture.block("minecraft:white_glazed_terracotta"));
+            line.power(true);
+            require(line.extended() && line.mFixture.at(east(line.mPiston, 2)).mName == "minecraft:white_glazed_terracotta",
+                    "a sticky piston did not push glazed terracotta");
+            line.power(false);
+            require(!line.extended() && line.mFixture.at(east(line.mPiston, 2)).mName == "minecraft:white_glazed_terracotta",
+                    "a sticky piston pulled glazed terracotta");
+        }
+        {
+            // an extended piston holds: the piston behind it cannot push it
+            PistonLine line(false);
+            const Vector3i front = east(line.mPiston, 2);
+            BlockState second = line.mFixture.block("minecraft:piston");
+            second.mStates.putInt("facing_direction", 1);
+            line.mFixture.set(front, second);
+            line.mFixture.set(Vector3i(front.x, front.y, front.z + 1), line.mFixture.block("minecraft:redstone_block"));
+            line.mFixture.run(12);
+            require(PistonSystem::isExtended(line.mFixture.mLevel, front, line.mFixture.at(front)),
+                    "the second piston did not extend");
+            line.mFixture.set(east(line.mPiston, 1), line.mFixture.block("minecraft:stone"));
+            line.power(true);
+            require(!line.extended(), "a piston pushed an extended piston");
+        }
+    }
+
     // no quasi-connectivity: power above and beside a piston's top does nothing
     void pistonNoQuasiConnectivity() {
         Fixture fixture;
@@ -345,6 +437,8 @@ int main() {
         powerAtAirCell();
         conductivity();
         strongPowerThroughConductors();
+        pistonMovableTable();
+        pistonMoves();
         std::cout << "circuit checks passed\n";
         return 0;
     } catch (const std::exception &error) {

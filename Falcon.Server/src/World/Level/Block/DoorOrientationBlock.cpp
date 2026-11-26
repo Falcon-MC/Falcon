@@ -82,10 +82,6 @@ std::vector<Vector3i> DoorOrientationBlock::getAffectedBlocks(Level &level, cons
     return DoubleBlock::otherHalf(level, position, state);
 }
 
-PistonMoveReaction DoorOrientationBlock::getPistonMoveReaction() const {
-    return PistonMoveReaction::Break;
-}
-
 BlockState DoorOrientationBlock::applyPlacementOrientation(const BlockState &state,
                                                            const BlockPlacementContext &context) const {
     using namespace PlacementOrientation;

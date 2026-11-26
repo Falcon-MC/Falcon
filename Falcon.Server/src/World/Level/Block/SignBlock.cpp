@@ -15,10 +15,6 @@ bool SignBlock::matches(const std::string &identifier) {
            || BlockIdentifier::endsWithAny(identifier, {"_standing_sign", "_hanging_sign"});
 }
 
-PistonMoveReaction SignBlock::getPistonMoveReaction() const {
-    return PistonMoveReaction::Break;
-}
-
 namespace {
     constexpr const char *STANDING_SUFFIX = "standing_sign";
     constexpr const char *WALL_SUFFIX = "wall_sign";

@@ -10,8 +10,6 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    PistonMoveReaction getPistonMoveReaction() const override;
-
     bool isWornOnHead() const override {
         return true;
     }

@@ -57,8 +57,6 @@ public:
 
     static bool breaksWhenMoved(const BlockState &state);
 
-    static bool sticksToPiston(const BlockState &state);
-
     static bool canSticksBlock(const BlockState &state);
 
 private:
