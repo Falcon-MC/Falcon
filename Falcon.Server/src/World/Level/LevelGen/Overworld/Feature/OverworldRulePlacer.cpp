@@ -47,6 +47,7 @@
 #include <cctype>
 #include <climits>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -301,12 +302,15 @@ namespace {
             }
         }
 
-        // the rule's variable.origin*, left by the last scatter
+        // the rule's variable.origin*: where the previous rule's scatter left them, then back at the chunk origin
+        // for the rules after it
         static ScatterVariables forRule(BlockManager &blocks, const int32_t origin[3]) {
             ScatterVariables variables(blocks, origin);
             if (placementContext.mSharesOrigin) {
-                for (size_t axis = 0; axis < 3; axis++)
+                for (size_t axis = 0; axis < 3; axis++) {
                     variables.mOriginVariable[axis] = placementContext.mOrigin[axis];
+                    placementContext.mOrigin[axis] = static_cast<float>(origin[axis]);
+                }
             }
             return variables;
         }
@@ -416,6 +420,23 @@ namespace {
             drawnZ = drawnZ || axis == 2;
         }
         return true;
+    }
+
+    // a scatter leaving the chunk reads the biome of the chunk it lands in; past the decorated 3x3 or the build
+    // height the game falls back to the ocean
+    int32_t biomeAt(BlockManager &blocks, const LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
+        if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+            return BiomeIds::OCEAN;
+
+        const int32_t chunkX = x >> 4;
+        const int32_t chunkZ = z >> 4;
+        if (chunkX == chunk.getX() && chunkZ == chunk.getZ())
+            return static_cast<int32_t>(chunk.getBiomeAt(x & 15, y, z & 15));
+
+        const LevelChunk *other = std::abs(chunkX - chunk.getX()) <= 1 && std::abs(chunkZ - chunk.getZ()) <= 1
+                                          ? blocks.getLevel().peekChunkPtr(chunkX, chunkZ)
+                                          : nullptr;
+        return other != nullptr ? static_cast<int32_t>(other->getBiomeAt(x & 15, y, z & 15)) : BiomeIds::OCEAN;
     }
 
     bool isWater(const BlockState &state) {
@@ -2871,8 +2892,7 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
         int32_t position[3] = {0, 0, 0};
         scatterPosition(axes, entry.mEvalOrder, origin, variables, scatter, position);
 
-        if (biomeFilter >= 0
-            && static_cast<int32_t>(chunk.getBiomeAt(position[0] & 15, position[1], position[2] & 15)) != biomeFilter)
+        if (biomeFilter >= 0 && biomeAt(blocks, chunk, position[0], position[1], position[2]) != biomeFilter)
             continue;
 
         if (feature.mOre != nullptr)
