@@ -16,7 +16,9 @@ namespace {
     };
 }
 
-SendEventGoal::SendEventGoal(std::vector<Choice> choices) : mChoices(std::move(choices)) {}
+SendEventGoal::SendEventGoal(std::vector<Choice> choices) : mChoices(std::move(choices)) {
+    setRequiredControlFlags(SpellCasting::CASTING_FLAGS);
+}
 
 MobActor *SendEventGoal::_receiver(ServerNetworkHandler &owner) const {
     if (mReceiver == -1)
@@ -93,6 +95,7 @@ void SendEventGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 void SendEventGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
+    setRequiredControlFlags(SpellCasting::CASTING_FLAGS);
     SpellCasting::setCasting(owner, mob, false);
     if (mChoice >= 0)
         mCooldownEndTick = owner.getCurrentTick() + mChoices[mChoice].mCooldown;
@@ -106,8 +109,10 @@ void SendEventGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     const Choice &choice = mChoices[mChoice];
     if (choice.mLookAtTarget)
         mob.getLookControl().setLookAt(receiver->getPosition());
-    if (mCastTicks-- == 1)
+    if (mCastTicks-- == 1) {
+        setRequiredControlFlags(SpellCasting::AFTER_CAST_FLAGS);
         SpellCasting::setCasting(owner, mob, false);
+    }
 
     if (mStep >= (int32_t) choice.mSequence.size())
         return;

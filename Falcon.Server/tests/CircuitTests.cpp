@@ -278,6 +278,22 @@ namespace {
                 require(fixture.at(at).mName == "minecraft:redstone_torch",
                         "a ring torch was off while the ring's block was powered from outside");
         }
+
+        lever.mStates.putByte("open_bit", 0);
+        fixture.set(Vector3i(centre.x, centre.y - 1, centre.z), lever);
+        fixture.run(10);
+        unsigned litTorches = 0;
+        for (int tick = 0; tick < 12; ++tick) {
+            fixture.run(1);
+            unsigned litThisTick = 0;
+            for (unsigned index = 0; index < 4; ++index) {
+                if (fixture.at(torches[index]).mName == "minecraft:redstone_torch")
+                    litThisTick |= 1u << index;
+            }
+            if (litThisTick != 0 && (litThisTick & (litThisTick - 1)) == 0)
+                litTorches |= litThisTick;
+        }
+        require(litTorches == 15, "the light did not go around the ring again after outside power fell");
     }
 
     // the lamp lights with the evaluation and goes out four ticks after it loses power
