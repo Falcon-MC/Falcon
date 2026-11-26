@@ -14,7 +14,8 @@ class SculkWorld {
 public:
     virtual ~SculkWorld() = default;
 
-    virtual BlockState getBlock(const Vector3i &position) = 0;
+    // block states are interned: the reference stays valid after a block is set
+    virtual const BlockState &getBlock(const Vector3i &position) = 0;
 
     virtual void setBlock(const Vector3i &position, const BlockState &state) = 0;
 
@@ -41,7 +42,7 @@ class LevelSculkWorld : public SculkWorld {
 public:
     LevelSculkWorld(ServerNetworkHandler *owner, Level &level) : mOwner(owner), mLevel(level) {}
 
-    BlockState getBlock(const Vector3i &position) override;
+    const BlockState &getBlock(const Vector3i &position) override;
 
     void setBlock(const Vector3i &position, const BlockState &state) override;
 

@@ -197,7 +197,7 @@ bool SculkSpreader::_findMovement(SculkWorld &world, const Vector3i &from, std::
     bool found = false;
     for (const Vector3i &offset: offsets) {
         const Vector3i next = add(from, offset);
-        const BlockState state = world.getBlock(next);
+        const BlockState &state = world.getBlock(next);
         const SculkBehaviours::Kind kind = SculkBehaviours::kindOf(state);
         if (kind == SculkBehaviours::Kind::Default || !isMovementUnobstructed(world, from, next))
             continue;
@@ -248,7 +248,7 @@ void SculkSpreader::_updateCursor(SculkWorld &world, const Vector3i &origin, std
         }
     }
 
-    const BlockState state = world.getBlock(cursor.mPosition);
+    const BlockState &state = world.getBlock(cursor.mPosition);
     const SculkBehaviours::Kind here = SculkBehaviours::kindOf(state);
     if (here != SculkBehaviours::Kind::Default) {
         cursor.mFacing = SculkBehaviours::facingsOf(here, state, cursor.mFacing);
@@ -258,7 +258,8 @@ void SculkSpreader::_updateCursor(SculkWorld &world, const Vector3i &origin, std
     cursor.mDecayDelay = SculkBehaviours::updateDecayDelay(kind, cursor.mDecayDelay);
 }
 
-// SculkSpreader::updateCursors: each cursor steps, cursors meeting on a block merge, and the client sees the charge
+// each cursor steps, cursors meeting on a block merge, and the client sees the charge; world generation merges
+// nothing and shows nothing
 void SculkSpreader::updateCursors(ServerNetworkHandler *owner, Level &level, const Vector3i &origin,
                                   std::mt19937 &random, bool convertBlocks) {
     LevelSculkWorld world(owner, level);
@@ -268,6 +269,20 @@ void SculkSpreader::updateCursors(ServerNetworkHandler *owner, Level &level, con
 void SculkSpreader::updateCursors(SculkWorld &world, const Vector3i &origin, std::mt19937 &random, bool convertBlocks) {
     if (mCursors.empty())
         return;
+
+    if (mSettings.mWorldGeneration) {
+        size_t kept = 0;
+        for (SculkChargeCursor &cursor: mCursors) {
+            if (cursor.mCharge <= 0)
+                continue;
+            if (world.isTicking(cursor.mPosition))
+                _updateCursor(world, origin, random, convertBlocks, cursor);
+            if (cursor.mCharge > 0)
+                mCursors[kept++] = cursor;
+        }
+        mCursors.resize(kept);
+        return;
+    }
 
     std::vector<SculkChargeCursor> next;
     next.reserve(mCursors.size());
@@ -340,8 +355,8 @@ void SculkSpreader::load(const Tag &data) {
     }
 }
 
-BlockState LevelSculkWorld::getBlock(const Vector3i &position) {
-    return mLevel.getBlockState(position.x, position.y, position.z);
+const BlockState &LevelSculkWorld::getBlock(const Vector3i &position) {
+    return mLevel.getChunk(position.x >> 4, position.z >> 4).getBlock(position.x & 15, position.y, position.z & 15);
 }
 
 void LevelSculkWorld::setBlock(const Vector3i &position, const BlockState &state) {
