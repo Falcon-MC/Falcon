@@ -266,7 +266,6 @@ namespace {
         return std::min(chest->getViewerCount(), RedstoneSystem::MAX_SIGNAL);
     }
 
-    // the game's redstone_conductivity: full opaque blocks conduct, every block lets wire step down
     class LevelCircuitSource : public CircuitBlockSource {
     public:
         explicit LevelCircuitSource(Level &level) : mLevel(level) {}
@@ -281,12 +280,8 @@ namespace {
         }
 
         RedstoneConductivity getConductivity(const Vector3i &position) const override {
-            RedstoneConductivity conductivity;
             const BlockState *state = mLevel.peekBlockPtr(position.x, position.y, position.z);
-            if (state == nullptr)
-                return conductivity;
-            conductivity.mConductor = RedstoneSystem::isNormalBlock(*state);
-            return conductivity;
+            return state == nullptr ? RedstoneConductivity() : RedstoneConductivity::of(*state);
         }
 
     private:

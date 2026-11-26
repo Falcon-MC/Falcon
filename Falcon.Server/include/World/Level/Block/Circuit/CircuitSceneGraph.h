@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/Block/Circuit/CircuitComponent.h"
+#include "World/Level/Block/Circuit/RedstoneConductivity.h"
 
 #include <cstdint>
 #include <deque>
@@ -9,12 +10,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
-// the game's minecraft:redstone_conductivity
-struct RedstoneConductivity {
-    bool mConductor = false;
-    bool mAllowsWireToStepDown = true;
-};
 
 // what the circuit asks the world about the blocks it has no component for
 class CircuitBlockSource {
