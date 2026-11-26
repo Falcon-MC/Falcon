@@ -27,7 +27,9 @@ namespace {
     }
 }
 
-SummonEntityGoal::SummonEntityGoal(std::vector<Choice> choices) : mChoices(std::move(choices)) {}
+SummonEntityGoal::SummonEntityGoal(std::vector<Choice> choices) : mChoices(std::move(choices)) {
+    setRequiredControlFlags(SpellCasting::CASTING_FLAGS);
+}
 
 bool SummonEntityGoal::_capped(ServerNetworkHandler &owner, MobActor &mob, const Choice &choice) const {
     for (const Spawn &spawn: choice.mSequence) {
@@ -117,6 +119,7 @@ void SummonEntityGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 void SummonEntityGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
+    setRequiredControlFlags(SpellCasting::CASTING_FLAGS);
     SpellCasting::setCasting(owner, mob, false);
     if (mChoice >= 0)
         mCooldownEndTick = owner.getCurrentTick() + mChoices[mChoice].mCooldown;
@@ -129,8 +132,10 @@ void SummonEntityGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 
     const Choice &choice = mChoices[mChoice];
     mob.getLookControl().setLookAt(target->getPosition());
-    if (mCastTicks-- == 1)
+    if (mCastTicks-- == 1) {
+        setRequiredControlFlags(SpellCasting::AFTER_CAST_FLAGS);
         SpellCasting::setCasting(owner, mob, false);
+    }
 
     if (mStep >= (int32_t) choice.mSequence.size())
         return;
