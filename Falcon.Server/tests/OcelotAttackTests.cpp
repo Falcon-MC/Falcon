@@ -73,17 +73,18 @@ namespace {
         return mob.getFlags().get(ActorFlag::Sprinting);
     }
 
-    // a wild cat stalks a rabbit crouched, sprints at it from four blocks and strikes once a second
-    void catPouncesOnRabbit() {
+    // a wild cat stalks its target crouched, sprints at it from four blocks and strikes once a second; a pig
+    // outlives the first strike
+    void catPouncesOnTarget() {
         Arena arena;
         MobActor &cat = arena.spawn("minecraft:cat", "minecraft:spawn_wild_adult", Vector3f(0.5f, 100.0f, 0.5f));
-        MobActor &rabbit = arena.spawn("minecraft:rabbit", "minecraft:entity_spawned", Vector3f(10.5f, 100.0f, 0.5f));
+        MobActor &target = arena.spawn("minecraft:pig", "minecraft:entity_spawned", Vector3f(10.5f, 100.0f, 0.5f));
         const OcelotAttackGoal::Settings settings = settingsFor(cat);
         require(settings.mCoolDownTicks == 20 && settings.mMaxSprintRange == 4.0f, "unexpected cat attack values");
 
         OcelotAttackGoal goal(settings);
         require(!goal.canUse(arena.mOwner, cat), "the cat attacked with no target");
-        require(cat.setTarget(arena.mOwner, rabbit.getRuntimeId()), "the cat could not target the rabbit");
+        require(cat.setTarget(arena.mOwner, target.getRuntimeId()), "the cat could not target the pig");
         require(goal.canUse(arena.mOwner, cat), "the cat did not go for its target");
         goal.start(arena.mOwner, cat);
 
@@ -91,22 +92,26 @@ namespace {
         require(sneaking(cat) && !sprinting(cat), "the cat did not stalk its target crouched");
         require(!cat.getNavigation().isDone(), "the cat did not walk to its target");
 
-        rabbit.setPosition(Vector3f(3.5f, 100.0f, 0.5f));
+        target.setPosition(Vector3f(3.5f, 100.0f, 0.5f));
         goal.tick(arena.mOwner, cat);
         require(sprinting(cat) && !sneaking(cat), "the cat did not sprint at its close target");
 
-        // cat width 0.48 times 2: reach 0.96 blocks
-        const float health = rabbit.getHealth();
-        rabbit.setPosition(Vector3f(1.2f, 100.0f, 0.5f));
+        // cat width 0.6 times 2: reach 1.2 blocks
+        const float health = target.getHealth();
+        target.setPosition(Vector3f(1.2f, 100.0f, 0.5f));
         goal.tick(arena.mOwner, cat);
-        require(rabbit.getHealth() < health, "the cat did not strike its target in reach");
+        require(target.getHealth() == health - 4.0f, "the cat did not strike its target in reach for 4");
 
-        const float struck = rabbit.getHealth();
-        for (int tick = 0; tick < settings.mCoolDownTicks - 1 && rabbit.isAlive(); ++tick)
+        // no world ticks run here: end the pig's hurt window by hand, only the cooldown holds the next strike
+        target.setNoDamageTicks(0);
+        const float struck = target.getHealth();
+        for (int tick = 0; tick < settings.mCoolDownTicks - 1; ++tick)
             goal.tick(arena.mOwner, cat);
-        require(rabbit.getHealth() == struck, "the cat struck again before its cooldown");
+        require(target.getHealth() == struck, "the cat struck again before its cooldown");
+        goal.tick(arena.mOwner, cat);
+        require(target.getHealth() < struck, "the cat did not strike again after its cooldown");
 
-        rabbit.setPosition(Vector3f(15.6f, 100.0f, 0.5f));
+        target.setPosition(Vector3f(15.6f, 100.0f, 0.5f));
         require(!goal.canContinueToUse(arena.mOwner, cat), "the cat chased a target past 15 blocks");
         goal.stop(arena.mOwner, cat);
         require(cat.getTarget(arena.mOwner) == nullptr, "the cat kept the target it gave up on");
@@ -134,7 +139,7 @@ int main() {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
         EntityDefinitions::initialize();
-        catPouncesOnRabbit();
+        catPouncesOnTarget();
         ocelotHasTheAttack();
         std::cout << "ocelot attack checks passed\n";
     } catch (const std::exception &error) {

@@ -2919,8 +2919,10 @@ void MobActor::onAttackBlocked(ServerNetworkHandler &owner, Actor &blocker) {
 float MobActor::getAttackDamage() const {
     const json::Value *attack = getComponent("minecraft:attack");
     const json::Value *damage = attack == nullptr ? nullptr : attack->get("damage");
-    if (damage == nullptr)
-        return 0.0f;
+    if (damage == nullptr) {
+        // the cat and the ocelot set their attack damage attribute with this component instead
+        return numberIn(getComponent("minecraft:attack_damage"), "value", 0.0f);
+    }
 
     if (damage->isArray() && damage->mArray.size() == 2) {
         // the game swaps a reversed array, never a reversed object
