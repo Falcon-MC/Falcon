@@ -11,9 +11,6 @@ FeatureNoiseHolder::FeatureNoiseHolder(IRandom &random) {
     const IRandomPtr mossCeilingRandom = random.identical();
     mMossSnapToCeiling = std::make_shared<SimplexF>(*mossCeilingRandom, 2.0f, 2.0f / 4.0f, 1.0f / 30.0f);
 
-    const IRandomPtr sculkRandom = random.identical();
-    mSculkPatch = std::make_shared<SimplexF>(*sculkRandom, 20.0f, 1.0f / 99.0f, 1.0f / 100.0f);
-
     const IRandomPtr kelpRandom = random.identical();
     mKelp = std::make_shared<SimplexNoise>(*kelpRandom, -7, std::vector<float>{1.0f});
 
