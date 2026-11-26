@@ -4,7 +4,7 @@
 
 #include <string>
 
-class MultifaceBlock final : public ReplaceableBlock {
+class MultifaceBlock : public ReplaceableBlock {
 public:
     explicit MultifaceBlock(const Block &block) : ReplaceableBlock(block) {}
 
