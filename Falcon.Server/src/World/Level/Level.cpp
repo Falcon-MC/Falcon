@@ -824,9 +824,6 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
             ++mPendingBlockChangeCount;
             continue;
         }
-        // decorated later, from a copy already holding it: its own blocks won there
-        if (decorationHolds(chunk->getBaseSequence(), chunk->getDecorationSequence(), change.mSequence))
-            continue;
 
         const int32_t localX = change.mX & 15;
         const int32_t localZ = change.mZ & 15;
@@ -1572,7 +1569,6 @@ size_t Level::drainCompletedChunks() {
 
             added++;
 
-            _queueGeneratedChanges(std::move(result.mOverflowChanges));
             _refreshChunkShapes(result.mX, result.mZ);
             _queueCompletedSaves(result.mX, result.mZ);
             _storeGeneratedContent(result);

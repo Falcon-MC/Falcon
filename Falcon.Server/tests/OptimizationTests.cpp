@@ -836,18 +836,6 @@ int main() {
                     "Rejected load result dropped its parked changes");
             overtaken.closeStorage();
         });
-        check("raw terrain ignores blocks decorations left in the cache", [&]() {
-            const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(
-                    DimensionType::Overworld, 1, DimensionFactory::GeneratorType::Flat);
-            TerrainCache cache(*generator);
-            LevelChunk decorated = cache.neighbour(3, 3);
-            decorated.setBlock(0, 140, 0, BlockState("minecraft:gold_block"));
-            cache.put(std::move(decorated));
-            require(cache.terrain(3, 3).getBlock(0, 140, 0).mName != "minecraft:gold_block",
-                    "Raw terrain picked up a decorated neighbour");
-            require(cache.neighbour(3, 3).getBlock(0, 140, 0).mName == "minecraft:gold_block",
-                    "Decorated neighbour was not kept for the next decoration");
-        });
         check("failed terrain generation releases its claim", [&]() {
             const ThrowOnceGenerator generator;
             TerrainCache cache(generator);

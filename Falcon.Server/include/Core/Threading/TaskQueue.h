@@ -23,6 +23,19 @@ public:
         mCondition.notify_one();
     }
 
+    // ahead of everything queued
+    void pushFront(T value) {
+        {
+            std::lock_guard<std::mutex> guard(mMutex);
+            if (mClosed)
+                return;
+
+            mItems.push_front(std::move(value));
+        }
+
+        mCondition.notify_one();
+    }
+
     void pushAll(std::vector<T> &&values) {
         if (values.empty())
             return;

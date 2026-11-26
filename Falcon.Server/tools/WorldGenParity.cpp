@@ -7,6 +7,7 @@
 // usage:
 //   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
 //                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2] [--blocks file]
+//                        [--order rows|spiral|reverse|random:<n>] [--threads n]
 //   FalconWorldGenParity --db <path> --seed <int64> --column x,z [--terrain-only]
 //   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
 //
@@ -15,6 +16,8 @@
 // --mineshaft-markers minY,maxY: exact states at the union of mineshaft-marker positions in an overworld area
 // --min-mineshaft-marker-match pct: exit 2 when that score falls below the threshold
 // --terrain-only: chunks as the noise fills them, before population
+// --order, --threads: the order the area's chunks are asked for and the workers generating them; a chunk must
+//   come out the same for every order
 // --blocks: one "x y z expected generated" line per block that differs or is not plain terrain, for scripts
 // --block-states: append tab-separated expected and generated states to the block dump
 // --dump: both worlds of every visited chunk in a binary file for scripts, its strings in <file>.strings;
@@ -62,8 +65,10 @@
 #include "World/Level/Storage/LevelStorage.h"
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cerrno>
+#include <cmath>
 #include <cstdarg>
 #include <chrono>
 #include <cstdint>
@@ -74,8 +79,11 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <memory>
+#include <random>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -165,6 +173,8 @@ namespace {
         double mMinMineshaftMatch = 0.0;
         int32_t mMineshaftMinY = 0;
         int32_t mMineshaftMaxY = 0;
+        std::string mOrder = "rows";
+        size_t mThreads = 1;
     };
 
     enum class CoarseClass {
@@ -236,6 +246,7 @@ namespace {
         LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
         LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2] [--blocks file]");
         LOG_ERROR(LogAreaID::Level, "                            [--block-states] [--dump file]");
+        LOG_ERROR(LogAreaID::Level, "                            [--order rows|spiral|reverse|random:<n>] [--threads n]");
         LOG_ERROR(LogAreaID::Level, "                            [--mineshaft-markers minY,maxY] [--min-mineshaft-marker-match pct]");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --far");
@@ -314,6 +325,10 @@ namespace {
                 options.mJson = value;
             } else if (flag == "--blocks") {
                 options.mBlocks = value;
+            } else if (flag == "--order") {
+                options.mOrder = value;
+            } else if (flag == "--threads") {
+                options.mThreads = (size_t) std::max(1, std::atoi(value.c_str()));
             } else if (flag == "--dump") {
                 options.mDump = value;
             } else if (flag == "--min-block-match" || flag == "--min-mineshaft-marker-match") {
@@ -585,79 +600,75 @@ namespace {
         return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     }
 
-    // decorated as the workers do, with a ring: the game decorates a loaded area's neighbours too; even rows, then
-    // the odd row between: TerrainCache::decorationClass order; a row goes out once both around it are decorated
+    std::string gOrder = "rows";
+    size_t gThreads = 1;
+
+    // the area's chunks in a request order: rows, spiral from the centre, reverse (of the spiral), random:<seed>
+    std::vector<std::pair<int32_t, int32_t>> requestOrder(const ChunkArea &area, const std::string &order) {
+        std::vector<std::pair<int32_t, int32_t>> chunks;
+        for (int32_t chunkZ = area.mZ0; chunkZ <= area.mZ1; chunkZ++) {
+            for (int32_t chunkX = area.mX0; chunkX <= area.mX1; chunkX++)
+                chunks.emplace_back(chunkX, chunkZ);
+        }
+        if (order == "rows")
+            return chunks;
+
+        const double centreX = (area.mX0 + area.mX1) / 2.0;
+        const double centreZ = (area.mZ0 + area.mZ1) / 2.0;
+        std::stable_sort(chunks.begin(), chunks.end(), [&](const auto &a, const auto &b) {
+            const double ringA = std::max(std::abs(a.first - centreX), std::abs(a.second - centreZ));
+            const double ringB = std::max(std::abs(b.first - centreX), std::abs(b.second - centreZ));
+            if (ringA != ringB)
+                return ringA < ringB;
+            return std::atan2(a.second - centreZ, a.first - centreX) < std::atan2(b.second - centreZ, b.first - centreX);
+        });
+        if (order == "reverse") {
+            std::reverse(chunks.begin(), chunks.end());
+        } else if (order.rfind("random:", 0) == 0) {
+            std::mt19937 random((uint32_t) std::strtoul(order.c_str() + 7, nullptr, 10));
+            std::shuffle(chunks.begin(), chunks.end(), random);
+        }
+        return chunks;
+    }
+
+    // generated as the workers do, in the --order requests on --threads workers, visited in rows
     void generateArea(int64_t seed, const ChunkArea &area, bool terrainOnly,
                       const std::function<void(LevelChunk &)> &visit) {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(gDimension,
                                                                                          seed);
         TerrainCache terrainCache(*generator);
-        GeneratorChunkSource source(seed, gDimension, terrainCache);
-        // features reaching past the 3x3: in no cached copy
-        std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> spilled;
-
-        const int32_t firstRow = area.mZ0 - 1;
-        const int32_t lastRow = area.mZ1 + 1;
-        const auto decorateRow = [&](int32_t chunkZ) {
-            for (const int32_t pass: {0, 1}) {
-                for (int32_t chunkX = area.mX0 - 1; chunkX <= area.mX1 + 1; chunkX++) {
-                    if ((TerrainCache::decorationClass(chunkX, chunkZ) & 1) != pass)
-                        continue;
-
-                    LevelChunk chunk(chunkX, chunkZ);
-                    chunk.setDimension(gDimension);
-                    std::vector<GeneratedBlockChange> overflow;
+        const std::vector<std::pair<int32_t, int32_t>> order = requestOrder(area, gOrder);
+        std::unordered_map<int64_t, std::unique_ptr<LevelChunk>> generated;
+        std::mutex mutex;
+        std::atomic<size_t> next(0);
+        std::vector<std::thread> workers;
+        // built on this thread: a generator's constructor sets shared noise, one at a time
+        std::vector<std::unique_ptr<GeneratorChunkSource>> sources;
+        for (size_t i = 0; i < std::max<size_t>(1, gThreads); i++)
+            sources.push_back(std::unique_ptr<GeneratorChunkSource>(new GeneratorChunkSource(seed, gDimension, terrainCache)));
+        for (size_t i = 0; i < std::max<size_t>(1, gThreads); i++) {
+            workers.emplace_back([&, i]() {
+                GeneratorChunkSource &source = *sources[i];
+                for (size_t index = next++; index < order.size(); index = next++) {
+                    const int32_t chunkX = order[index].first;
+                    const int32_t chunkZ = order[index].second;
                     std::vector<Tag> blockActors;
                     std::vector<Tag> entities;
-                    uint64_t base = 0;
-                    if (terrainOnly)
-                        continue;
-
-                    source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
-
-                    for (GeneratedBlockChange &change: overflow) {
-                        if (change.mSequence != 0 || change.mY < gMinY || change.mY > gMaxY
-                            || !area.contains(change.mX >> 4, change.mZ >> 4))
-                            continue;
-
-                        spilled[packChunk(change.mX >> 4, change.mZ >> 4)].push_back(std::move(change));
-                    }
+                    std::unique_ptr<LevelChunk> chunk(new LevelChunk(
+                            terrainOnly ? terrainCache.terrain(chunkX, chunkZ)
+                                        : source.generate(chunkX, chunkZ, blockActors, entities)));
+                    std::lock_guard<std::mutex> lock(mutex);
+                    generated[packChunk(chunkX, chunkZ)] = std::move(chunk);
                 }
-            }
-        };
-        std::unordered_set<int32_t> handed;
-        const auto handOver = [&](int32_t chunkZ) {
-            if (chunkZ < area.mZ0 || chunkZ > area.mZ1 || !handed.insert(chunkZ).second)
-                return;
-
-            for (int32_t chunkX = area.mX0; chunkX <= area.mX1; chunkX++) {
-                LevelChunk finished = terrainCache.neighbour(chunkX, chunkZ);
-                const auto changes = spilled.find(packChunk(chunkX, chunkZ));
-                if (changes != spilled.end()) {
-                    for (const GeneratedBlockChange &change: changes->second)
-                        finished.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
-                    spilled.erase(changes);
-                }
-
-                visit(finished);
-            }
-        };
-
-        // the decorated rows: once one is, the rows below it are final
-        for (int32_t chunkZ = firstRow; chunkZ <= lastRow; chunkZ++) {
-            if ((chunkZ & 1) == 0) {
-                decorateRow(chunkZ);
-                if (chunkZ - 1 >= firstRow) {
-                    decorateRow(chunkZ - 1);
-                    handOver(chunkZ - 2);
-                    handOver(chunkZ - 1);
-                }
-            } else if (chunkZ == lastRow) {
-                decorateRow(chunkZ);
-            }
+            });
         }
-        handOver(lastRow - 1);
-        handOver(lastRow);
+        for (std::thread &worker: workers)
+            worker.join();
+
+        for (int32_t chunkZ = area.mZ0; chunkZ <= area.mZ1; chunkZ++) {
+            for (int32_t chunkX = area.mX0; chunkX <= area.mX1; chunkX++)
+                visit(*generated[packChunk(chunkX, chunkZ)]);
+        }
     }
 
     enum class LoadResult {
@@ -1497,6 +1508,8 @@ int main(int argc, char **argv) {
         printUsage();
     } else {
         try {
+            gOrder = options.mOrder;
+            gThreads = options.mThreads;
             result = run(options);
         } catch (const std::exception &exception) {
             LOG_ERROR(LogAreaID::Level, "%s", exception.what());

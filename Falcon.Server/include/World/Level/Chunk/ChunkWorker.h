@@ -22,7 +22,16 @@ class GeneratorChunkSource;
 class TerrainCache;
 
 struct ChunkTask {
-    enum class Kind : int { Load = 0, Save = 1, Populate = 2, Barrier = 3, PersistChanges = 4, EraseEntities = 5 };
+    enum class Kind : int {
+        Load = 0,
+        Save = 1,
+        Populate = 2,
+        Barrier = 3,
+        PersistChanges = 4,
+        EraseEntities = 5,
+        // terrain or a decoration another worker's chunk needs, taken ahead of the queue
+        Prepare = 6
+    };
 
     Kind mKind = Kind::Load;
     int32_t mX = 0;
@@ -32,17 +41,13 @@ struct ChunkTask {
     std::vector<GeneratedBlockChange> mChanges;
     std::shared_ptr<std::promise<std::vector<GeneratedBlockChange>>> mChangesResult;
     std::vector<int64_t> mEntityIds;
-    // a load storage missed, back in the queue until its earlier neighbours are decorated
-    bool mMissing = false;
-    bool mDeferred = false;
-    std::chrono::steady_clock::time_point mDeferredSince;
+    bool mPrepareDecoration = false;
 };
 
 struct ChunkLoadResult {
     int32_t mX = 0;
     int32_t mZ = 0;
     std::unique_ptr<LevelChunk> mChunk;
-    std::vector<GeneratedBlockChange> mOverflowChanges;
     // applied by the worker, stored ones first; exist nowhere else: restored if the result is dropped;
     // a load discarded at shutdown returns no chunk, only its task's parked blocks
     std::vector<GeneratedBlockChange> mSpilledChanges;
@@ -61,9 +66,9 @@ public:
     // credits held until the main thread drains the result: no unbounded result queue; generation takes
     // hundreds of ms: several chunks in flight per worker
     static constexpr size_t MAX_OUTSTANDING_GENERATION = 64;
-    // an earlier neighbour stuck behind a slow queue: decorated out of order rather than later
-    static constexpr std::chrono::milliseconds MAX_DECORATION_DEFERRAL{500};
-    static constexpr std::chrono::milliseconds DEFERRAL_POLL{2};
+    // no generation for this long: the caches are dropped, a quiet dimension holds no memory for them
+    static constexpr std::chrono::seconds CACHE_IDLE_RELEASE{60};
+    static constexpr std::chrono::milliseconds PREPARE_RETRY{2};
 
     ChunkWorker(const ChunkGenerator &generator, LevelStorage &storage);
 
@@ -133,15 +138,18 @@ public:
         return mPopulatedCount.load();
     }
 
+    // terrain chunks built and chunks decorated, evicted ones built again included
+    uint64_t getTerrainGenerations() const;
+
+    uint64_t getDecorationCount() const;
+
 private:
     void _run(size_t queueIndex);
 
-    // false: put back in the queue, an earlier neighbour still to decorate
-    bool _processLoad(ChunkTask &task, size_t sourceIndex);
+    void _processLoad(ChunkTask &task, size_t sourceIndex);
 
-    bool _defer(ChunkTask &task);
-
-    void _requeue(TaskQueue<ChunkTask> &queue, ChunkTask &task, size_t &deferredInRow);
+    // what the chunk needs and nobody built yet, handed to the other workers' queue fronts
+    void _shareNeeds(int32_t chunkX, int32_t chunkZ, size_t sourceIndex);
 
     void _processSave(ChunkTask &task);
 
@@ -176,4 +184,7 @@ private:
     std::atomic<uint64_t> mLoadedCount;
     std::atomic<uint64_t> mSavedCount;
     std::atomic<uint64_t> mPopulatedCount;
+    // main thread only
+    std::chrono::steady_clock::time_point mLastGeneration;
+    bool mCachesReleased = false;
 };

@@ -19,31 +19,18 @@ namespace {
             throw std::runtime_error(message);
     }
 
-    // every chunk of a size x size area decorated in the workers' order, then handed to check one by one
+    // every chunk of a size x size area with all its decorations, handed to check one by one
     void generateArea(DimensionType dimension, int64_t seed, int32_t originX, int32_t originZ, int32_t size,
                       const std::function<void(const LevelChunk &)> &check) {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(dimension, seed);
         TerrainCache cache(*generator);
         GeneratorChunkSource source(seed, dimension, cache);
         for (int32_t chunkZ = originZ; chunkZ < originZ + size; chunkZ++) {
-            for (const int32_t pass: {0, 1}) {
-                for (int32_t chunkX = originX; chunkX < originX + size; chunkX++) {
-                    if ((TerrainCache::decorationClass(chunkX, chunkZ) & 1) != pass)
-                        continue;
-                    LevelChunk chunk(chunkX, chunkZ);
-                    chunk.setDimension(dimension);
-                    std::vector<GeneratedBlockChange> overflow;
-                    std::vector<Tag> blockActors;
-                    std::vector<Tag> entities;
-                    uint64_t base = 0;
-                    source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
-                    cache.put(std::move(chunk));
-                }
+            for (int32_t chunkX = originX; chunkX < originX + size; chunkX++) {
+                std::vector<Tag> blockActors;
+                std::vector<Tag> entities;
+                check(source.generate(chunkX, chunkZ, blockActors, entities));
             }
-        }
-        for (int32_t chunkZ = originZ; chunkZ < originZ + size; chunkZ++) {
-            for (int32_t chunkX = originX; chunkX < originX + size; chunkX++)
-                check(cache.neighbour(chunkX, chunkZ));
         }
     }
 

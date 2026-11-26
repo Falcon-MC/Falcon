@@ -9,14 +9,16 @@
 #include <utility>
 
 class ChunkGenerator;
+class GeneratorChunkSource;
 class LevelChunk;
 class TerrainCache;
 
 // bare terrain under a planned structure: many columns of few chunks, the throwaway chunk being the costly part;
-// read from the workers' cache when there is one
+// read from the workers' cache when there is one; `populated`: the chunks with their decorations, from that source
 class StructureTerrain {
 public:
-    explicit StructureTerrain(const ChunkGenerator &generator, TerrainCache *cache = nullptr, bool populated = false);
+    explicit StructureTerrain(const ChunkGenerator &generator, TerrainCache *cache = nullptr,
+                              GeneratorChunkSource *populated = nullptr);
     ~StructureTerrain();
 
     int32_t getSolidHeight(int32_t x, int32_t z);
@@ -37,6 +39,6 @@ private:
 
     const ChunkGenerator &mGenerator;
     TerrainCache *mCache;
-    bool mPopulated;
+    GeneratorChunkSource *mPopulated;
     std::map<std::pair<int32_t, int32_t>, Chunk> mChunks;
 };

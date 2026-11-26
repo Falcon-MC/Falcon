@@ -1,29 +1,109 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
-#include "World/Level/Chunk/GeneratedBlockChange.h"
+#include "World/Level/Chunk/ChunkWorker.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
+#include "World/Level/Storage/LevelStorage.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <random>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
+    const int64_t SEED = 42;
+    const int32_t AREA_X = -2;
+    const int32_t AREA_Z = -2;
+    const int32_t AREA_SIZE = 5;
+
     void require(bool condition, const char *message) {
         if (!condition)
             throw std::runtime_error(message);
     }
 
-    std::unique_ptr<ChunkGenerator> flatGenerator() {
-        return DimensionFactory::createGenerator(DimensionType::Overworld, 1, DimensionFactory::GeneratorType::Flat);
+    uint64_t mix(uint64_t hash, uint64_t value) {
+        return hash ^ (value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2));
+    }
+
+    using Order = std::vector<std::pair<int32_t, int32_t>>;
+
+    Order areaOrder() {
+        Order order;
+        for (int32_t chunkZ = AREA_Z; chunkZ < AREA_Z + AREA_SIZE; chunkZ++) {
+            for (int32_t chunkX = AREA_X; chunkX < AREA_X + AREA_SIZE; chunkX++)
+                order.emplace_back(chunkX, chunkZ);
+        }
+        return order;
+    }
+
+    // every block, block actor and entity of each chunk of the area, hashed in area order
+    struct Area {
+        std::vector<uint64_t> mHashes = std::vector<uint64_t>((size_t) (AREA_SIZE * AREA_SIZE), 0);
+        size_t mBlockActors = 0;
+
+        void add(const LevelChunk &chunk, const std::vector<Tag> &blockActors, const std::vector<Tag> &entities) {
+            uint64_t hash = 0;
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; y++) {
+                        hash = mix(hash, (uint32_t) chunk.getBlock(x, y, z, 0).getHash());
+                        hash = mix(hash, (uint32_t) chunk.getBlock(x, y, z, 1).getHash());
+                    }
+                }
+            }
+            for (const Tag &actor: blockActors) {
+                hash = mix(hash, (uint32_t) actor.getInt("x"));
+                hash = mix(hash, (uint32_t) actor.getInt("y"));
+                hash = mix(hash, (uint32_t) actor.getInt("z"));
+            }
+            hash = mix(hash, entities.size());
+            mBlockActors += blockActors.size();
+            const size_t index = (size_t) ((chunk.getZ() - AREA_Z) * AREA_SIZE + chunk.getX() - AREA_X);
+            mHashes[index] = hash;
+        }
+    };
+
+    Area generate(const Order &order, size_t threads) {
+        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
+                                                                                         SEED);
+        TerrainCache cache(*generator);
+        Area area;
+        std::mutex mutex;
+        std::atomic<size_t> next(0);
+        std::vector<std::thread> workers;
+        // built on this thread: a generator's constructor sets shared noise, one at a time
+        std::vector<std::unique_ptr<GeneratorChunkSource>> sources;
+        for (size_t i = 0; i < threads; i++)
+            sources.push_back(std::unique_ptr<GeneratorChunkSource>(new GeneratorChunkSource(SEED, DimensionType::Overworld, cache)));
+        for (size_t i = 0; i < threads; i++) {
+            workers.emplace_back([&, i]() {
+                GeneratorChunkSource &source = *sources[i];
+                for (size_t index = next++; index < order.size(); index = next++) {
+                    std::vector<Tag> blockActors;
+                    std::vector<Tag> entities;
+                    const LevelChunk chunk = source.generate(order[index].first, order[index].second, blockActors,
+                                                             entities);
+                    std::lock_guard<std::mutex> lock(mutex);
+                    area.add(chunk, blockActors, entities);
+                }
+            });
+        }
+        for (std::thread &worker: workers)
+            worker.join();
+        return area;
     }
 
     void classOrder() {
@@ -49,133 +129,176 @@ namespace {
         }
     }
 
-    void holdsRule() {
-        require(decorationHolds(4, 9, 5), "a decoration between base and own was applied twice");
-        require(!decorationHolds(4, 9, 4), "a decoration from before the base was dropped");
-        require(!decorationHolds(4, 9, 12), "a later decoration was dropped");
-        require(!decorationHolds(4, 9, 0), "a change of unknown order was dropped");
-        require(!decorationHolds(0, 0, 3), "a chunk decorated in an earlier session dropped a change");
+    // a write lands only on the block its decoration saw
+    void writesNeedTheBlockSeen() {
+        LevelChunk chunk(0, 0);
+        const BlockState *air = &chunk.getBlock(1, 70, 1);
+        const BlockState *gold = SubChunk::intern(BlockState("minecraft:gold_block"));
+        const BlockState *iron = SubChunk::intern(BlockState("minecraft:iron_block"));
+        const uint32_t index = (uint32_t) (1 | 1 << 4 | (70 - LevelChunk::MIN_Y) << 8);
+        ChunkDecoration first;
+        first.add(4, {index, air, gold});
+        GeneratorChunkSource::apply(chunk, first, 4);
+        require(&chunk.getBlock(1, 70, 1) == gold, "a write over the block it saw was dropped");
+        ChunkDecoration second;
+        second.add(4, {index, air, iron});
+        GeneratorChunkSource::apply(chunk, second, 4);
+        require(&chunk.getBlock(1, 70, 1) == gold, "a write over another block than the one it saw was placed");
+
+        std::vector<ChunkWrite> log;
+        chunk.setWriteLog(&log);
+        chunk.setBlock(2, 70, 2, *iron);
+        chunk.setWriteLog(nullptr);
+        chunk.setBlock(3, 70, 3, *iron);
+        require(log.size() == 1 && log[0].mBefore == air && log[0].mAfter == iron, "the write log missed a block");
+        LevelChunk copy = chunk;
+        copy.setBlock(4, 70, 4, *iron);
+        require(log.size() == 1, "a copy of a logged chunk logged its writes");
     }
 
-    void neighboursWait() {
-        const std::unique_ptr<ChunkGenerator> generator = flatGenerator();
-        TerrainCache cache(*generator);
-        cache.expectDecoration(0, 0);
-        require(cache.awaitsEarlierNeighbour(1, 1), "a later class did not wait for its earlier neighbour");
-        require(cache.awaitsEarlierNeighbour(-1, -1), "a diagonal later class did not wait");
-        require(!cache.awaitsEarlierNeighbour(2, 2), "a chunk waited for one two chunks away");
-        cache.expectDecoration(1, 1);
-        require(!cache.awaitsEarlierNeighbour(0, 0), "the first class waited for a later one");
-        cache.finishDecoration(0, 0);
-        require(!cache.awaitsEarlierNeighbour(1, 1), "a finished decoration still held its neighbour");
-    }
+    // the same chunks asked for in other orders and on several threads: the same blocks, actors and entities
+    void ordersAgree() {
+        const Order rows = areaOrder();
+        const Area reference = generate(rows, 1);
 
-    void areaLock() {
-        const std::unique_ptr<ChunkGenerator> generator = flatGenerator();
-        TerrainCache cache(*generator);
-        std::unique_ptr<TerrainCache::DecorationArea> first = cache.lockArea(0, 0);
-        const std::unique_ptr<TerrainCache::DecorationArea> apart = cache.lockArea(4, 0);
-        require(apart->getSequence() > first->getSequence(), "sequences do not follow the locks");
-
-        std::atomic<bool> locked(false);
-        uint64_t sequence = 0;
-        std::thread neighbour([&]() {
-            const std::unique_ptr<TerrainCache::DecorationArea> area = cache.lockArea(1, 1);
-            sequence = area->getSequence();
-            locked.store(true);
+        Order reversed = rows;
+        std::reverse(reversed.begin(), reversed.end());
+        Order shuffled = rows;
+        std::mt19937 random(7);
+        std::shuffle(shuffled.begin(), shuffled.end(), random);
+        // spiral from the centre
+        Order spiral = rows;
+        std::stable_sort(spiral.begin(), spiral.end(), [](const auto &a, const auto &b) {
+            const int32_t centre = AREA_SIZE / 2;
+            return std::max(std::abs(a.first - AREA_X - centre), std::abs(a.second - AREA_Z - centre))
+                   < std::max(std::abs(b.first - AREA_X - centre), std::abs(b.second - AREA_Z - centre));
         });
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        require(!locked.load(), "two neighbours decorated at once");
-        first.reset();
-        neighbour.join();
-        require(locked.load() && sequence > apart->getSequence(), "the neighbour never got the area");
+
+        require(generate(reversed, 1).mHashes == reference.mHashes, "the reversed order changed the area");
+        require(generate(shuffled, 1).mHashes == reference.mHashes, "a random order changed the area");
+        require(generate(spiral, 4).mHashes == reference.mHashes, "four threads changed the area");
     }
 
-    void baseSequence() {
-        const std::unique_ptr<ChunkGenerator> generator = flatGenerator();
-        TerrainCache cache(*generator);
-        {
-            const std::unique_ptr<TerrainCache::DecorationArea> area = cache.lockArea(10, 10);
-        }
-        uint64_t created = 99;
-        cache.base(0, 0, created);
-        require(created == 1, "a new entry does not record the decorations before it");
-
-        LevelChunk decorated = cache.neighbour(0, 0);
-        decorated.setBlock(0, 140, 0, BlockState("minecraft:gold_block"));
-        cache.put(std::move(decorated));
-        require(cache.base(0, 0, created).getBlock(0, 140, 0).mName == "minecraft:gold_block",
-                "a generated chunk ignored what its neighbours spilled into the cache");
-        require(created == 1, "a put moved the entry's creation");
-        require(cache.terrain(0, 0).getBlock(0, 140, 0).mName != "minecraft:gold_block",
-                "raw terrain picked up a decoration");
-    }
-
-    // a neighbour decorated in another session comes from storage, not as raw terrain under its plants
-    void storedNeighbour() {
-        const std::unique_ptr<ChunkGenerator> generator = flatGenerator();
-        TerrainCache cache(*generator);
-        size_t loads = 0;
-        cache.setStoredLoader([&loads](LevelChunk &chunk) {
-            ++loads;
-            if (chunk.getX() != 3 || chunk.getZ() != 0)
-                return false;
-            chunk.setBlock(0, 140, 0, BlockState("minecraft:gold_block"));
-            chunk.setPopulated(true);
-            return true;
-        });
-        require(cache.neighbour(3, 0).getBlock(0, 140, 0).mName == "minecraft:gold_block",
-                "a stored neighbour came back as raw terrain");
-        require(cache.neighbour(4, 0).getBlock(0, 140, 0).mName != "minecraft:gold_block",
-                "an absent neighbour took another chunk's blocks");
-        cache.neighbour(3, 0);
-        cache.neighbour(4, 0);
-        require(loads == 2, "storage was read again for a chunk already checked");
-        require(cache.terrain(3, 0).getBlock(0, 140, 0).mName != "minecraft:gold_block",
-                "raw terrain picked up a stored decoration");
-    }
-
-    // a decoration writes into its generated neighbours at once, the next one reads it
+    // a decoration's blocks in a neighbour reach that neighbour, unless a decoration after it wrote there
     void writesReachNeighbours() {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
-                                                                                            42);
+                                                                                         SEED);
         TerrainCache cache(*generator);
-        GeneratorChunkSource source(42, DimensionType::Overworld, cache);
+        GeneratorChunkSource source(SEED, DimensionType::Overworld, cache);
+        size_t reached = 0;
+        for (int32_t chunkX = 0; chunkX < 4 && reached == 0; chunkX++) {
+            const std::shared_ptr<const ChunkDecoration> decoration = source.decoration(chunkX, 0);
+            // slot of the chunk east of it
+            const size_t east = (size_t) ((1 + 1) * 3 + 1);
+            if (decoration->mWrites[east].empty())
+                continue;
 
-        size_t checked = 0;
-        for (int32_t chunkX = 0; chunkX < 4 && checked == 0; chunkX++) {
-            LevelChunk chunk(chunkX, 0);
-            std::vector<GeneratedBlockChange> overflow;
             std::vector<Tag> blockActors;
             std::vector<Tag> entities;
-            uint64_t base = 0;
-            const uint64_t own = source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
-            require(own > base, "a decoration got no sequence");
-            const LevelChunk raw = cache.terrain(chunkX, 0);
-            const LevelChunk kept = cache.neighbour(chunkX, 0);
-            bool decorated = false;
-            for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y && !decorated; y++) {
-                if (chunk.getBlock(8, y, 8).getHash() == raw.getBlock(8, y, 8).getHash())
-                    continue;
-                decorated = true;
-                require(kept.getBlock(8, y, 8).getHash() == chunk.getBlock(8, y, 8).getHash(),
-                        "the decorated chunk was not kept for its neighbours");
-            }
-
-            for (const GeneratedBlockChange &change: overflow) {
-                const bool inArea = std::abs((change.mX >> 4) - chunkX) <= 1 && std::abs(change.mZ >> 4) <= 1;
-                require(change.mSequence == (inArea ? own : 0), "an overflow block carries the wrong sequence");
-                if (!inArea || change.mLayer != 0)
-                    continue;
-
-                const LevelChunk target = cache.neighbour(change.mX >> 4, change.mZ >> 4);
-                require(target.getBlock(change.mX & 15, change.mY, change.mZ & 15).getHash()
-                                == change.mState->getHash(),
-                        "a neighbour's cached copy misses a block written into it");
-                checked++;
+            const LevelChunk neighbour = source.generate(chunkX + 1, 0, blockActors, entities);
+            for (size_t index = 0; index < decoration->mWrites[east].size(); index++) {
+                const ChunkWrite write = decoration->get(east, index);
+                const int x = (int) (write.mIndex & 15);
+                const int z = (int) ((write.mIndex >> 4) & 15);
+                const int32_t y = (int32_t) ((write.mIndex >> 8) & 511) + LevelChunk::MIN_Y;
+                if (&neighbour.getBlock(x, y, z, (int) (write.mIndex >> 17)) == write.mAfter)
+                    reached++;
             }
         }
-        require(checked != 0, "no decoration spilled into a neighbour");
+        require(reached != 0, "no decoration reached its neighbour");
+    }
+}
+
+namespace {
+    uint64_t hashBlocks(const LevelChunk &chunk) {
+        uint64_t hash = 0;
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                for (int32_t y = LevelChunk::MIN_Y; y <= LevelChunk::MAX_Y; y++) {
+                    hash = mix(hash, (uint32_t) chunk.getBlock(x, y, z, 0).getHash());
+                    hash = mix(hash, (uint32_t) chunk.getBlock(x, y, z, 1).getHash());
+                }
+            }
+        }
+        return hash;
+    }
+
+    ChunkLoadResult awaitResult(ChunkWorker &worker) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+        while (std::chrono::steady_clock::now() < deadline) {
+            std::vector<ChunkLoadResult> results = worker.drainCompleted();
+            if (!results.empty())
+                return std::move(results.front());
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        throw std::runtime_error("the worker never finished the chunk");
+    }
+
+    GeneratedBlockChange goldAt(int32_t chunkX, int32_t chunkZ) {
+        GeneratedBlockChange change;
+        change.mX = chunkX * 16 + 3;
+        change.mY = 300;
+        change.mZ = chunkZ * 16 + 5;
+        change.mState = SubChunk::intern(BlockState("minecraft:gold_block"));
+        return change;
+    }
+
+    // the worker's finish step: a chunk generated by a worker, with blocks parked for it, is the source's chunk
+    // with those blocks; next to a neighbour stored by an older world that parked its share, the neighbour's
+    // decoration is not replayed a second time
+    void workersFinishChunks() {
+        const std::filesystem::path worlds = std::filesystem::temp_directory_path()
+                                             / ("falcon-decoration-order-"
+                                                + std::to_string(std::chrono::steady_clock::now()
+                                                                         .time_since_epoch()
+                                                                         .count()));
+        std::filesystem::create_directories(worlds);
+        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
+                                                                                         SEED);
+        TerrainCache cache(*generator);
+        GeneratorChunkSource source(SEED, DimensionType::Overworld, cache);
+        std::vector<Tag> blockActors;
+        std::vector<Tag> entities;
+        {
+            LevelStorage storage;
+            require(storage.open(worlds.string(), "worker", 0), "the fixture world did not open");
+            ChunkWorker worker(*generator, storage);
+            worker.start(2);
+
+            std::vector<GeneratedBlockChange> parked{goldAt(0, 0)};
+            require(worker.requestLoad(0, 0, parked), "the load was refused");
+            ChunkLoadResult fresh = awaitResult(worker);
+            LevelChunk expected = source.generate(0, 0, blockActors, entities);
+            expected.setBlock(3, 300, 5, *goldAt(0, 0).mState);
+            require(fresh.mChunk != nullptr && fresh.mGenerated, "the worker returned no generated chunk");
+            require(hashBlocks(*fresh.mChunk) == hashBlocks(expected),
+                    "the worker's chunk is not the source's chunk with its parked block");
+
+            // a neighbour whose decoration writes into the chunk west of it
+            int32_t target = -1;
+            for (int32_t chunkX = 4; chunkX < 12 && target < 0; chunkX++) {
+                if (!source.decoration(chunkX + 1, 3)->mWrites[(size_t) ((-1 + 1) * 3 + 1)].empty())
+                    target = chunkX;
+            }
+            require(target >= 0, "no decoration writes into its west neighbour");
+            require(storage.saveChunk(source.generate(target + 1, 3, blockActors, entities)),
+                    "the stored neighbour was not saved");
+            require(storage.mergePendingBlockChanges(target, 3, {goldAt(target, 3)}), "the spill was not parked");
+
+            std::vector<GeneratedBlockChange> none;
+            require(worker.requestLoad(target, 3, none), "the second load was refused");
+            ChunkLoadResult old = awaitResult(worker);
+            const uint16_t east = (uint16_t) (1u << ((1 + 1) * 3 + 1));
+            LevelChunk withoutNeighbour = source.generate(target, 3, blockActors, entities, east);
+            require(hashBlocks(withoutNeighbour) != hashBlocks(source.generate(target, 3, blockActors, entities)),
+                    "the skipped neighbour placed nothing in the chunk");
+            withoutNeighbour.setBlock(3, 300, 5, *goldAt(target, 3).mState);
+            require(hashBlocks(*old.mChunk) == hashBlocks(withoutNeighbour),
+                    "the stored neighbour's decoration was replayed over its parked share");
+            require(storage.loadPendingBlockChanges(target, 3).empty(), "the applied spill stayed in storage");
+            worker.stop();
+        }
+        std::filesystem::remove_all(worlds);
     }
 }
 
@@ -196,12 +319,10 @@ int main() {
     };
 
     check("decoration classes order every pair of neighbours", classOrder);
-    check("a chunk keeps the blocks of decorations it already holds", holdsRule);
-    check("a later class waits for an expected earlier neighbour", neighboursWait);
-    check("neighbours never decorate at once", areaLock);
-    check("stored neighbours are read from storage", storedNeighbour);
-    check("a generated chunk starts from what decorations left", baseSequence);
+    check("a decoration's write needs the block it saw", writesNeedTheBlockSeen);
     check("decorations write into their neighbours", writesReachNeighbours);
+    check("request orders and threads give the same chunks", ordersAgree);
+    check("workers finish chunks with their parked blocks", workersFinishChunks);
 
     BedrockLog::flush();
     return failures == 0 ? 0 : 1;

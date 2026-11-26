@@ -195,7 +195,14 @@ void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
         return;
 
     const int index = subChunkIndexFor(y);
-    mSubChunks[index].setBlock(x, y & 15, z, state);
+    if (mWriteLog.mWrites != nullptr) {
+        const BlockState &before = mSubChunks[index].getBlock(x, y & 15, z);
+        mSubChunks[index].setBlock(x, y & 15, z, state);
+        mWriteLog.mWrites->push_back({(uint32_t) (x | z << 4 | (y - MIN_Y) << 8), &before,
+                                      &mSubChunks[index].getBlock(x, y & 15, z)});
+    } else {
+        mSubChunks[index].setBlock(x, y & 15, z, state);
+    }
     if (!mSubChunkNetworkValid.empty())
         mSubChunkNetworkValid[(size_t) index] = 0;
     for (auto &translated: mTranslatedSubChunkCache)
@@ -217,7 +224,14 @@ void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &
     }
 
     const int index = subChunkIndexFor(y);
-    mSubChunks[index].setBlock(x, y & 15, z, layer, state);
+    if (mWriteLog.mWrites != nullptr) {
+        const BlockState &before = mSubChunks[index].getBlock(x, y & 15, z, layer);
+        mSubChunks[index].setBlock(x, y & 15, z, layer, state);
+        mWriteLog.mWrites->push_back({(uint32_t) (x | z << 4 | (y - MIN_Y) << 8 | 1 << 17), &before,
+                                      &mSubChunks[index].getBlock(x, y & 15, z, layer)});
+    } else {
+        mSubChunks[index].setBlock(x, y & 15, z, layer, state);
+    }
     if (!mSubChunkNetworkValid.empty())
         mSubChunkNetworkValid[(size_t) index] = 0;
     for (auto &translated: mTranslatedSubChunkCache)
