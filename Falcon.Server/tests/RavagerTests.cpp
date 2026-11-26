@@ -1,3 +1,4 @@
+#include "Core/Math/MathConstants.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/AI/Navigation/PathFinder.h"
 #include "World/Actor/ActorFlags.h"
@@ -127,17 +128,30 @@ namespace {
         MobActor &ravager = arena.spawn(RAVAGER, Vector3f(0.5f, 64.0f, 3.0f), "minecraft:entity_spawned");
         const float health = player.getHealth();
 
-        int32_t ticks = 0;
-        while (!ravager.hasComponentGroup("stunned") && ticks++ < 60 * TICKS_PER_SECOND) {
-            // the shield stays up and the player stands still: the client moves players, not the server
+        // each bite is an even draw: 64 blocked bites all pushing is a 2^-64 chance
+        const int32_t maxBites = 64;
+        int32_t bites = 0;
+        for (int32_t ticks = 0; !ravager.hasComponentGroup("stunned") && bites < maxBites
+                                && ticks < maxBites * 5 * TICKS_PER_SECOND; ticks++) {
+            // the client moves players, not the server: the blocker stands still and keeps the shield toward the
+            // ravager, or a ravager walking around it bites from behind
+            const Vector3f ravagerPosition = ravager.getPosition();
+            const float yaw = std::atan2(0.5f - ravagerPosition.x, ravagerPosition.z - 0.5f) * 180.0f
+                              / MathConstants::PI_F;
             player.setPosition(Vector3f(0.5f, 64.0f, 0.5f));
+            player.setRotation(Vector3f(0.0f, yaw, yaw));
             player.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+            // the player's own tick: without it the invulnerability window of the first block never ends
+            player.tickCombat(1);
             if (ravager.getTarget(arena.mOwner) == nullptr)
                 ravager.setTarget(arena.mOwner, player.getRuntimeId());
             arena.tick();
+            require(player.getHealth() == health, "a blocked bite hurt the player");
+            // a bite that reached the shield opens the window again
+            bites += player.getNoDamageTicks() == 10 ? 1 : 0;
         }
-        require(ravager.hasComponentGroup("stunned"), "no blocked bite ever stunned the ravager");
-        require(player.getHealth() == health, "a blocked bite hurt the player");
+        require(ravager.hasComponentGroup("stunned"),
+                "no blocked bite ever stunned the ravager, " + std::to_string(bites) + " bites");
         require(!ravager.hasComponentGroup("minecraft:hostile"), "the stunned ravager kept hunting");
         arena.tick();
         require(ravager.getFlags().get(ActorFlag::Stunned), "the stunned flag was not shown");
