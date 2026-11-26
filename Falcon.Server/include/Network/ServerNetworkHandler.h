@@ -1176,6 +1176,8 @@ private:
 
     void handle(const NetworkIdentifier &id, const InteractPacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const NpcRequestPacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const PlayerActionPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const RespawnPacket &packet) override;

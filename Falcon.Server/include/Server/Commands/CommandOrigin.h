@@ -57,6 +57,11 @@ public:
     // the entity running the command, a player or not; null for the server and blocks
     virtual Actor *getEntity();
 
+    // the player an npc's dialogue command answers to, @initiator; null outside npc dialogues
+    virtual ServerPlayer *getInitiator() {
+        return nullptr;
+    }
+
     // command blocks: false for any other origin
     virtual bool getSourceBlock(Level *&level, Vector3i &position);
 

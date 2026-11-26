@@ -57,6 +57,10 @@ public:
     // without an executor, the base origin's entity keeps running it
     Actor *getEntity() override;
 
+    ServerPlayer *getInitiator() override {
+        return mBase.getInitiator();
+    }
+
     bool getSourceBlock(Level *&level, Vector3i &position) override {
         return mBase.getSourceBlock(level, position);
     }

@@ -1,6 +1,7 @@
 #include "World/Actor/Misc/NpcActor.h"
 
 #include "Core/Json/Json.h"
+#include "Network/Handler/NpcHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
@@ -13,13 +14,22 @@ namespace {
     const char *const SCENE_NAME_TAG = "SceneName";
     const char *const VARIANT_TAG = "Variant";
     const char *const MARK_VARIANT_TAG = "MarkVariant";
+    // the game's own spelling
+    const char *const INTERACT_TEXT_TAG = "InterativeText";
+    const char *const ACTIONS_TAG = "Actions";
+    const char *const PLAYER_SCENES_TAG = "PlayerSceneMapping";
+    const char *const PLAYER_ID_TAG = "PlayerID";
 
-    std::vector<NpcActor::Skin> definitionSkins() {
-        std::vector<NpcActor::Skin> skins;
+    const json::Value *definitionData() {
         const json::Value *definition = EntityDefinitions::find(NpcActor::IDENTIFIER);
         const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
         const json::Value *npc = components == nullptr ? nullptr : components->get("minecraft:npc");
-        const json::Value *data = npc == nullptr ? nullptr : npc->get("npc_data");
+        return npc == nullptr ? nullptr : npc->get("npc_data");
+    }
+
+    std::vector<NpcActor::Skin> definitionSkins() {
+        std::vector<NpcActor::Skin> skins;
+        const json::Value *data = definitionData();
         const json::Value *list = data == nullptr ? nullptr : data->get("skin_list");
         if (list == nullptr || !list->isArray())
             return skins;
@@ -50,7 +60,11 @@ namespace {
 }
 
 NpcActor::NpcActor(uint64_t runtimeId, const std::string &identifier)
-        : ServerActor(runtimeId, identifier), mSkins(definitionSkins()) {}
+        : ServerActor(runtimeId, identifier), mSkins(definitionSkins()) {
+    const json::Value *data = definitionData();
+    if (data != nullptr && data->isObject())
+        mNpcData = json::stringify(*data);
+}
 
 int32_t NpcActor::getSkinIndex() const {
     return mSkinIndex >= 0 && (size_t) mSkinIndex < mSkins.size() ? mSkinIndex : -1;
@@ -89,14 +103,49 @@ void NpcActor::setName(ServerNetworkHandler *owner, const std::string &rawName) 
     setNameTag(firstCodePoints(resolveName(rawName), MAX_NAME_TAG_LENGTH));
     if (owner == nullptr)
         return;
-    EntityDataEntry raw;
-    raw.mId = NAME_RAW_TEXT_DATA_ID;
-    raw.mFormat = EntityDataFormat::String;
-    raw.mStringValue = mRawName;
-    EntityDataMap metadata;
-    metadata.mEntries.push_back(raw);
-    owner->sendActorMetadata(*this, metadata);
+    _sendString(owner, NAME_RAW_TEXT_DATA_ID, mRawName);
     owner->sendActorNameTag(*this);
+}
+
+const std::string &NpcActor::getSceneFor(int64_t playerUniqueId) const {
+    const auto scene = mPlayerScenes.find(playerUniqueId);
+    return scene == mPlayerScenes.end() ? mSceneName : scene->second;
+}
+
+const std::string &NpcActor::getOpenedScene(int64_t playerUniqueId) const {
+    static const std::string NONE;
+    const auto scene = mOpenedScenes.find(playerUniqueId);
+    return scene == mOpenedScenes.end() ? NONE : scene->second;
+}
+
+bool NpcActor::setActions(ServerNetworkHandler *owner, std::vector<NpcAction> actions) {
+    if (actions == mActions)
+        return false;
+    mActions = std::move(actions);
+    _sendString(owner, ACTIONS_DATA_ID, NpcAction::writeList(mActions));
+    return true;
+}
+
+void NpcActor::setInteractText(ServerNetworkHandler *owner, const std::string &text) {
+    mInteractText = text;
+    _sendString(owner, INTERACT_TEXT_DATA_ID, mInteractText);
+}
+
+bool NpcActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
+    NpcHandler::openDialogue(owner, *this, player, getSceneFor(player.getUniqueId()));
+    return true;
+}
+
+void NpcActor::_sendString(ServerNetworkHandler *owner, int32_t id, const std::string &value) {
+    if (owner == nullptr)
+        return;
+    EntityDataEntry entry;
+    entry.mId = id;
+    entry.mFormat = EntityDataFormat::String;
+    entry.mStringValue = value;
+    EntityDataMap metadata;
+    metadata.mEntries.push_back(entry);
+    owner->sendActorMetadata(*this, metadata);
 }
 
 void NpcActor::_appendSkin(EntityDataMap &metadata) const {
@@ -123,18 +172,46 @@ void NpcActor::_appendSkin(EntityDataMap &metadata) const {
 
 void NpcActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     _appendSkin(metadata);
-    if (mRawName.empty())
+    EntityDataEntry hasNpc;
+    hasNpc.mId = HAS_NPC_DATA_ID;
+    hasNpc.mFormat = EntityDataFormat::Byte;
+    hasNpc.mByteValue = 1;
+    metadata.mEntries.push_back(hasNpc);
+    const std::pair<int32_t, const std::string *> strings[] = {
+            {NPC_DATA_DATA_ID, &mNpcData}, {INTERACT_TEXT_DATA_ID, &mInteractText}, {NAME_RAW_TEXT_DATA_ID, &mRawName}};
+    for (const auto &[id, value]: strings) {
+        if (value->empty())
+            continue;
+        EntityDataEntry entry;
+        entry.mId = id;
+        entry.mFormat = EntityDataFormat::String;
+        entry.mStringValue = *value;
+        metadata.mEntries.push_back(entry);
+    }
+    if (mActions.empty())
         return;
-    EntityDataEntry raw;
-    raw.mId = NAME_RAW_TEXT_DATA_ID;
-    raw.mFormat = EntityDataFormat::String;
-    raw.mStringValue = mRawName;
-    metadata.mEntries.push_back(raw);
+    EntityDataEntry actions;
+    actions.mId = ACTIONS_DATA_ID;
+    actions.mFormat = EntityDataFormat::String;
+    actions.mStringValue = NpcAction::writeList(mActions);
+    metadata.mEntries.push_back(actions);
 }
 
 Tag NpcActor::saveNbt() const {
     Tag data = ServerActor::saveNbt();
     data.putString(RAW_NAME_TAG, mRawName);
+    data.putString(INTERACT_TEXT_TAG, mInteractText);
+    data.putString(ACTIONS_TAG, NpcAction::writeList(mActions));
+    if (!mPlayerScenes.empty()) {
+        Tag scenes = Tag::ofList(Tag::Type::Compound);
+        for (const auto &[player, scene]: mPlayerScenes) {
+            Tag entry = Tag::ofCompound();
+            entry.putLong(PLAYER_ID_TAG, player);
+            entry.putString(SCENE_NAME_TAG, scene);
+            scenes.addToList(std::move(entry));
+        }
+        data.put(PLAYER_SCENES_TAG, std::move(scenes));
+    }
     if (!mSceneName.empty())
         data.putString(SCENE_NAME_TAG, mSceneName);
     const int32_t index = getSkinIndex();
@@ -149,7 +226,17 @@ Tag NpcActor::saveNbt() const {
 void NpcActor::loadNbt(const Tag &data) {
     ServerActor::loadNbt(data);
     mRawName = data.getString(RAW_NAME_TAG, mRawName);
+    mInteractText = data.getString(INTERACT_TEXT_TAG, mInteractText);
+    if (data.contains(ACTIONS_TAG))
+        mActions = NpcAction::parseList(data.getString(ACTIONS_TAG));
     mSceneName = data.getString(SCENE_NAME_TAG, mSceneName);
+    const Tag *scenes = data.get(PLAYER_SCENES_TAG);
+    if (scenes != nullptr && scenes->isList()) {
+        for (const Tag &entry: scenes->getList()) {
+            if (entry.isCompound() && entry.contains(PLAYER_ID_TAG))
+                mPlayerScenes[entry.getLong(PLAYER_ID_TAG)] = entry.getString(SCENE_NAME_TAG);
+        }
+    }
     if (!data.contains(VARIANT_TAG))
         return;
     const int32_t variant = data.getInt(VARIANT_TAG);

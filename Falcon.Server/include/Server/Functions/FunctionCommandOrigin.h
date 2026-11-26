@@ -15,6 +15,7 @@ public:
               mPermissions(permissions), mLocale(caller.getLocale()),
               mPermission(caller.getCommandPermission()), mPosition(caller.getPosition()),
               mRotation(caller.getRotation()), mLevel(caller.getLevel()), mEntity(caller.getEntity()),
+              mInitiator(caller.getInitiator()),
               mWithoutCheats(caller.canUseCommandsWithoutCheats()), mManagesServer(caller.canManageServer()) {
         mHasBlock = caller.getSourceBlock(mBlockLevel, mBlock);
     }
@@ -72,6 +73,10 @@ public:
         return mEntity;
     }
 
+    ServerPlayer *getInitiator() override {
+        return mInitiator;
+    }
+
     bool getSourceBlock(Level *&level, Vector3i &position) override {
         level = mBlockLevel;
         position = mBlock;
@@ -99,6 +104,7 @@ private:
     Vector3f mRotation;
     Level *mLevel;
     Actor *mEntity;
+    ServerPlayer *mInitiator;
     bool mWithoutCheats;
     bool mManagesServer;
     bool mHasBlock = false;

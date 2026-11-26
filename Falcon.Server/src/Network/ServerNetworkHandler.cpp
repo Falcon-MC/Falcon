@@ -38,6 +38,7 @@
 #include "Network/Handler/BookHandler.h"
 #include "Network/Handler/CrafterHandler.h"
 #include "Network/Handler/LecternHandler.h"
+#include "Network/Handler/NpcHandler.h"
 #include "Network/Handler/LodestoneHandler.h"
 #include "Network/Handler/ChatHandler.h"
 #include "Network/Handler/InventoryHandler.h"
@@ -133,6 +134,7 @@
 #include "Protocol/Packets/CraftingDataPacket.h"
 #include "Protocol/Packets/CraftingEventPacket.h"
 #include "Protocol/Packets/InteractPacket.h"
+#include "Protocol/Packets/NpcRequestPacket.h"
 #include "Protocol/Packets/InventoryContentPacket.h"
 #include "Protocol/Packets/InventorySlotPacket.h"
 #include "Protocol/Packets/InventoryTransactionPacket.h"
@@ -3102,6 +3104,14 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InteractPac
         return;
 
     InventoryHandler::handleOpenInventory(*this, *player);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const NpcRequestPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned())
+        return;
+
+    NpcHandler::handleRequest(*this, *player, packet);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ItemStackRequestPacket &packet) {
