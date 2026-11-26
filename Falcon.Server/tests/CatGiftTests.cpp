@@ -122,7 +122,7 @@ namespace {
         offer.mLootTable = "loot_tables/entities/cat_gift.json";
         const json::Value *drop = cat.getComponent("minecraft:behavior.drop_item_for");
         require(drop != nullptr && drop->get("on_drop_attempt") != nullptr, "the gift group has no drop_item_for");
-        offer.mOnDropAttempt = std::make_shared<json::Value>(*drop->get("on_drop_attempt"));
+        offer.mOnDropAttempt = std::shared_ptr<json::Value>(drop->get("on_drop_attempt")->clone());
         return DropItemForGoal(settings, std::move(offer));
     }
 
