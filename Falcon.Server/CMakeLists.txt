@@ -445,6 +445,7 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     target_compile_definitions(FalconFluidParityTests PRIVATE
             FALCON_FLUID_TRACE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/fluids")
     falcon_add_test(bubble-columns FalconBubbleColumnTests tests/BubbleColumnTests.cpp)
+    falcon_add_test(liquid-flow FalconLiquidFlowTests tests/LiquidFlowTests.cpp)
     falcon_add_test(fast-join FalconFastJoinTests tests/FastJoinTests.cpp)
     falcon_add_test(actor-visibility FalconActorVisibilityTests tests/ActorVisibilityTests.cpp)
     # the queue alone: no server to link

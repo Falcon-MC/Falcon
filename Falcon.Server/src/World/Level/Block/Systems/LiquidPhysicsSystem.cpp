@@ -797,79 +797,77 @@ LiquidInfo LiquidPhysicsSystem::getLiquidInfo(int32_t x, int32_t y, int32_t z) {
     return result;
 }
 
-bool LiquidPhysicsSystem::_isFlowable(const BlockState &state, bool lava) const {
+// blocks a liquid drops past for the current: air, liquids and the blocks entities walk through
+bool LiquidPhysicsSystem::_blocksMotion(const BlockState &state) const {
     const LiquidProperties properties = LiquidProperties::of(state);
-    if (properties.air || properties.isLiquid())
-        return true;
-
+    if (properties.air || properties.isLiquid() || properties.bubbleColumn)
+        return false;
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
-    if (data == nullptr)
-        return false;
-
-    // waterlogging level 1: source only, no flowing water; higher levels take flowing water into layer 1;
-    // lava never waterlogs
-    const uint8_t waterlogging = getWaterloggingLevel(state);
-    if (!lava && waterlogging > 1)
-        return true;
-    if (!lava && waterlogging == 1)
-        return false;
-    return !data->mSolid;
+    return data == nullptr || data->mSolid;
 }
 
 Vector3f LiquidPhysicsSystem::getFlowVector(const Vector3i &position) {
     const Scope scope(*this);
-    const LiquidView liquid(*_liquidAt(position).state);
-    if (!liquid.isLiquid())
+    const LiquidMaterial material = _liquidPropertiesAt(position).material;
+    if (material == LiquidMaterial::None)
         return Vector3f();
 
-    const bool lava = liquid.isLava();
-    const int decay = liquid.isSource() || liquid.isFalling() ? 0 : liquid.getDecay();
+    // falling liquid counts as depth 0 everywhere here
+    const auto depthOf = [this, material](const Vector3i &at) {
+        const int depth = _depth(at, material);
+        return depth >= 8 ? 0 : depth;
+    };
+    const int depth = depthOf(position);
+    const uint8_t ownFaces = _propertiesAt(position).blockedFaces;
     float x = 0.0f;
-    float y = 0.0f;
     float z = 0.0f;
-    static const int offsets[4][3] = {{0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
-    // pushes towards higher decay (shallower fluid); an open side over fluid counts 8 levels deeper:
-    // entities are pulled over edges
-    for (const auto &side: offsets) {
-        const Vector3i next = offset(position, side[0], 0, side[2]);
-        const BlockState &sideState = *_liquidAt(next).state;
-        const LiquidView sideLiquid(sideState);
-        if (sideLiquid.isLiquid() && sideLiquid.isLava() == lava) {
-            const int sideDecay = sideLiquid.isSource() || sideLiquid.isFalling() ? 0 : sideLiquid.getDecay();
-            const int realDecay = sideDecay - decay;
-            x += (float) side[0] * (float) realDecay;
-            z += (float) side[2] * (float) realDecay;
-        } else if (_isFlowable(sideState, lava)) {
-            const LiquidView belowLiquid(*_liquidAt(offset(next, 0, -1, 0)).state);
-            if (belowLiquid.isLiquid() && belowLiquid.isLava() == lava) {
-                const int belowDecay = belowLiquid.isSource() || belowLiquid.isFalling() ? 0 : belowLiquid.getDecay();
-                const int realDecay = belowDecay - (decay - 8);
-                x += (float) side[0] * (float) realDecay;
-                z += (float) side[2] * (float) realDecay;
+    // towards shallower liquid; an open side over liquid counts 8 levels deeper: entities are pulled over edges
+    for (const Side &side: SPREAD_SIDES) {
+        const Vector3i next = offset(position, side.x, 0, side.z);
+        const int nextDepth = depthOf(next);
+        int weight = 0;
+        bool counted = false;
+        // both faces open, as for the spread
+        if (nextDepth >= 0 && (_propertiesAt(next).blockedFaces >> side.face & 1) == 0
+            && (ownFaces >> LiquidFace::opposite(side.face) & 1) == 0) {
+            weight = nextDepth - depth;
+            counted = true;
+        } else if (!_blocksMotion(_stateAt(next))) {
+            const int belowDepth = depthOf(offset(next, 0, -1, 0));
+            if (belowDepth >= 0) {
+                weight = belowDepth - depth + 8;
+                counted = true;
             }
+        }
+        if (counted) {
+            x += (float) (side.x * weight);
+            z += (float) (side.z * weight);
         }
     }
 
-    // falling fluid next to a wall pulls down hard: drags entities along waterfalls
-    if (liquid.isFalling()) {
-        for (const auto &side: offsets) {
-            const Vector3i next = offset(position, side[0], 0, side[2]);
-            if (!_isFlowable(*_liquidAt(next).state, lava)
-                || !_isFlowable(*_liquidAt(offset(next, 0, 1, 0)).state, lava)) {
-                const float length = std::sqrt(x * x + y * y + z * z);
-                if (length > 0.0f) {
-                    x /= length;
-                    z /= length;
-                }
-                y -= 6.0f;
-                break;
+    float y = 0.0f;
+    // falling liquid beside a solid block pulls down hard: drags entities along waterfalls
+    if (_depth(position, material) >= 8) {
+        for (const Side &side: SPREAD_SIDES) {
+            const Vector3i next = offset(position, side.x, 0, side.z);
+            if (!_propertiesAt(next).solid && !_propertiesAt(offset(next, 0, 1, 0)).solid)
+                continue;
+            const float length = std::sqrt(x * x + z * z);
+            if (length >= 0.0001f) {
+                x /= length;
+                z /= length;
+            } else {
+                x = 0.0f;
+                z = 0.0f;
             }
+            y = -6.0f;
+            break;
         }
     }
 
     const float length = std::sqrt(x * x + y * y + z * z);
-    if (length <= 0.0f)
+    if (length < 0.0001f)
         return Vector3f();
     return Vector3f(x / length, y / length, z / length);
 }

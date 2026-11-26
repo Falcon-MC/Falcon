@@ -243,7 +243,7 @@ private:
     int _searchSlope(LiquidMaterial self, const Vector3i &position, int pass, int from);
     void _popResources(const Vector3i &position, const BlockState &state);
 
-    bool _isFlowable(const BlockState &state, bool lava) const;
+    bool _blocksMotion(const BlockState &state) const;
 
     std::string _saveRecord(const BlockTickingQueue &queue, int32_t chunkX, int32_t chunkZ) const;
     void _loadRecord(BlockTickingQueue &queue, int32_t chunkX, int32_t chunkZ, const std::string &record);
