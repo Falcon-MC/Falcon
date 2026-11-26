@@ -3,7 +3,7 @@
 #include "Protocol/NetworkPacketHandler.h"
 
 InteractPacket::InteractPacket()
-        : mAction(Action::None), mRuntimeActorId(0), mHasMousePosition(false) {}
+        : mAction(Action::Invalid), mRuntimeActorId(0), mHasMousePosition(false) {}
 
 void InteractPacket::write(BinaryStream &stream, const PacketCodecContext &context) const {
     stream.putByte((unsigned char) mAction);
