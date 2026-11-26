@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
     const Vector3i ORIGIN(8, 64, 8);
@@ -41,11 +42,16 @@ namespace {
         World &mWorld = mOwner.getWorlds().getDefault();
         Level &mLevel;
 
-        RedstoneFixture() : mLevel(mWorld.getLevel(DimensionType::Overworld)) {
+        // `chunks` loaded chunks in a row along x from chunk 0, 0, all ticking
+        explicit RedstoneFixture(int chunks = 1) : mLevel(mWorld.getLevel(DimensionType::Overworld)) {
             mLevel.setOwner(&mOwner);
-            mLevel.setActiveColumns({BlockTickingQueue::column(0, 0)});
-            mLevel.getChunk(0, 0);
-            for (int x = 0; x < 16; ++x) {
+            std::vector<int64_t> columns;
+            for (int chunk = 0; chunk < chunks; ++chunk) {
+                columns.push_back(BlockTickingQueue::column(chunk, 0));
+                mLevel.getChunk(chunk, 0);
+            }
+            mLevel.setActiveColumns(columns);
+            for (int x = 0; x < 16 * chunks; ++x) {
                 for (int z = 0; z < 16; ++z) {
                     for (int y = 60; y <= 72; ++y)
                         mLevel.setBlockState(x, y, z, BlockState(BlockNames::AIR));
@@ -367,6 +373,34 @@ namespace {
     }
 
 
+    // a hopper on a chunk's edge powered from the next chunk: it keeps its state while that chunk is away, and
+    // locks once it loads
+    void circuitReloadAtBorder() {
+        RedstoneFixture fixture(2);
+        const Vector3i locked(15, 64, 4);
+        const Vector3i free(15, 64, 10);
+        BlockState hopper = VanillaBlocks::HOPPER().toBlockState();
+        hopper.mStates.putByte("toggle_bit", 1);
+        fixture.set(locked, hopper);
+        hopper.mStates.putByte("toggle_bit", 0);
+        fixture.set(free, hopper);
+        fixture.set(Vector3i(16, 64, 4), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        fixture.set(Vector3i(16, 64, 10), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+
+        LevelChunk east = fixture.mLevel.extractChunk(1, 0);
+        LevelChunk home = fixture.mLevel.extractChunk(0, 0);
+        fixture.mLevel.insertChunk(std::move(home));
+        fixture.run(6);
+        require(fixture.at(locked).mStates.getByte("toggle_bit", 0) == 1,
+                "a hopper powered from an unloaded chunk was unlocked");
+
+        fixture.mLevel.insertChunk(std::move(east));
+        fixture.run(6);
+        require(fixture.at(locked).mStates.getByte("toggle_bit", 0) == 1
+                        && fixture.at(free).mStates.getByte("toggle_bit", 0) == 1,
+                "a hopper was not locked once the chunk powering it loaded");
+    }
+
     // powered TNT ignites only while tntexplodes is on, as every other ignition
     void tntGameRule() {
         RedstoneFixture fixture;
@@ -459,6 +493,7 @@ int main() {
         hopperPlacedPowered();
         openablePlacedPowered();
         circuitReload();
+        circuitReloadAtBorder();
         tntGameRule();
         lightningRod();
         copperBulb();
