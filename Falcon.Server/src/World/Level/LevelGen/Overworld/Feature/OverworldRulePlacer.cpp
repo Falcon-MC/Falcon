@@ -32,6 +32,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/BlockPileFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/CactusFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/SculkPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
@@ -2113,6 +2114,16 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                                                      "minecraft:sulfur", "minecraft:cinnabar"}};
     static const ThresholdDefinition UNDERGROUND_GLOW_LICHEN = {"minecraft:underground_glow_lichen_feature",
                                                                 multiface(GLOW_LICHEN), 2};
+    // features/sculk_vein_feature.json; planks is no block of the game any more
+    static const MultifaceDefinition SCULK_VEIN = {"minecraft:sculk_vein_feature",
+                                                   &VanillaBlocks::SCULK_VEIN,
+                                                   20,
+                                                   {0, 1, 2, 3, 4, 5},
+                                                   1.0f,
+                                                   {"minecraft:stone", "minecraft:deepslate",
+                                                    "minecraft:cobbled_deepslate", "minecraft:deepslate_tiles",
+                                                    "minecraft:cracked_deepslate_tiles", "minecraft:deepslate_bricks",
+                                                    "minecraft:cracked_deepslate_bricks", "minecraft:tuff"}};
 
     // BDS 1.26.61 behavior packs, features/small_dripstone*.json; the scatter keeps the default xyz order
     static const DripstoneDefinition DRIPSTONE = {&dripstoneBlocks, 3, 5, {0.1f, 0.3f, 0.1f, 1.0f}};
@@ -2625,6 +2636,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     }
     if (entry.mPass == "after_underground_pass" && entry.mFeature == UNDERGROUND_GLOW_LICHEN.mIdentifier)
         feature.mPlaced.mThreshold = &UNDERGROUND_GLOW_LICHEN;
+    if (entry.mPass == "after_underground_pass" && entry.mFeature == SCULK_VEIN.mIdentifier)
+        feature.mPlaced.mMultiface = &SCULK_VEIN;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:sculk_patch_feature")
+        feature.mPlaced.mFunction = &SculkPatchFeature::place;
     if (entry.mPass == FIRST_PASS) {
         feature.mForestFoliage = entry.mFeature == "minecraft:legacy:forest_foliage_feature";
         feature.mForestRock = entry.mFeature == "minecraft:legacy:forest_rock_feature";
