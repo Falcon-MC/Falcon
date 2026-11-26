@@ -394,6 +394,7 @@ struct EntityFilter::Test {
         RedstoneStrengthAtPosition,
         InCaravan,
         IsInVillage,
+        IsRaider,
         Unsupported,
         IsBlock,
         IsWaterlogged
@@ -534,7 +535,7 @@ namespace {
             {"redstone_strength_at_position", FilterTestType::RedstoneStrengthAtPosition},
             {"in_caravan", FilterTestType::InCaravan},
             {"is_in_village", FilterTestType::IsInVillage},
-            {"is_raider", FilterTestType::Unsupported},
+            {"is_raider", FilterTestType::IsRaider},
             {"has_trade_supply", FilterTestType::Unsupported},
             {"trusts", FilterTestType::Unsupported},
             {"is_leashed_to", FilterTestType::Unsupported},
@@ -1245,6 +1246,13 @@ namespace {
                                                                  .getVillageManager()
                                                                  .getClosestVillage(blockPosition(*target), 0);
                 return applyBoolean(village != nullptr, filter);
+            }
+            case FilterTestType::IsRaider: {
+                // the game asks the mob's dweller component for its role: only raid groups give the hostile one
+                const MobActor *mob = mobOf(*target);
+                return applyBoolean(mob != nullptr && mob->getDweller().isActive()
+                                            && mob->getDweller().getRole() == DwellerRole::Hostile,
+                                    filter);
             }
             case FilterTestType::Unsupported:
                 return applyBoolean(false, filter);
