@@ -1160,6 +1160,13 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              {{&VanillaBlocks::REDSTONE_ORE, {"minecraft:stone"}},
               {&VanillaBlocks::DEEPSLATE_REDSTONE_ORE, {"minecraft:deepslate"}}}},
             {"minecraft:tuff_feature", 64, 0.0f, {{&VanillaBlocks::TUFF, {"minecraft:stone", "minecraft:deepslate"}}}},
+            // the game's own silverfish feature, not the pack's stone-only one: veins of 9 in the four stones and in
+            // deepslate and tuff, as the game's output shows
+            {"minecraft:silverfish_feature",
+             8,
+             0.0f,
+             {{&VanillaBlocks::INFESTED_STONE, {"minecraft:stone"}},
+              {&VanillaBlocks::INFESTED_DEEPSLATE, {"minecraft:deepslate"}}}},
             {"minecraft:nether_soul_sand_underground_feature",
              12,
              0.0f,
@@ -2465,6 +2472,13 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     Feature feature;
     if (entry.mPass == AFTER_SURFACE_PASS) {
         feature.mKelp = entry.mFeature == "minecraft:kelp_feature";
+        // the silverfish veins come after the surface
+        if (entry.mFeature == "minecraft:silverfish_feature") {
+            for (const OreDefinition &ore: ORES) {
+                if (entry.mFeature == ore.mIdentifier)
+                    feature.mOre = &ore;
+            }
+        }
         if (entry.mFeature == UNDERWATER_MAGMA_UNDERGROUND.mIdentifier)
             feature.mPlaced.mThreshold = &UNDERWATER_MAGMA_UNDERGROUND;
         if (entry.mFeature == SMALL_DRIPSTONE.mIdentifier)
