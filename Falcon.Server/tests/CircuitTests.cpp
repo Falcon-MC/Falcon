@@ -470,6 +470,20 @@ namespace {
         require(fixture.at(lamp).mName == "minecraft:redstone_lamp", "a torch hung on a lamp lit it");
     }
 
+    // a lamp passes power on: a lever on top of it strongly powers it, and the dust beside it takes the signal
+    void lampPassesPowerOn() {
+        Fixture fixture;
+        const Vector3i lamp = ORIGIN;
+        fixture.set(lamp, fixture.block("minecraft:redstone_lamp"));
+        BlockState lever = fixture.lever(true);
+        lever.mStates.putString("lever_direction", "up_east_west");
+        fixture.set(Vector3i(lamp.x, lamp.y + 1, lamp.z), lever);
+        fixture.set(east(lamp, 1), fixture.block("minecraft:redstone_wire"));
+        fixture.run(8);
+        require(fixture.at(lamp).mName == "minecraft:lit_redstone_lamp", "a lamp under a lever was not lit");
+        require(fixture.signal(east(lamp, 1)) == 15, "dust beside a lamp powered by a lever on it got no signal");
+    }
+
     // the game's movable table: what a piston pushes, pulls, breaks or stops at
     void pistonMovableTable() {
         const auto movement = [](const char *name) { return PistonMovable::of(name).mMovement; };
@@ -596,6 +610,7 @@ int main() {
         strongPowerThroughConductors();
         producerSetups();
         consumerSetups();
+        lampPassesPowerOn();
         pistonMovableTable();
         pistonMoves();
         std::cout << "circuit checks passed\n";
