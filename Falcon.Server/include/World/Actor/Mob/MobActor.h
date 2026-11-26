@@ -350,6 +350,10 @@ public:
         _setFlag(owner, ActorFlag::Sitting, sitting);
     }
 
+    void setRestingFlag(ServerNetworkHandler &owner, bool resting) {
+        _setFlag(owner, ActorFlag::Resting, resting);
+    }
+
     void setWantsToWake(ServerNetworkHandler &owner, bool wants) {
         _setFlag(owner, ActorFlag::WantsToWake, wants);
     }

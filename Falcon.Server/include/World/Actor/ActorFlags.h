@@ -18,6 +18,8 @@ enum class ActorFlag : int {
     Silent = 17,
     CanClimb = 19,
     CanWalk = 22,
+    // a pet lying on its owner's bed
+    Resting = 23,
     Sitting = 24,
     Angry = 25,
     Interested = 26,

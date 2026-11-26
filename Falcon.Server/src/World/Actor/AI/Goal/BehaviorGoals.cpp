@@ -10,6 +10,7 @@
 #include "World/Actor/AI/Goal/BreedGoal.h"
 #include "World/Actor/AI/Goal/DefendVillageTargetGoal.h"
 #include "World/Actor/AI/Goal/DragonGoals.h"
+#include "World/Actor/AI/Goal/DropItemForGoal.h"
 #include "World/Actor/AI/Goal/CelebrateGoal.h"
 #include "World/Actor/AI/Goal/CelebrateSurviveGoal.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
@@ -67,6 +68,7 @@
 #include "World/Actor/AI/Goal/OpenDoorGoal.h"
 #include "World/Actor/AI/Goal/OwnerTargetGoal.h"
 #include "World/Actor/AI/Goal/PanicGoal.h"
+#include "World/Actor/AI/Goal/PetSleepWithOwnerGoal.h"
 #include "World/Actor/AI/Goal/PickupItemsGoal.h"
 #include "World/Actor/AI/Goal/PlayGoal.h"
 #include "World/Actor/AI/Goal/PlaceBlockGoal.h"
@@ -165,6 +167,8 @@ namespace {
     const int32_t OCELOT_SIT_SEARCH_HEIGHT = 1;
     const float OCELOT_SIT_GOAL_RADIUS = 1.0f;
     const float SLEEP_DEFAULT_Y_OFFSET = 1.0f;
+    const float PET_SLEEP_DEFAULT_SEARCH_HEIGHT = 1.0f;
+    const float PET_SLEEP_DEFAULT_GOAL_RADIUS = 0.5f;
 
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
     const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
@@ -1648,6 +1652,39 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         settings.mCanSleepWhileRiding = isFlagSet(component, "can_sleep_while_riding");
         settings.mTimeoutTicks = (int32_t) numberOf(component, "timeout_cooldown", 0.0f);
         return std::make_unique<SleepGoal>(settings);
+    }
+
+    if (behavior == "pet_sleep_with_owner") {
+        PetSleepWithOwnerGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", PET_SLEEP_DEFAULT_SEARCH_HEIGHT);
+        settings.mGoalRadius = numberOf(component, "goal_radius", PET_SLEEP_DEFAULT_GOAL_RADIUS);
+        return std::make_unique<PetSleepWithOwnerGoal>(settings);
+    }
+
+    if (behavior == "drop_item_for") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", 0.0f);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", 0.0f);
+        settings.mGoalRadius = numberOf(component, "goal_radius", MOVE_TO_BLOCK_DEFAULT_RADIUS);
+        DropItemForGoal::Offer offer;
+        offer.mCooldownTicks = (int32_t) std::lround(numberOf(component, "cooldown", 0.0f) * TICKS_PER_SECOND);
+        offer.mDropChance = numberOf(component, "drop_item_chance", offer.mDropChance);
+        offer.mOfferingDistance = numberOf(component, "offering_distance", offer.mOfferingDistance);
+        offer.mMinimumTeleportDistance = numberOf(component, "minimum_teleport_distance",
+                                                  offer.mMinimumTeleportDistance);
+        offer.mPickupDelayTicks = (int32_t) std::lround(numberOf(component, "seconds_before_pickup", 0.0f)
+                                                        * TICKS_PER_SECOND);
+        offer.mTimeOfDayMin = rangeValue(component, "time_of_day_range", "min", offer.mTimeOfDayMin);
+        offer.mTimeOfDayMax = rangeValue(component, "time_of_day_range", "max", offer.mTimeOfDayMax);
+        offer.mTargetRange = vectorOf(component, "target_range");
+        offer.mTeleportOffset = vectorOf(component, "teleport_offset");
+        offer.mEntries = targetEntries(component);
+        const json::Value *loot = component.get("loot_table");
+        offer.mLootTable = loot == nullptr ? std::string() : loot->string();
+        offer.mOnDropAttempt = triggerOf(component, "on_drop_attempt");
+        return std::make_unique<DropItemForGoal>(settings, std::move(offer));
     }
 
     if (behavior == "move_towards_home_restriction")

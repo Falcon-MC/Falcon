@@ -30,6 +30,14 @@ public:
         mColor = color;
     }
 
+    // one pet per bed sleeps with its owner; not saved
+    bool claimPet(int64_t uniqueId);
+
+    void releasePet(int64_t uniqueId);
+
 private:
+    static constexpr int64_t NO_PET = -1;
+
     int8_t mColor = 0;
+    int64_t mPetId = NO_PET;
 };
