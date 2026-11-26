@@ -726,6 +726,7 @@ private:
 
     // read by getPhysics() every tick: resolved once per component change
     struct DefinitionPhysics {
+        bool mHasCollision = true;
         bool mSwims = false;
         bool mClimbsLadders = false;
         bool mClimbsWalls = false;

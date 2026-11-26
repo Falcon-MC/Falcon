@@ -130,6 +130,7 @@ namespace {
                                                  "minecraft:navigation.swim", "minecraft:navigation.climb"};
     const char *const CAN_CLIMB_COMPONENT = "minecraft:can_climb";
     const char *const BLOCK_CLIMBER_COMPONENT = "minecraft:block_climber";
+    const char *const PHYSICS_COMPONENT = "minecraft:physics";
     const char *const MOB_EFFECT_IMMUNITY_COMPONENT = "minecraft:mob_effect_immunity";
     const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
     const char *const BURNS_IN_DAYLIGHT_COMPONENT = "minecraft:burns_in_daylight";
@@ -1235,6 +1236,7 @@ bool MobActor::canBeAffected(MobEffectId id) const {
 PhysicsComponent MobActor::getPhysics() const {
     PhysicsComponent physics = ServerActor::getPhysics();
     const DefinitionPhysics &definition = _getDefinitionPhysics();
+    physics.mHasCollision = definition.mHasCollision;
     physics.mSwims = definition.mSwims;
     physics.mFloatsInLiquid = mGoalSelector.keepsAfloat();
     physics.mClimbsLadders = definition.mClimbsLadders;
@@ -1262,6 +1264,10 @@ const MobActor::DefinitionPhysics &MobActor::_getDefinitionPhysics() const {
 
     DefinitionPhysics &definition = mDefinitionPhysics;
     definition = DefinitionPhysics();
+    // has_collision false: the vex moves straight through blocks
+    const json::Value *physics = getComponent(PHYSICS_COMPONENT);
+    const json::Value *collision = physics == nullptr ? nullptr : physics->get("has_collision");
+    definition.mHasCollision = collision == nullptr || collision->boolean(true);
     definition.mSwims = canSwim();
     definition.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
     definition.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;

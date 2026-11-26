@@ -2087,8 +2087,10 @@ void ServerNetworkHandler::tickActors() {
 
         if (!actor.isProjectile()) {
             const ActorSize size = actor.getSize();
-            // nothing hurts an invulnerable actor: where its eyes are is not even looked at
-            if (!actor.isInvulnerable() && _isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
+            // nothing hurts an invulnerable actor: where its eyes are is not even looked at; an actor without
+            // collision is meant to be inside blocks
+            if (!actor.isInvulnerable() && actor.getPhysics().mHasCollision
+                && _isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE,
                            ActorDamageSource::environment("death.attack.inWall", actor.getName()));
 
