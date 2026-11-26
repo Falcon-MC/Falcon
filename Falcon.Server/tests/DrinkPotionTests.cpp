@@ -38,6 +38,8 @@ namespace {
         owner.setProperties(PropertiesSettings(properties.string()));
         EntityDefinitions::initialize();
         Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        // the opened world has generated the chunk its random seed spawns in, and an existing chunk wins the insert
+        level.dropChunk(0, 0);
         level.insertChunk(LevelChunk(0, 0)).setPopulated(true);
         MobActor *witch =
                 dynamic_cast<MobActor *>(owner.spawnActor(level, "minecraft:witch", Vector3f(4.5f, 100.0f, 4.5f)));
