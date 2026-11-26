@@ -15,12 +15,18 @@
 #endif
 #include <sched.h>
 #ifdef __linux__
+#include <cerrno>
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #endif
 
 namespace {
+#ifdef __linux__
+    const int WORKER_NICE_OFFSET = 10;
+    const int LOWEST_NICE = 19;
+#endif
+
     // lower quarter of the scheduling range: generation and storage never starve the tick thread
     void lowerCurrentThreadPriority() {
 #ifdef __APPLE__
@@ -31,8 +37,16 @@ namespace {
 #endif
 #ifdef __linux__
         // normal threads have a 0..0 priority range there: the code below changes nothing; nice is per thread
-        if (setpriority(PRIO_PROCESS, (id_t) syscall(SYS_gettid), 10) == 0)
-            return;
+        // added to the inherited nice: an absolute value does nothing at that value and raises a server above it
+        const id_t thread = (id_t) syscall(SYS_gettid);
+        errno = 0;
+        const int inherited = getpriority(PRIO_PROCESS, thread);
+        if (errno == 0) {
+            if (inherited >= LOWEST_NICE)
+                return;
+            if (setpriority(PRIO_PROCESS, thread, std::min(inherited + WORKER_NICE_OFFSET, LOWEST_NICE)) == 0)
+                return;
+        }
 #endif
         sched_param parameters;
         int policy = 0;
