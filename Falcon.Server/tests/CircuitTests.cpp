@@ -14,6 +14,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
     void require(bool condition, const std::string &message) {
@@ -137,16 +138,15 @@ namespace {
         fixture.run(6);
 
         fixture.flip(source);
-        const int lit = fixture.within(6, [&]() { return fixture.signal(east(source, 15)) == 1; });
-        require(lit != 0, "the fifteenth dust never got the signal");
+        const int first = fixture.within(6, [&]() { return fixture.signal(east(source, 1)) != 0; });
+        require(first != 0, "the first dust never got the signal");
+        require(fixture.signal(east(source, 15)) == 1, "the fifteenth dust did not get the signal in the same tick");
         for (int step = 1; step <= 15; ++step) {
             const int expected = 16 - step;
             require(fixture.signal(east(source, step)) == expected,
                     "dust " + std::to_string(step) + " held " + std::to_string(fixture.signal(east(source, step)))
                             + ", not " + std::to_string(expected));
         }
-        require(fixture.signal(east(source, 1)) == 15 && fixture.signal(east(source, 15)) == 1,
-                "the dust line did not settle in one evaluation");
     }
 
     // one evaluation per repeater step: delay 4 lags delay 1 by three evaluations, six ticks
@@ -158,7 +158,7 @@ namespace {
             const Vector3i repeater = east(source, 1);
             fixture.set(source, fixture.block("minecraft:redstone_block"));
             fixture.set(source, BlockState(BlockNames::AIR));
-            // the repeater reads the block east of it: it faces west
+            // cardinal_direction west: the repeater takes its input from the west, where the source is
             fixture.set(repeater, fixture.repeater("west", delay));
             fixture.set(east(source, 2), fixture.block("minecraft:redstone_wire"));
             fixture.run(6);
@@ -213,6 +213,69 @@ namespace {
         require(off >= 5 && off <= 6, "a lamp went out " + std::to_string(off) + " ticks after losing power, not 4 after the evaluation");
     }
 
+    // a lamp lit from the next chunk stays lit while that chunk is unloaded, and through its reload
+    void chunkBorder() {
+        Fixture fixture;
+        fixture.mLevel.getChunk(1, 0);
+        fixture.mLevel.setActiveColumns({BlockTickingQueue::column(0, 0), BlockTickingQueue::column(1, 0)});
+        const Vector3i lamp(15, 64, 8);
+        const Vector3i power(16, 64, 8);
+        fixture.set(lamp, fixture.block("minecraft:redstone_lamp"));
+        fixture.set(power, fixture.block("minecraft:redstone_block"));
+        fixture.run(6);
+        require(fixture.at(lamp).mName == "minecraft:lit_redstone_lamp", "a lamp beside a redstone block was not lit");
+
+        LevelChunk east = fixture.mLevel.extractChunk(1, 0);
+        fixture.run(12);
+        require(fixture.at(lamp).mName == "minecraft:lit_redstone_lamp",
+                "a lamp lit from an unloaded chunk went out");
+        fixture.mLevel.insertChunk(std::move(east));
+        fixture.run(12);
+        require(fixture.at(lamp).mName == "minecraft:lit_redstone_lamp",
+                "a lamp lit from the next chunk went out after that chunk loaded again");
+    }
+
+    // a powered piston blocked by obsidian extends once the obsidian is gone, with no change of power
+    void pistonRetry() {
+        Fixture fixture;
+        const Vector3i piston = ORIGIN;
+        BlockState state = fixture.block("minecraft:piston");
+        state.mStates.putInt("facing_direction", 1);
+        fixture.set(piston, state);
+        const Vector3i front(piston.x, piston.y + 1, piston.z);
+        fixture.set(front, fixture.block("minecraft:obsidian"));
+        fixture.set(Vector3i(piston.x + 1, piston.y, piston.z), fixture.block("minecraft:redstone_block"));
+        fixture.run(10);
+        require(!PistonSystem::isExtended(fixture.mLevel, piston, fixture.at(piston)),
+                "a piston pushed obsidian");
+        fixture.set(front, BlockState(BlockNames::AIR));
+        fixture.run(10);
+        require(PistonSystem::isExtended(fixture.mLevel, piston, fixture.at(piston)),
+                "a powered piston did not extend once the obsidian in front was gone");
+    }
+
+    // a cell with no component, such as the air an armor stand stands in, takes the power its neighbours give it
+    // from their side: a lever powers it, a repeater running past it does not
+    void powerAtAirCell() {
+        Fixture fixture;
+        const Vector3i cell = ORIGIN;
+        BlockState lever = fixture.lever(true);
+        fixture.set(Vector3i(cell.x - 1, cell.y, cell.z), lever);
+        fixture.run(6);
+        require(RedstoneSystem::isBlockIndirectlyGettingPowered(fixture.mOwner, fixture.mLevel, cell) == 15,
+                "an air cell beside a lever got no power");
+
+        Fixture other;
+        // a repeater east of the cell, running north to south: the cell is beside it, not in front
+        const Vector3i repeater = east(cell, 1);
+        other.set(Vector3i(repeater.x, repeater.y, repeater.z - 1), other.block("minecraft:redstone_block"));
+        other.set(repeater, other.repeater("north", 0));
+        other.run(6);
+        require(other.at(repeater).mName == "minecraft:powered_repeater", "the repeater beside the cell was not powered");
+        const int fromRepeater = RedstoneSystem::getRedstonePower(other.mOwner, other.mLevel, repeater, RedstoneFace::EAST);
+        require(fromRepeater == 0, "a repeater beside a cell powered it");
+    }
+
     // no quasi-connectivity: power above and beside a piston's top does nothing
     void pistonNoQuasiConnectivity() {
         Fixture fixture;
@@ -239,6 +302,9 @@ int main() {
         torchInverts();
         lampTurnsOffLate();
         pistonNoQuasiConnectivity();
+        chunkBorder();
+        pistonRetry();
+        powerAtAirCell();
         std::cout << "circuit checks passed\n";
         return 0;
     } catch (const std::exception &error) {

@@ -71,7 +71,9 @@ void CircuitSystem::evaluate(CircuitBlockSource *region) {
     for (auto &chunk: mSceneGraph.getChunkLists()) {
         const int32_t chunkX = (int32_t) (chunk.first >> 32);
         const int32_t chunkZ = (int32_t) (uint32_t) chunk.first;
-        chunk.second.mShouldEvaluate = region == nullptr || region->isLoaded(Vector3i(chunkX * 16, 0, chunkZ * 16));
+        chunk.second.mShouldEvaluate = region == nullptr
+                                       || (region->isLoaded(Vector3i(chunkX * 16, 0, chunkZ * 16))
+                                           && !_isNearUnloaded(chunk.first));
     }
 
     for (auto &chunk: mSceneGraph.getChunkLists()) {
@@ -148,4 +150,35 @@ void CircuitSystem::updateDependencies(CircuitBlockSource *region) {
 
 void CircuitSystem::removeChunk(int32_t chunkX, int32_t chunkZ) {
     mSceneGraph.removeChunk(chunkX, chunkZ);
+    mUnloadedChunks.insert(CircuitSceneGraph::chunkKey(chunkX, chunkZ));
+    // forget the unloaded chunks no chunk with components is near any more
+    auto &lists = mSceneGraph.getChunkLists();
+    for (auto it = mUnloadedChunks.begin(); it != mUnloadedChunks.end();) {
+        const auto x = (int32_t) (*it >> 32);
+        const auto z = (int32_t) (uint32_t) *it;
+        bool near = false;
+        for (int dx = -WAIT_RADIUS_CHUNKS; dx <= WAIT_RADIUS_CHUNKS && !near; ++dx) {
+            for (int dz = -WAIT_RADIUS_CHUNKS; dz <= WAIT_RADIUS_CHUNKS && !near; ++dz)
+                near = (dx != 0 || dz != 0) && lists.count(CircuitSceneGraph::chunkKey(x + dx, z + dz)) != 0;
+        }
+        it = near ? std::next(it) : mUnloadedChunks.erase(it);
+    }
+}
+
+void CircuitSystem::onChunkLoaded(int32_t chunkX, int32_t chunkZ) {
+    mUnloadedChunks.erase(CircuitSceneGraph::chunkKey(chunkX, chunkZ));
+}
+
+bool CircuitSystem::_isNearUnloaded(int64_t chunk) const {
+    if (mUnloadedChunks.empty())
+        return false;
+    const auto x = (int32_t) (chunk >> 32);
+    const auto z = (int32_t) (uint32_t) chunk;
+    for (int dx = -WAIT_RADIUS_CHUNKS; dx <= WAIT_RADIUS_CHUNKS; ++dx) {
+        for (int dz = -WAIT_RADIUS_CHUNKS; dz <= WAIT_RADIUS_CHUNKS; ++dz) {
+            if (mUnloadedChunks.count(CircuitSceneGraph::chunkKey(x + dx, z + dz)) != 0)
+                return true;
+        }
+    }
+    return false;
 }

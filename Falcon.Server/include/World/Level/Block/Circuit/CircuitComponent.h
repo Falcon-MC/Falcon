@@ -104,24 +104,12 @@ public:
         mDirection = direction;
     }
 
-    void setConsumePowerAnyDirection(bool any) {
-        mConsumePowerAnyDirection = any;
-    }
-
     virtual bool consumePowerAnyDirection() const {
-        return mConsumePowerAnyDirection;
+        return false;
     }
 
     virtual bool canConsumePower() const {
         return false;
-    }
-
-    virtual bool canStopPower() const {
-        return false;
-    }
-
-    virtual void setStopPower(bool stop) {
-        (void) stop;
     }
 
     virtual bool needsBlockUpdate() {
@@ -254,13 +242,6 @@ public:
         mNoWireStepDown = blocks;
     }
 
-    bool allowsWireStepDownBelow() const {
-        return mAllowWireStepDownBelow;
-    }
-
-    void setAllowsWireStepDownBelow(bool allows) {
-        mAllowWireStepDownBelow = allows;
-    }
 
 protected:
     void addSourceItem(const CircuitSourceItem &item);
@@ -277,9 +258,7 @@ protected:
     int16_t mCachedStrength = 0;
     uint8_t mDirection = CircuitFace::NONE;
     bool mNoWireStepDown = false;
-    bool mAllowWireStepDownBelow = true;
     bool mRemoved = false;
-    bool mConsumePowerAnyDirection = false;
     Vector3i mPos;
 
     friend class CircuitSceneGraph;
@@ -288,14 +267,6 @@ protected:
 class ProducerComponent : public BaseCircuitComponent {
 public:
     void setStrength(int strength) override;
-
-    bool canStopPower() const override {
-        return mStopPower;
-    }
-
-    void setStopPower(bool stop) override {
-        mStopPower = stop;
-    }
 
     bool allowConnection(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, bool &directlyPowered) override;
 
@@ -321,20 +292,6 @@ public:
 protected:
     int mNextStrength = 0;
     bool mAllowAttachments = false;
-    bool mStopPower = false;
-};
-
-// a producer that only connects through the faces of its mask
-class FacedProducerComponent : public ProducerComponent {
-public:
-    bool allowConnection(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, bool &directlyPowered) override;
-
-    void setFaceMask(uint32_t mask) {
-        mFaceMask = mask;
-    }
-
-private:
-    uint32_t mFaceMask = 0;
 };
 
 class PoweredBlockComponent : public BaseCircuitComponent {
@@ -410,8 +367,6 @@ public:
         return true;
     }
 
-    bool needsBlockUpdate() override;
-
     bool addSource(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, int &dampening,
                    bool &directlyPowered) override;
 
@@ -436,19 +391,12 @@ public:
         return mPromotedToProducer;
     }
 
-    // the consumers sharing one block update: only the strongest of them is updated
-    void setGroup(const std::vector<ConsumerComponent *> &group) {
-        mGroup = group;
-    }
-
 protected:
-    std::vector<ConsumerComponent *> mGroup;
     bool mSecondaryPowered = false;
     bool mPropagatePower = false;
     bool mPromotedToProducer = false;
     bool mFullHalfPulse = false;
     bool mAcceptFacingCapacitor = true;
-    bool mHandled = false;
 };
 
 class PistonConsumerComponent : public ConsumerComponent {
@@ -652,28 +600,16 @@ public:
         mRearAnalogStrength = strength;
     }
 
-    void setSideAnalogStrengths(int left, int right) {
-        mSideAnalogStrengthLeft = left;
-        mSideAnalogStrengthRight = right;
-    }
-
     void setSubtractMode(bool subtract) {
         mSubtract = subtract;
-    }
-
-    void setEnabled(bool enabled) {
-        mEnabled = enabled;
     }
 
 private:
     std::vector<CircuitSourceItem> mSideComponents;
     int mRearAnalogStrength = -1;
-    int mSideAnalogStrengthLeft = -1;
-    int mSideAnalogStrengthRight = -1;
     bool mSubtract = false;
     int mRearStrength = 0;
     int mSideStrength = 0;
-    bool mEnabled = true;
 };
 
 // the observer: a strength set by the block lasts one evaluation
