@@ -339,14 +339,49 @@ namespace {
         fixture.set(shutTrapdoor, withByte(VanillaBlocks::IRON_TRAPDOOR(), "open_bit", 0));
         fixture.set(Vector3i(shutTrapdoor.x + 1, 64, shutTrapdoor.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
         fixture.set(openTrapdoor, withByte(VanillaBlocks::IRON_TRAPDOOR(), "open_bit", 1));
+        const Vector3i firedDispenser(6, 64, 2);
+        const Vector3i newDispenser(6, 64, 6);
+        fixture.set(firedDispenser, withByte(VanillaBlocks::DISPENSER(), "triggered_bit", 1));
+        fixture.set(Vector3i(firedDispenser.x + 1, 64, firedDispenser.z),
+                    VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        fixture.set(newDispenser, withByte(VanillaBlocks::DISPENSER(), "triggered_bit", 0));
+        fixture.set(Vector3i(newDispenser.x + 1, 64, newDispenser.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
         LevelChunk saved = fixture.mLevel.extractChunk(0, 0);
         fixture.mLevel.insertChunk(std::move(saved));
-        fixture.run(6);
+        // tick by tick, so the dispensers are seen between the circuit's first update and the four-tick delay
+        bool refired = false;
+        bool fired = false;
+        for (int tick = 0; tick < 8; ++tick) {
+            fixture.run(1);
+            refired = refired || fixture.mLevel.isUpdateScheduled(firedDispenser);
+            fired = fired || (byte(newDispenser, "triggered_bit") == 1 && fixture.mLevel.isUpdateScheduled(newDispenser));
+        }
+        require(!refired && byte(firedDispenser, "triggered_bit") == 1,
+                "a dispenser held by steady power fired again after a chunk load");
+        require(fired, "a dispenser powered while saved untriggered did not fire after a chunk load");
 
         require(byte(lockedHopper, "toggle_bit") == 1, "a powered hopper was not locked after a chunk load");
         require(byte(freeHopper, "toggle_bit") == 0, "an unpowered hopper stayed locked after a chunk load");
         require(byte(shutTrapdoor, "open_bit") == 0, "a shut trapdoor beside power opened after a chunk load");
         require(byte(openTrapdoor, "open_bit") == 1, "an open unpowered trapdoor shut after a chunk load");
+    }
+
+
+    // powered TNT ignites only while tntexplodes is on, as every other ignition
+    void tntGameRule() {
+        RedstoneFixture fixture;
+        fixture.mLevel.getGameRules().setFromString("tntexplodes", "false");
+        fixture.set(ORIGIN, VanillaBlocks::TNT().toBlockState());
+        fixture.set(Vector3i(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        fixture.run(6);
+        require(fixture.at(ORIGIN).mName == "minecraft:tnt", "powered TNT ignited with tntexplodes off");
+
+        fixture.mLevel.getGameRules().setFromString("tntexplodes", "true");
+        fixture.set(Vector3i(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z), BlockState(BlockNames::AIR));
+        fixture.run(6);
+        fixture.set(Vector3i(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        fixture.run(6);
+        require(fixture.at(ORIGIN).mName != "minecraft:tnt", "powered TNT did not ignite with tntexplodes on");
     }
 
     void copperBulb() {
@@ -424,6 +459,7 @@ int main() {
         hopperPlacedPowered();
         openablePlacedPowered();
         circuitReload();
+        tntGameRule();
         lightningRod();
         copperBulb();
         detectorRail();

@@ -499,8 +499,8 @@ namespace {
         return shape;
     }
 
-    // a door or fence gate itself skips the update its new component gets. The note block's own handling of it is
-    // not read yet: it keeps skipping it, so a note block placed beside power does not play
+    // the blocks whose own handling ignores the update their new component gets: a door, fence gate or note block
+    // placed beside power keeps its state until the signal changes
     bool skipsFirstUpdateItself(const BlockState &state) {
         const Block *block = VanillaBlocks::fromIdentifier(state.mName);
         return dynamic_cast<const DoorOrientationBlock *>(block) != nullptr
@@ -671,7 +671,8 @@ namespace {
                    || dynamic_cast<const FenceGateBlock *>(block) != nullptr) {
             OpenableBlock::onRedstoneUpdate(owner, level, position, state);
         } else if (dynamic_cast<const TntBlock *>(block) != nullptr) {
-            if (strength > 0)
+            // the game rule every TNT ignition reads also stops a powered one
+            if (strength > 0 && level.getGameRules().getBool("tntexplodes"))
                 TntBlock::prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
         } else if (dynamic_cast<const DispenserBlock *>(block) != nullptr) {
             DispenserBlock::onRedstoneUpdate(owner, level, position, state);
