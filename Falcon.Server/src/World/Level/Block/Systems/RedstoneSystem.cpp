@@ -20,6 +20,7 @@
 #include "World/Level/Block/DoorBlock.h"
 #include "World/Level/Block/LeverBlock.h"
 #include "World/Level/Block/OpenableBlock.h"
+#include "World/Level/Block/PoweredRailBlock.h"
 #include "World/Level/Block/DoorOrientationBlock.h"
 #include "World/Level/Block/FenceGateBlock.h"
 #include "World/Level/Block/TrapDoorBlock.h"
@@ -306,14 +307,12 @@ namespace {
     }
 
     enum class CircuitKind {
-        None, Wire, Torch, Repeater, Comparator, Observer, Producer, Consumer, Piston, Lamp, Door
+        None, Wire, Torch, Repeater, Comparator, Observer, Producer, Consumer, Piston, Lamp, Door, Rail
     };
 
     // the blocks given a consumer by hooks of their own
     bool isConsumerName(const std::string &name) {
         static const std::unordered_set<std::string> names = {
-                "minecraft:activator_rail",
-                "minecraft:golden_rail",
                 "minecraft:dispenser",
                 "minecraft:dropper",
                 "minecraft:noteblock",
@@ -356,6 +355,8 @@ namespace {
             return CircuitKind::Lamp;
         if (PistonSystem::isPiston(state.mName))
             return CircuitKind::Piston;
+        if (PoweredRailBlock::matches(state.mName))
+            return CircuitKind::Rail;
         if (dynamic_cast<const DoorOrientationBlock *>(block) != nullptr)
             return CircuitKind::Door;
         if (RedstoneSystem::isPowerSource(state) || DetectorSystem::isHook(state) || DetectorSystem::isTarget(state)
@@ -506,6 +507,14 @@ namespace {
                || dynamic_cast<const FenceGateBlock *>(block) != nullptr || state.mName == "minecraft:noteblock";
     }
 
+    // the axis a powered rail lies on: south for the north-south shapes, west for the east-west ones
+    uint8_t railAxis(const BlockState &state) {
+        const int shape = stateInt(state, "rail_direction", BaseRailBlock::STRAIGHT_NORTH_SOUTH);
+        const bool eastWest = shape == BaseRailBlock::STRAIGHT_EAST_WEST || shape == BaseRailBlock::ASCENDING_EAST
+                              || shape == BaseRailBlock::ASCENDING_WEST;
+        return eastWest ? CircuitFace::WEST : CircuitFace::SOUTH;
+    }
+
     void setupComponent(Level &level, const Vector3i &position, const BlockState &state) {
         CircuitSystem &circuit = *stateOf(level).mCircuit;
         switch (kindOf(state)) {
@@ -575,6 +584,15 @@ namespace {
                 }
                 break;
             }
+            case CircuitKind::Rail: {
+                auto *rail = circuit.create<RailTransporterComponent>(position, railAxis(state));
+                if (rail != nullptr) {
+                    rail->setGolden(state.mName == "minecraft:golden_rail");
+                    if (stateBool(state, PoweredRailBlock::STATE_POWERED, false))
+                        rail->setStrength(RedstoneSystem::MAX_SIGNAL);
+                }
+                break;
+            }
             case CircuitKind::None:
                 break;
         }
@@ -596,6 +614,9 @@ namespace {
                 break;
             case CircuitKind::Producer:
                 component->setStrength(producerSignal(level, position, state));
+                break;
+            case CircuitKind::Rail:
+                component->setDirection(railAxis(state));
                 break;
             default:
                 break;
@@ -707,6 +728,15 @@ namespace {
                     level.scheduleUpdate(position, LIT_LAMP_TURN_OFF_DELAY);
                 }
                 return;
+            case CircuitKind::Rail: {
+                const bool powered = strength > 0;
+                if (stateBool(state, PoweredRailBlock::STATE_POWERED, false) == powered)
+                    return;
+                Tag states = state.mStates;
+                states.putByte(PoweredRailBlock::STATE_POWERED, powered ? 1 : 0);
+                setLockedBlock(level, position, BlockState(state.mName, states));
+                return;
+            }
             case CircuitKind::Consumer:
             case CircuitKind::Door:
             case CircuitKind::Piston:

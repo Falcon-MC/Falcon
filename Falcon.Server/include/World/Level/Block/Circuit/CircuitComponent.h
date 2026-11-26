@@ -409,6 +409,36 @@ protected:
     bool mAcceptFacingCapacitor = true;
 };
 
+// a powered or activator rail: it takes power only from a direct source, and passes it along up to eight more rails
+// of its kind and axis. Its strength is how many more rails the power still reaches, plus one
+class RailTransporterComponent : public BaseCircuitComponent {
+public:
+    // the reach a rail powered from outside the line starts with
+    static constexpr int FIRST_RAIL_REACH = 9;
+
+    bool addSource(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, int &dampening,
+                   bool &directlyPowered) override;
+
+    bool allowConnection(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, bool &directlyPowered) override;
+
+    bool evaluate(CircuitSystem &system, const Vector3i &position) override;
+
+    CircuitComponentType getInstanceType() const override {
+        return CircuitComponentType::RailTransporter;
+    }
+
+    // powered and activator rails never pass power to each other
+    void setGolden(bool golden) {
+        mGolden = golden;
+    }
+
+private:
+    void addRailSource(BaseCircuitComponent *component, int dampening, const Vector3i &position, uint8_t direction,
+                       int reach);
+
+    bool mGolden = false;
+};
+
 class PistonConsumerComponent : public ConsumerComponent {
 public:
     bool consumePowerAnyDirection() const override {

@@ -361,6 +361,80 @@ bool TransporterComponent::evaluate(CircuitSystem &system, const Vector3i &posit
     return changed;
 }
 
+void RailTransporterComponent::addRailSource(BaseCircuitComponent *component, int dampening, const Vector3i &position,
+                                             uint8_t direction, int reach) {
+    CircuitSourceItem item;
+    item.mComponent = component;
+    item.mDampening = dampening;
+    item.mPos = position;
+    item.mDirection = direction;
+    item.mDirectlyPowered = true;
+    item.mData = reach;
+    addSourceItem(item);
+}
+
+// only direct power reaches a rail. From outside the line it takes the source with the full reach; from the rail
+// before it, it takes each of that rail's sources with one rail less to go
+bool RailTransporterComponent::addSource(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, int &dampening,
+                                         bool &directlyPowered) {
+    (void) graph;
+    if (!directlyPowered)
+        return false;
+    const BaseCircuitComponent *nearest = info.mNearest.mComponent;
+    const auto sameItem = [this](const Vector3i &position, int reach, int lost) {
+        for (const CircuitSourceItem &item: mSources) {
+            if (item.mPos == position && item.mData == reach && item.mDampening == lost)
+                return true;
+        }
+        return false;
+    };
+    if (nearest == nullptr || nearest->getInstanceType() != CircuitComponentType::RailTransporter) {
+        const int lost = std::max(dampening, 1) - 1;
+        if (sameItem(info.mPower.mPos, FIRST_RAIL_REACH, lost))
+            return false;
+        addRailSource(info.mPower.mComponent, lost, info.mPower.mPos, info.mCurrent.mDirection, FIRST_RAIL_REACH);
+        return true;
+    }
+
+    const size_t before = mSources.size();
+    for (const CircuitSourceItem &item: nearest->getSources()) {
+        if (item.mData < 2)
+            continue;
+        const int lost = std::max(item.mDampening, 0);
+        if (!sameItem(item.mPos, item.mData - 1, lost))
+            addRailSource(item.mComponent, lost, item.mPos, info.mCurrent.mDirection, item.mData - 1);
+    }
+    return mSources.size() != before;
+}
+
+// the search goes on only to a rail of the same kind lying on the same axis, along that axis
+bool RailTransporterComponent::allowConnection(CircuitSceneGraph &graph, const CircuitTrackingInfo &info,
+                                               bool &directlyPowered) {
+    (void) graph, (void) directlyPowered;
+    const BaseCircuitComponent *next = info.mCurrent.mComponent;
+    if (next == nullptr || next->getInstanceType() != CircuitComponentType::RailTransporter)
+        return false;
+    if (static_cast<const RailTransporterComponent *>(next)->mGolden != mGolden)
+        return false;
+    const uint8_t axis = getDirection();
+    if (next->getDirection() != axis)
+        return false;
+    return info.mCurrent.mDirection == axis || info.mCurrent.mDirection == CircuitFace::opposite(axis);
+}
+
+bool RailTransporterComponent::evaluate(CircuitSystem &system, const Vector3i &position) {
+    (void) system, (void) position;
+    // the block update sees the strength the last evaluation left
+    mCachedStrength = mStrength;
+    int16_t reach = 0;
+    for (const CircuitSourceItem &item: mSources) {
+        if (item.mData > reach && item.mComponent != nullptr && item.mComponent->getStrength() > item.mDampening)
+            reach = (int16_t) item.mData;
+    }
+    mStrength = reach;
+    return mStrength != mCachedStrength;
+}
+
 bool ConsumerComponent::addSource(CircuitSceneGraph &graph, const CircuitTrackingInfo &info, int &dampening,
                                   bool &directlyPowered) {
     (void) graph;
