@@ -10,8 +10,7 @@ FALCON_REGISTER_BLOCK(ReplaceableBlock, 330);
 
 namespace {
     const std::unordered_set<std::string> &replaceableIdentifiers() {
-        static const std::unordered_set<std::string> identifiers = {"minecraft:bubble_column",
-                                                                    "minecraft:bush",
+        static const std::unordered_set<std::string> identifiers = {"minecraft:bush",
                                                                     "minecraft:crimson_roots",
                                                                     "minecraft:warped_roots",
                                                                     "minecraft:nether_sprouts",
