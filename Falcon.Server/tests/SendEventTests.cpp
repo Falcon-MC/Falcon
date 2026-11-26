@@ -2,6 +2,7 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/AI/Goal/SendEventGoal.h"
+#include "World/Actor/AI/Goal/SpellCasting.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -67,6 +68,7 @@ namespace {
         require(goal.canUse(arena.mOwner, evoker), "the sheep in range was not chosen");
         goal.start(arena.mOwner, evoker);
         require(evoker.getFlags().get(ActorFlag::Casting), "the casting flag was not set");
+        require(goal.getRequiredControlFlags() == SpellCasting::CASTING_FLAGS, "the caster can walk during the cast");
 
         for (int32_t tick = 0; tick < 40; tick++)
             goal.tick(arena.mOwner, evoker);
@@ -78,6 +80,8 @@ namespace {
         for (int32_t tick = 0; tick < 19; tick++)
             goal.tick(arena.mOwner, evoker);
         require(!evoker.getFlags().get(ActorFlag::Casting), "the casting flag outlived cast_duration");
+        require(goal.getRequiredControlFlags() == SpellCasting::AFTER_CAST_FLAGS,
+                "the caster is still held after cast_duration");
         require(!goal.canContinueToUse(arena.mOwner, evoker), "the goal went on after its sequence");
     }
 
