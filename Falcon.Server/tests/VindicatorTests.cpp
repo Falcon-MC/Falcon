@@ -30,17 +30,28 @@ namespace {
 
     struct Arena {
         ServerNetworkHandler mOwner{"Vindicators", "", 1};
-        Level &mLevel = mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        Level &mLevel;
 
-        Arena() {
+        // the properties first: setting them opens a new world and frees the old one's levels
+        explicit Arena(const std::filesystem::path &properties = {}) : mLevel(open(properties)) {
             for (int32_t x = -1; x <= 1; x++) {
-                for (int32_t z = -1; z <= 1; z++)
+                for (int32_t z = -1; z <= 1; z++) {
+                    // the opened world has generated the chunk its random seed spawns in, and an existing chunk
+                    // wins the insert
+                    mLevel.dropChunk(x, z);
                     mLevel.insertChunk(LevelChunk(x, z)).setPopulated(true);
+                }
             }
             for (int32_t x = -12; x <= 12; x++) {
                 for (int32_t z = -12; z <= 12; z++)
                     mLevel.setBlockState(x, 63, z, BlockState("minecraft:stone"));
             }
+        }
+
+        Level &open(const std::filesystem::path &properties) {
+            if (!properties.empty())
+                mOwner.setProperties(PropertiesSettings(properties.string()));
+            return mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
         }
 
         ServerPlayer &player(uint64_t runtimeId, const Vector3f &position) {
@@ -147,10 +158,9 @@ namespace {
 
     // raid vindicators break doors from normal difficulty
     void raidDoors(const std::filesystem::path &directory) {
-        Arena arena;
         const std::filesystem::path properties = directory / "vindicator.properties";
         std::ofstream(properties) << "difficulty=normal\n";
-        arena.mOwner.setProperties(PropertiesSettings(properties.string()));
+        Arena arena(properties);
         MobActor &raider = arena.spawn(VINDICATOR, Vector3f(0.5f, 64.0f, 0.5f), "minecraft:spawn_for_raid");
         MobActor &wanderer = arena.spawn(VINDICATOR, Vector3f(4.5f, 64.0f, 0.5f));
         arena.ticks(1);

@@ -4,6 +4,7 @@
 #include "Protocol/Types/StartGameTypes.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/PropertiesSettings.h"
+#include "Server/ServerPaths.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -14,10 +15,12 @@
 #include "World/Level/Level.h"
 #include "World/Level/WorldManager.h"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 namespace {
     const Vector3i NOTE(4, 100, 4);
@@ -153,16 +156,25 @@ namespace {
 }
 
 int main() {
+    // a world of its own: the shared working directory would hand it another test's world
+    const auto originalRoot = ServerPaths::getRoot();
+    const auto directory = std::filesystem::temp_directory_path()
+                           / ("falcon-note-block-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    int result = 0;
     try {
+        std::filesystem::create_directories(directory);
+        ServerPaths::setRoot(directory);
         ServerNetworkHandler server("NoteBlock", "", 1);
-        const std::filesystem::path properties =
-                std::filesystem::temp_directory_path() / "falcon-note-block-test.properties";
+        const std::filesystem::path properties = directory / "test.properties";
         std::ofstream(properties) << "spawn-protection=0\n";
         server.setProperties(PropertiesSettings(properties.string()));
         server.getScriptEngine().bindHost(server);
         server.getScriptEngine().startup();
         EntityDefinitions::initialize();
         Level &level = server.getWorlds().getDefault().getOverworld();
+        // the opened world has generated the chunk its random seed spawns in, and an existing chunk wins the insert
+        level.dropChunk(0, 0);
         level.insertChunk(LevelChunk(0, 0)).setPopulated(true);
         const auto *block = VanillaBlocks::getAs<NoteBlock>("minecraft:noteblock");
         require(block != nullptr, "the note block was not registered");
@@ -173,7 +185,10 @@ int main() {
         checkFirstUpdate(server, level, *block);
     } catch (const std::exception &error) {
         std::clog << "Note block regression failed: " << error.what() << '\n';
-        return 1;
+        result = 1;
     }
-    return 0;
+    ServerPaths::setRoot(originalRoot);
+    std::error_code ignored;
+    std::filesystem::remove_all(directory, ignored);
+    return result;
 }
