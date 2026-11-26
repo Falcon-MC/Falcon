@@ -63,7 +63,7 @@ class TerrainCache {
 public:
     // a decoration reads the terrain of chunks up to 5 away from the chunks asked for; at view distance 32 a
     // spawn spiral generates each terrain about once with this many
-    static constexpr size_t MAX_CACHED_CHUNKS = 2048;
+    static constexpr size_t MAX_CACHED_CHUNKS = 8192;
     // about 45 KB each: what a decoration's writes take; evicted ones are decorated again, the same
     static constexpr size_t MAX_DECORATION_BYTES = (size_t) 64 << 20;
 

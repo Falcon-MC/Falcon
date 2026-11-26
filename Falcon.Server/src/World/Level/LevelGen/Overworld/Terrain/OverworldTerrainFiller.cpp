@@ -267,7 +267,7 @@ float OverworldTerrainFiller::_caves(float density, float x, float y, float z) c
     return std::fmax(underground, pillars) * CAVE_SCALE;
 }
 
-void OverworldTerrainFiller::_sampleCorners(int32_t chunkX, int32_t chunkZ, Corners &corners) const {
+void OverworldTerrainFiller::_sampleCorners(int32_t chunkX, int32_t chunkZ, Corners &corners, bool sampleVeins) const {
     const int32_t quartX = chunkX * 4;
     const int32_t quartZ = chunkZ * 4;
     const float start[3] = {static_cast<float>(quartX), static_cast<float>(MIN_CELL_Y), static_cast<float>(quartZ)};
@@ -305,9 +305,11 @@ void OverworldTerrainFiller::_sampleCorners(int32_t chunkX, int32_t chunkZ, Corn
     corners.mNoodleThickness.assign((size_t) CORNER_COUNT, 1.0f);
     corners.mNoodleRidgeA.assign((size_t) CORNER_COUNT, 1.0f);
     corners.mNoodleRidgeB.assign((size_t) CORNER_COUNT, 1.0f);
-    corners.mVeinToggle.assign((size_t) CORNER_COUNT, 1.0f);
-    corners.mVeinRidgeA.assign((size_t) CORNER_COUNT, 1.0f);
-    corners.mVeinRidgeB.assign((size_t) CORNER_COUNT, 1.0f);
+    if (sampleVeins) {
+        corners.mVeinToggle.assign((size_t) CORNER_COUNT, 1.0f);
+        corners.mVeinRidgeA.assign((size_t) CORNER_COUNT, 1.0f);
+        corners.mVeinRidgeB.assign((size_t) CORNER_COUNT, 1.0f);
+    }
 
     for (int32_t cornerX = 0; cornerX < CORNERS_XZ; cornerX++) {
         const float x = (static_cast<float>(cornerX) + static_cast<float>(quartX)) * 4.0f;
@@ -347,9 +349,11 @@ void OverworldTerrainFiller::_sampleCorners(int32_t chunkX, int32_t chunkZ, Corn
                 const float result = bottomSlide > 1.0f ? slid : (slid + -15.0f) * bottomSlide + 15.0f;
 
                 if (result >= SKIP_DENSITY) {
-                    corners.mVeinToggle[index] = clampUnit(mVeininess->getValue(x * 1.5f, y * 1.5f, z * 1.5f));
-                    corners.mVeinRidgeA[index] = clampUnit(mVeinA->getValue(x * 4.0f, y * 4.0f, z * 4.0f));
-                    corners.mVeinRidgeB[index] = clampUnit(mVeinB->getValue(x * 4.0f, y * 4.0f, z * 4.0f));
+                    if (sampleVeins) {
+                        corners.mVeinToggle[index] = clampUnit(mVeininess->getValue(x * 1.5f, y * 1.5f, z * 1.5f));
+                        corners.mVeinRidgeA[index] = clampUnit(mVeinA->getValue(x * 4.0f, y * 4.0f, z * 4.0f));
+                        corners.mVeinRidgeB[index] = clampUnit(mVeinB->getValue(x * 4.0f, y * 4.0f, z * 4.0f));
+                    }
                     corners.mNoodleToggle[index] = clampUnit(mNoodle->getValue(x, y, z));
                     corners.mNoodleThickness[index] = clampUnit(mNoodleThickness->getValue(x, y, z));
                     const float ridgeX = x * 2.6666667f;
@@ -371,13 +375,23 @@ OverworldAquifer OverworldTerrainFiller::createAquifer() const {
 
 void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer,
                                   const TerrainBeard *beard) const {
-    const int32_t chunkX = chunk.getX();
-    const int32_t chunkZ = chunk.getZ();
+    _fill<false>(chunk.getX(), chunk.getZ(), &chunk, heightMap, aquifer, beard);
+}
+
+void OverworldTerrainFiller::fillPreliminaryHeights(int32_t chunkX, int32_t chunkZ, int32_t *heightMap) const {
+    std::fill_n(heightMap, 256, MIN_Y - 1);
+    OverworldAquifer aquifer = createAquifer();
+    _fill<true>(chunkX, chunkZ, nullptr, heightMap, aquifer, nullptr);
+}
+
+template <bool HeightsOnly>
+void OverworldTerrainFiller::_fill(int32_t chunkX, int32_t chunkZ, LevelChunk *chunk, int32_t *heightMap,
+                                   OverworldAquifer &aquifer, const TerrainBeard *beard) const {
     const int32_t baseX = chunkX << 4;
     const int32_t baseZ = chunkZ << 4;
 
     Corners corners;
-    _sampleCorners(chunkX, chunkZ, corners);
+    _sampleCorners(chunkX, chunkZ, corners, !HeightsOnly);
 
     CellInterpolator density;
     CellInterpolator noodleToggle;
@@ -392,6 +406,7 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
     const std::vector<float> *const sources[] = {
             &corners.mDensity,      &corners.mNoodleToggle, &corners.mNoodleThickness, &corners.mNoodleRidgeA,
             &corners.mNoodleRidgeB, &corners.mVeinToggle,   &corners.mVeinRidgeA,      &corners.mVeinRidgeB};
+    constexpr size_t interpolatorCount = HeightsOnly ? 5 : 8;
 
     // cells above the preliminary surface and sea level stop at the first one with a solid bottom corner
     const int32_t seaLevelCell = (uint8_t) (SEA_LEVEL - MIN_Y) >> 3;
@@ -429,28 +444,37 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
                 } while (lowestTop + 1 < topCell);
             }
 
-            for (int32_t cellY = 0; cellY < topCell; cellY++) {
+            int32_t remainingColumns = 16;
+            for (int32_t cell = 0; cell < topCell; cell++) {
+                if (HeightsOnly && remainingColumns == 0)
+                    break;
+                const int32_t cellY = HeightsOnly ? topCell - 1 - cell : cell;
                 const int32_t cellBottom = MIN_Y + cellY * 8;
                 const bool beardCellY = bearded && cellBottom + 7 >= beard->getMinY() && cellBottom <= beard->getMaxY();
-                for (size_t i = 0; i < 8; i++)
+                for (size_t i = 0; i < interpolatorCount; i++)
                     interpolators[i]->load(*sources[i], cellX, cellZ, cellY);
 
                 for (int32_t localZ = 0; localZ < 4; localZ++) {
                     const float tz = 0.25f * static_cast<float>(localZ);
-                    for (CellInterpolator *interpolator: interpolators)
-                        interpolator->selectZ(tz);
+                    for (size_t i = 0; i < interpolatorCount; i++)
+                        interpolators[i]->selectZ(tz);
 
                     const int32_t z = cellZ * 4 + localZ;
                     for (int32_t localX = 0; localX < 4; localX++) {
-                        const float tx = 0.25f * static_cast<float>(localX);
-                        for (CellInterpolator *interpolator: interpolators)
-                            interpolator->selectX(tx);
-
                         const int32_t x = cellX * 4 + localX;
-                        for (int32_t localY = 0; localY < 8; localY++) {
+                        int32_t &height = heightMap[(x << 4) | z];
+                        if (HeightsOnly && height >= MIN_Y)
+                            continue;
+
+                        const float tx = 0.25f * static_cast<float>(localX);
+                        for (size_t i = 0; i < interpolatorCount; i++)
+                            interpolators[i]->selectX(tx);
+
+                        for (int32_t layer = 0; layer < 8; layer++) {
+                            const int32_t localY = HeightsOnly ? 7 - layer : layer;
                             const float ty = 0.125f * static_cast<float>(localY);
-                            for (CellInterpolator *interpolator: interpolators)
-                                interpolator->selectY(ty);
+                            for (size_t i = 0; i < interpolatorCount; i++)
+                                interpolators[i]->selectY(ty);
 
                             const int32_t y = MIN_Y + cellY * 8 + localY;
                             const int32_t worldX = baseX + x;
@@ -478,6 +502,15 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
                             if (value <= 0.0f) {
                                 substance = aquifer.compute(worldX, y, worldZ);
                                 value = value + substance.mDensity;
+                            }
+
+                            if constexpr (HeightsOnly) {
+                                if (value > 0.0f || y < substance.mFluidLevel) {
+                                    height = y;
+                                    remainingColumns--;
+                                    break;
+                                }
+                                continue;
                             }
 
                             const BlockState *state = nullptr;
@@ -527,9 +560,9 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
                             if (state == nullptr)
                                 continue;
 
-                            chunk.setBlock(x, y, z, *state);
-                            if (y > heightMap[(x << 4) | z])
-                                heightMap[(x << 4) | z] = y;
+                            chunk->setBlock(x, y, z, *state);
+                            if (y > height)
+                                height = y;
                         }
                     }
                 }
