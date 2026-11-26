@@ -47,6 +47,8 @@ namespace nethernet {
 
         static std::string buildAnswer(const AnswerParameters &parameters);
 
+        static std::string buildLanAnswer(AnswerParameters &parameters, size_t budget);
+
         static std::string stripCandidatePrefix(const std::string &value);
     };
 }

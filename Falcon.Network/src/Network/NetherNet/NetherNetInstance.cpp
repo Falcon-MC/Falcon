@@ -745,14 +745,14 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
         for (size_t i = 0; i < ranked.size(); ++i)
             parameters.mCandidates[i] = std::move(ranked[i].second);
 
-        while (answer.size() > lanAnswerBudget && parameters.mCandidates.size() > 1) {
-            parameters.mCandidates.pop_back();
-            answer = nethernet::Description::buildAnswer(parameters);
+        answer = nethernet::Description::buildLanAnswer(parameters, lanAnswerBudget);
+        if (answer.empty()) {
+            LOG_WARN(LogAreaID::Network, "NetherNet LAN answer cannot fit its %zu-byte SDP budget with one candidate",
+                     lanAnswerBudget);
+            connection->close();
+            errorCode = nethernet::ErrorCodeFailedToCreateAnswer;
+            return false;
         }
-
-        if (answer.size() > lanAnswerBudget)
-            LOG_WARN(LogAreaID::Network, "NetherNet LAN answer SDP exceeds its datagram budget (%zu > %zu bytes)",
-                     answer.size(), lanAnswerBudget);
     }
 
     {

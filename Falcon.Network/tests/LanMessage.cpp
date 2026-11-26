@@ -1,3 +1,4 @@
+#include "Network/NetherNet/NetherNetDescription.h"
 #include "Network/NetherNet/NetherNetDiscovery.h"
 
 #include <cstdint>
@@ -35,6 +36,19 @@ int main() {
         require(recipient == 7 && data == "Ping", "a short message changed");
 
         require(!nethernet::readLanMessage(std::string(5, '\0'), recipient, data), "a truncated header was accepted");
+
+        nethernet::AnswerParameters parameters;
+        parameters.mSetupRole = "active";
+        parameters.mCandidates = {"candidate:1 1 udp 100 192.168.1.2 19132 typ host"};
+        const std::string singleCandidate = nethernet::Description::buildAnswer(parameters);
+        const std::string secondCandidate = "candidate:2 1 udp 90 10.0.0.2 19132 typ host";
+        parameters.mCandidates.push_back(secondCandidate);
+
+        require(nethernet::Description::buildLanAnswer(parameters, singleCandidate.size()) == singleCandidate,
+                "the LAN answer did not retain only the first candidate at the exact budget");
+        parameters.mCandidates.push_back(secondCandidate);
+        require(nethernet::Description::buildLanAnswer(parameters, singleCandidate.size() - 1).empty(),
+                "an oversized LAN answer with one candidate was accepted");
     } catch (const std::exception &error) {
         std::cerr << "LAN message test failed: " << error.what() << '\n';
         return 1;

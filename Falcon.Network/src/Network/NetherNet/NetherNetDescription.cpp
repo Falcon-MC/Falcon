@@ -400,4 +400,18 @@ namespace nethernet {
         sdp += "a=max-message-size:262144\r\n";
         return sdp;
     }
+    std::string Description::buildLanAnswer(AnswerParameters &parameters, size_t budget) {
+        while (!parameters.mCandidates.empty()) {
+            std::string answer = buildAnswer(parameters);
+            if (answer.size() <= budget)
+                return answer;
+
+            if (parameters.mCandidates.size() == 1)
+                break;
+
+            parameters.mCandidates.pop_back();
+        }
+        return {};
+    }
+
 }
