@@ -252,6 +252,34 @@ namespace {
                 "the three torches left did not form one ring in order");
     }
 
+    // the ring's block powered from outside the ring: the game lights every torch of the ring
+    void torchRingOutsidePower() {
+        Fixture fixture;
+        const Vector3i centre(8, 64, 8);
+        fixture.set(centre, fixture.block("minecraft:stone"));
+        const Vector3i torches[4] = {Vector3i(8, 64, 7), Vector3i(7, 64, 8), Vector3i(8, 64, 9), Vector3i(9, 64, 8)};
+        const char *facing[4] = {"south", "east", "north", "west"};
+        for (int index = 0; index < 4; ++index) {
+            const Vector3i &at = torches[index];
+            fixture.set(Vector3i(at.x, at.y + 1, at.z), fixture.block("minecraft:stone"));
+            BlockState torch = fixture.block("minecraft:redstone_torch");
+            torch.mStates.putString("torch_facing_direction", facing[index]);
+            fixture.set(at, torch);
+        }
+        fixture.set(Vector3i(centre.x, centre.y + 1, centre.z), fixture.block("minecraft:redstone_wire"));
+        // a lever hanging under the centre block strongly powers it
+        BlockState lever = fixture.lever(true);
+        lever.mStates.putString("lever_direction", "down_east_west");
+        fixture.set(Vector3i(centre.x, centre.y - 1, centre.z), lever);
+        fixture.run(12);
+        for (int tick = 0; tick < 6; ++tick) {
+            fixture.run(1);
+            for (const Vector3i &at: torches)
+                require(fixture.at(at).mName == "minecraft:redstone_torch",
+                        "a ring torch was off while the ring's block was powered from outside");
+        }
+    }
+
     // the lamp lights with the evaluation and goes out four ticks after it loses power
     void lampTurnsOffLate() {
         Fixture fixture;
@@ -515,6 +543,7 @@ int main() {
         repeaterDelay();
         torchInverts();
         torchRing();
+        torchRingOutsidePower();
         lampTurnsOffLate();
         pistonNoQuasiConnectivity();
         chunkBorder();
