@@ -64,6 +64,6 @@ bool SeaPickleBlock::onFertilized(ServerNetworkHandler &owner, Level &level, con
 
     Tag states = state.mStates;
     states.putInt(STATE_CLUSTER, MAX_CLUSTER);
-    level.setBlock(position, BlockState(state.mName, states), true);
+    BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, true);
     return true;
 }
