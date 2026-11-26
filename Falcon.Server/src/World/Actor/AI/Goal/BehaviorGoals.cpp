@@ -1116,7 +1116,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                 potions.push_back(std::move(potion));
             }
         }
-        return std::make_unique<DrinkPotionGoal>(std::move(potions));
+        return std::make_unique<DrinkPotionGoal>(std::move(potions), numberOf(component, "speed_modifier", 0.0f));
     }
 
     if (behavior == "hold_ground") {

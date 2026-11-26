@@ -253,6 +253,13 @@ public:
     // the game overrides the movement attribute of a few mobs
     virtual float getMovementSpeed() const;
 
+    // added to the movement attribute while a goal holds it, as drinking a potion does: the ratio its moves keep
+    float getMovementModifierScale() const;
+
+    void setMovementModifier(float modifier) {
+        mMovementModifier = modifier;
+    }
+
     // how far its targets are kept: minecraft:follow_range, 16 without it; the game sets a few mobs' in code
     virtual float getFollowRange() const;
 
@@ -976,6 +983,7 @@ private:
     std::vector<int32_t> mEntitySensorCooldowns;
     int32_t mTemper = 0;
     mutable float mRolledMovementSpeed = -1.0f;
+    float mMovementModifier = 0.0f;
     mutable float mRolledJumpStrength = -1.0f;
     RideControlState mRideControl;
     MobAnger mAnger;

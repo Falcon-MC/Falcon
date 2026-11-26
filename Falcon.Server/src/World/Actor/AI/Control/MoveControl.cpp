@@ -58,7 +58,8 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
         && motion.y > 0.0f)
         return;
 
-    const float speed = mSpeed * mob.getMovementSpeedMultiplier() * (lavaWalking ? _lavaSpeedRatio(mob) : 1.0f);
+    const float speed = mSpeed * mob.getMovementSpeedMultiplier() * mob.getMovementModifierScale()
+                        * (lavaWalking ? _lavaSpeedRatio(mob) : 1.0f);
     if (motion.x * motion.x + motion.z * motion.z > speed * speed * SATURATED_SPEED_RATIO)
         return;
 
@@ -92,7 +93,7 @@ void MoveControl::_tickSwimming(MobActor &mob) {
     const float walkSpeed = mob.getMovementSpeed();
     const float multiplier = walkSpeed > 0.0f ? mSpeed / walkSpeed : 1.0f;
     const float swimSpeed = value == nullptr ? mSpeed : (float) value->number(mSpeed) * multiplier;
-    _steerTowards(mob, swimSpeed * mob.getMovementSpeedMultiplier() * SPEED_FACTOR);
+    _steerTowards(mob, swimSpeed * mob.getMovementSpeedMultiplier() * mob.getMovementModifierScale() * SPEED_FACTOR);
 }
 
 // the game moves a mob in lava at its minecraft:lava_movement speed in place of minecraft:movement

@@ -47,7 +47,9 @@ namespace {
         DrinkPotionGoal::Potion swiftness;
         swiftness.mId = 14;
         swiftness.mChance = 1.0f;
-        DrinkPotionGoal goal({swiftness});
+        // the witch's speed_modifier: -0.25 on a movement of 0.25 holds it still while it drinks
+        DrinkPotionGoal goal({swiftness}, -0.25f);
+        require(witch->getMovementModifierScale() == 1.0f, "the witch was slowed before drinking");
         for (int call = 0; call < 5; ++call)
             require(!goal.canUse(owner, *witch), "the goal tried before its sixth call");
         require(goal.canUse(owner, *witch), "a certain potion was not picked on the sixth call");
@@ -56,6 +58,7 @@ namespace {
                 "the witch does not hold the swiftness potion");
         require(witch->getFlags().get(ActorFlag::UsingItem) && goal.canContinueToUse(owner, *witch),
                 "the witch is not drinking");
+        require(witch->getMovementModifierScale() == 0.0f, "the drinking witch kept moving");
 
         goal.tick(owner, *witch);
         require(!witch->hasEffect(MobEffectId::Speed), "the potion worked before it was drunk");
@@ -67,6 +70,7 @@ namespace {
                 "the drink did not end with its effect");
         goal.stop(owner, *witch);
         require(witch->getEquipment().getSlot(MobEquipment::MAINHAND).isAir(), "the bottle stayed in the hand");
+        require(witch->getMovementModifierScale() == 1.0f, "the witch stayed slowed after drinking");
 
         // a potion whose filters fail is not drunk
         DrinkPotionGoal::Potion never = swiftness;
