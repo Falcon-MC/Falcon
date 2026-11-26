@@ -8,6 +8,8 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -354,13 +356,24 @@ namespace {
             return fixture.mLevel.getBlockState(AT.x, AT.y, AT.z).mStates.getByte("triggered_bit", 0) != 0;
         };
 
-        fixture.mLevel.onBlockPlaced(AT, fixture.mState);
+        // the circuit hands a new dispenser its first update at the next evaluation
+        const auto place = [&]() {
+            fixture.mLevel.setBlock(AT, BlockState(BlockNames::AIR), false);
+            fixture.mLevel.setBlock(AT, fixture.mState, false);
+            fixture.mActor = &fixture.mLevel.getBlockActors().getOrCreate<DispenserBlockActor>(AT);
+            fixture.load("minecraft:arrow", 2);
+            for (int tick = 0; tick < 4; ++tick) {
+                RedstoneSystem::tickCircuit(fixture.mOwner, fixture.mLevel);
+                RedstoneSystem::tick(fixture.mOwner, fixture.mLevel);
+            }
+        };
+        place();
         require(!triggered() && !fixture.mLevel.isUpdateScheduled(AT),
                 "a dispenser placed without power was triggered");
 
         fixture.mLevel.setBlock(Vector3i(AT.x - 1, AT.y, AT.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState(),
                                 false);
-        fixture.mLevel.onBlockPlaced(AT, fixture.mState);
+        place();
         require(triggered(), "a dispenser placed beside a redstone block was not triggered");
         require(fixture.mLevel.isUpdateScheduled(AT), "a dispenser placed beside a redstone block scheduled no shot");
 

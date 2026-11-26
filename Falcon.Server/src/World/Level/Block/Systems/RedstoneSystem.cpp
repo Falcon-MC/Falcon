@@ -1,10 +1,17 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Block/Circuit/CircuitSystem.h"
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/DetectorRailBlock.h"
+#include "World/Level/Block/LightningRodBlock.h"
+#include "World/Level/Block/SculkSensorBlock.h"
+#include "World/Level/Block/BlockData.h"
+#include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
-#include "World/Level/Block/BlockData.h"
 #include "World/Actor/Misc/PrimedTntActor.h"
 #include "World/Level/Block/ButtonBlock.h"
 #include "World/Level/Block/CommandBlock.h"
@@ -28,31 +35,21 @@
 #include "World/Level/Block/RedstoneRepeaterBlock.h"
 #include "World/Level/Block/RedstoneTorchBlock.h"
 #include "World/Level/Block/TrappedChestBlock.h"
-#include "World/Level/Block/SlabBlock.h"
 #include "World/Level/Block/TntBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/CommandBlockSystem.h"
-#include "World/Level/Block/Systems/FallingBlockSystem.h"
-#include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
-#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
-#include "Protocol/Packets/UpdateBlockPacket.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Core/Math/VectorMath.h"
 #include "World/Level/Block/BlockNames.h"
-#include "World/Level/BlockUpdates.h"
 
-#include <typeinfo>
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -160,43 +157,20 @@ int RedstoneFace::fromName(const std::string &name) {
     return RedstoneFace::NONE;
 }
 
+
 namespace {
-    const int TORCH_TICK_RATE = 2;
-    const int BUTTON_HOLD_TICKS = 30;
+    using VectorMath::centerOf;
+
+    // a wooden button stays pressed 30 ticks, a stone one 20
+    const int WOODEN_BUTTON_TICKS = 30;
+    const int STONE_BUTTON_TICKS = 20;
     const int PRESSURE_PLATE_RECHECK_TICKS = 20;
+    // the game's lamp: an unpowered lamp goes dark four ticks later
     const int LIT_LAMP_TURN_OFF_DELAY = 4;
     const int OBSERVER_PULSE_TICKS = 2;
     const char *const OBSERVER_NAME = "minecraft:observer";
-    const int COMPARATOR_DELAY = 2;
-    const int DIODE_PLACE_DELAY = 1;
     const char *SOUND_POWER_ON = LevelSoundEvent::POWER_ON;
     const char *SOUND_POWER_OFF = LevelSoundEvent::POWER_OFF;
-
-    struct RedstoneState {
-        std::unordered_map<int64_t, int32_t> mComparatorOutputs;
-        std::vector<Vector3i> mPendingNotifications;
-    };
-
-    std::unordered_map<const Level *, RedstoneState> gStates;
-
-    RedstoneState &stateOf(Level &level) {
-        return gStates[&level];
-    }
-
-    bool isComparatorState(const BlockState &state) {
-        return RedstoneComparatorBlock::matches(state.mName);
-    }
-
-    int redstoneChange(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int previousPower,
-                       int power) {
-        EventSignal<RedstoneChangeBeforeEvent> &redstone = owner.getEventBus().before().mRedstoneChange;
-        if (!redstone.hasSubscribers())
-            return power;
-
-        RedstoneChangeBeforeEvent event(level, position, previousPower, power);
-        redstone.emit(event);
-        return event.mPower;
-    }
 
     template <typename T>
     const T *blockAs(const BlockState &state) {
@@ -208,14 +182,6 @@ namespace {
         return blockAs<T>(state) != nullptr;
     }
 
-    int trappedChestSignal(Level &level, const Vector3i &position) {
-        const ChestBlockActor *chest = level.getBlockActors().find<ChestBlockActor>(position);
-        if (chest == nullptr)
-            return 0;
-
-        return std::min(chest->getViewerCount(), RedstoneSystem::MAX_SIGNAL);
-    }
-
     bool isChunkReady(Level &level, const Vector3i &position) {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
             return false;
@@ -223,7 +189,7 @@ namespace {
         return level.isChunkResident(position.x >> 4, position.z >> 4);
     }
 
-    // unloaded reads as air: no forced chunk load; a border circuit sees no power from the missing side
+    // unloaded reads as air: no forced chunk load
     BlockState stateAt(Level &level, const Vector3i &position) {
         if (!isChunkReady(level, position))
             return BlockState(BlockNames::AIR);
@@ -231,26 +197,16 @@ namespace {
         return level.getBlockState(position.x, position.y, position.z);
     }
 
-    // of the plain block class: no redstone part, no observer
-    bool isPlain(const BlockState &state) {
-        const Block *block = VanillaBlocks::fromState(state);
-        return block != nullptr && block->isPlainClass();
-    }
-
     int stateInt(const BlockState &state, const std::string &key, int fallback) {
         const Tag *tag = state.mStates.get(key);
         if (tag == nullptr)
             return fallback;
-
         if (tag->getType() == Tag::Type::Int)
             return tag->asInt();
-
         if (tag->getType() == Tag::Type::Byte)
             return (int) tag->asByte();
-
         if (tag->getType() == Tag::Type::Short)
             return (int) tag->asShort();
-
         return fallback;
     }
 
@@ -262,30 +218,22 @@ namespace {
         return state.mStates.getString(key, fallback);
     }
 
-    // torch_facing_direction points away from the support: attached face is the opposite
-    int torchFacing(const BlockState &state) {
-        const std::string attachment = stateString(state, "torch_facing_direction", "unknown");
-        if (attachment == "west")
-            return RedstoneFace::EAST;
-        if (attachment == "east")
-            return RedstoneFace::WEST;
-        if (attachment == "north")
-            return RedstoneFace::SOUTH;
-        if (attachment == "south")
-            return RedstoneFace::NORTH;
-
-        return RedstoneFace::UP;
+    // the game's torch component faces its support: west, east, north, south, down for a standing torch
+    uint8_t torchDirection(const BlockState &state) {
+        const std::string attachment = stateString(state, "torch_facing_direction", "top");
+        const int named = RedstoneFace::fromName(attachment);
+        return named >= RedstoneFace::NORTH ? (uint8_t) named : CircuitFace::DOWN;
     }
 
-    int leverFacing(const BlockState &state) {
-        const std::string direction = stateString(state, "lever_direction", "down_east_west");
+    // lever_direction names where the handle points: the support is behind it
+    int leverPointing(const BlockState &state) {
+        const std::string direction = stateString(state, "lever_direction", "up_east_west");
         if (direction == "down_east_west" || direction == "down_north_south")
             return RedstoneFace::DOWN;
         if (direction == "up_east_west" || direction == "up_north_south")
             return RedstoneFace::UP;
-
         const int named = RedstoneFace::fromName(direction);
-        return named == RedstoneFace::NONE ? RedstoneFace::DOWN : named;
+        return named == RedstoneFace::NONE ? RedstoneFace::UP : named;
     }
 
     int cardinalFacing(const BlockState &state) {
@@ -302,365 +250,438 @@ namespace {
         return std::clamp(stateInt(state, "facing_direction", 0), 0, RedstoneFace::COUNT - 1);
     }
 
-    bool isDiodePowered(const BlockState &state) {
-        const RedstoneDiodeBlock *diode = blockAs<RedstoneDiodeBlock>(state);
-        if (diode == nullptr)
-            return false;
-
-        return diode->isPowered(state);
-    }
-
-    int diodeFacing(const BlockState &state) {
-        return cardinalFacing(state);
-    }
-
-    int diodeDelay(const BlockState &state) {
-        if (isA<RedstoneComparatorBlock>(state))
-            return COMPARATOR_DELAY;
-
-        // repeater_delay 0-3: 1-4 redstone ticks of two game ticks
-        return (1 + stateInt(state, "repeater_delay", 0)) * 2;
-    }
-
-    BlockState diodePoweredState(const BlockState &state) {
-        return blockAs<RedstoneDiodeBlock>(state)->getPoweredState(state);
-    }
-
-    BlockState diodeUnpoweredState(const BlockState &state) {
-        return blockAs<RedstoneDiodeBlock>(state)->getUnpoweredState(state);
-    }
-
-    using VectorMath::centerOf;
-
     int wireSignal(const BlockState &state) {
         return std::clamp(stateInt(state, "redstone_signal", 0), 0, RedstoneSystem::MAX_SIGNAL);
     }
 
-    bool canConnectTo(Level &level, const Vector3i &position, int side) {
-        const BlockState state = stateAt(level, position);
-        if (isA<RedStoneWireBlock>(state))
-            return true;
-
-        if (isA<RedstoneDiodeBlock>(state)) {
-            const int facing = diodeFacing(state);
-            return facing == side || RedstoneFace::opposite(facing) == side;
-        }
-
-        return RedstoneSystem::isPowerSource(state) && side != RedstoneFace::NONE;
+    bool isDiodePowered(const BlockState &state) {
+        const RedstoneDiodeBlock *diode = blockAs<RedstoneDiodeBlock>(state);
+        return diode != nullptr && diode->isPowered(state);
     }
 
-    bool canConnectUpwardsTo(Level &level, const Vector3i &position) {
-        return canConnectTo(level, position, RedstoneFace::NONE);
-    }
-
-    bool wireIsPowerSourceAt(Level &level, const Vector3i &position, int side) {
-        const Vector3i sidePosition = RedstoneFace::relative(position, side);
-        const BlockState sideState = stateAt(level, sidePosition);
-        const bool sideIsNormal = RedstoneSystem::isNormalBlock(sideState);
-        const bool aboveIsNormal = RedstoneSystem::isNormalBlock(
-                stateAt(level, RedstoneFace::relative(position, RedstoneFace::UP)));
-
-        if (!aboveIsNormal && sideIsNormal
-            && canConnectUpwardsTo(level, RedstoneFace::relative(sidePosition, RedstoneFace::UP)))
-            return true;
-
-        if (canConnectTo(level, sidePosition, side))
-            return true;
-
-        return !sideIsNormal && canConnectUpwardsTo(level, RedstoneFace::relative(sidePosition, RedstoneFace::DOWN));
-    }
-
-    int wireStrongPowerAt(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int direction) {
-        const BlockState state = stateAt(level, position);
-        if (isA<RedStoneWireBlock>(state))
+    int trappedChestSignal(Level &level, const Vector3i &position) {
+        const ChestBlockActor *chest = level.getBlockActors().find<ChestBlockActor>(position);
+        if (chest == nullptr)
             return 0;
-
-        return RedstoneSystem::getStrongPower(owner, level, position, direction);
+        return std::min(chest->getViewerCount(), RedstoneSystem::MAX_SIGNAL);
     }
 
-    int wireStrongPowerAround(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-        int result = 0;
+    // the game's redstone_conductivity: full opaque blocks conduct, every block lets wire step down
+    class LevelCircuitSource : public CircuitBlockSource {
+    public:
+        explicit LevelCircuitSource(Level &level) : mLevel(level) {}
 
-        for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-            result = std::max(result, wireStrongPowerAt(owner, level, RedstoneFace::relative(position, face), face));
-
-            if (result >= RedstoneSystem::MAX_SIGNAL)
-                return result;
+        bool isLoaded(const Vector3i &position) const override {
+            return isChunkReady(mLevel, position);
         }
 
-        return result;
-    }
-
-    int wireIndirectPowerAt(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
-        const BlockState state = stateAt(level, position);
-        if (isA<RedStoneWireBlock>(state))
-            return 0;
-
-        if (RedstoneSystem::isNormalBlock(state))
-            return wireStrongPowerAround(owner, level, position);
-
-        return RedstoneSystem::getWeakPower(owner, level, position, face);
-    }
-
-    int wireIndirectPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-        int power = 0;
-
-        for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-            const int blockPower = wireIndirectPowerAt(owner, level, RedstoneFace::relative(position, face), face);
-
-            if (blockPower >= RedstoneSystem::MAX_SIGNAL)
-                return RedstoneSystem::MAX_SIGNAL;
-
-            if (blockPower > power)
-                power = blockPower;
+        bool isAir(const Vector3i &position) const override {
+            const BlockState *state = mLevel.peekBlockPtr(position.x, position.y, position.z);
+            return state == nullptr || state->mName == BlockNames::AIR;
         }
 
-        return power;
+        RedstoneConductivity getConductivity(const Vector3i &position) const override {
+            RedstoneConductivity conductivity;
+            const BlockState *state = mLevel.peekBlockPtr(position.x, position.y, position.z);
+            if (state == nullptr)
+                return conductivity;
+            conductivity.mConductor = RedstoneSystem::isNormalBlock(*state);
+            return conductivity;
+        }
+
+    private:
+        Level &mLevel;
+    };
+
+    struct RedstoneState {
+        explicit RedstoneState(Level &level) : mSource(std::make_unique<LevelCircuitSource>(level)) {}
+
+        std::unique_ptr<CircuitSystem> mCircuit = std::make_unique<CircuitSystem>();
+        std::unique_ptr<LevelCircuitSource> mSource;
+        std::vector<Vector3i> mPendingNotifications;
+    };
+
+    std::unordered_map<const Level *, RedstoneState> gStates;
+
+    RedstoneState &stateOf(Level &level) {
+        auto found = gStates.find(&level);
+        if (found == gStates.end())
+            found = gStates.emplace(&level, RedstoneState(level)).first;
+        return found->second;
     }
 
-    bool isTopSlab(const BlockState &state) {
-        return VanillaBlocks::getAs<SlabBlock>(state.mName) != nullptr && SlabBlock::isTopSlab(state);
+    enum class CircuitKind {
+        None, Wire, Torch, Repeater, Comparator, Observer, Producer, Consumer, Piston, Lamp, Door
+    };
+
+    // the blocks given a consumer by hooks of their own
+    bool isConsumerName(const std::string &name) {
+        static const std::unordered_set<std::string> names = {
+                "minecraft:activator_rail",
+                "minecraft:golden_rail",
+                "minecraft:dispenser",
+                "minecraft:dropper",
+                "minecraft:noteblock",
+                "minecraft:tnt",
+                "minecraft:underwater_tnt",
+                "minecraft:command_block",
+                "minecraft:repeating_command_block",
+                "minecraft:chain_command_block",
+                "minecraft:bell",
+                "minecraft:big_dripleaf",
+                "minecraft:sculk_shrieker",
+                "minecraft:crafter",
+                "minecraft:skeleton_skull",
+                "minecraft:wither_skeleton_skull",
+                "minecraft:zombie_head",
+                "minecraft:player_head",
+                "minecraft:creeper_head",
+                "minecraft:dragon_head",
+                "minecraft:piglin_head",
+                "minecraft:hopper",
+                "minecraft:structure_block",
+        };
+        return names.count(name) != 0 || BlockIdentifier::endsWith(name, "copper_bulb")
+               || BlockIdentifier::endsWith(name, "_shelf") || BlockIdentifier::endsWith(name, "shulker_box");
     }
 
-    int maxCurrentStrength(Level &level, const Vector3i &position, int maxStrength) {
-        const BlockState state = stateAt(level, position);
-        if (!isA<RedStoneWireBlock>(state))
-            return maxStrength;
-
-        return std::max(wireSignal(state), maxStrength);
+    CircuitKind kindOf(const BlockState &state) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        if (dynamic_cast<const RedStoneWireBlock *>(block) != nullptr)
+            return CircuitKind::Wire;
+        if (dynamic_cast<const RedstoneTorchBlock *>(block) != nullptr)
+            return CircuitKind::Torch;
+        if (dynamic_cast<const RedstoneRepeaterBlock *>(block) != nullptr)
+            return CircuitKind::Repeater;
+        if (dynamic_cast<const RedstoneComparatorBlock *>(block) != nullptr)
+            return CircuitKind::Comparator;
+        if (dynamic_cast<const ObserverBlock *>(block) != nullptr)
+            return CircuitKind::Observer;
+        if (dynamic_cast<const RedstoneLampBlock *>(block) != nullptr)
+            return CircuitKind::Lamp;
+        if (PistonSystem::isPiston(state.mName))
+            return CircuitKind::Piston;
+        if (dynamic_cast<const DoorOrientationBlock *>(block) != nullptr)
+            return CircuitKind::Door;
+        if (RedstoneSystem::isPowerSource(state) || DetectorSystem::isHook(state) || DetectorSystem::isTarget(state)
+            || dynamic_cast<const RedstoneBlock *>(block) != nullptr || dynamic_cast<const LeverBlock *>(block) != nullptr
+            || dynamic_cast<const ButtonBlock *>(block) != nullptr
+            || dynamic_cast<const PressurePlateBlock *>(block) != nullptr
+            || dynamic_cast<const DaylightDetectorBlock *>(block) != nullptr
+            || dynamic_cast<const TrappedChestBlock *>(block) != nullptr
+            || dynamic_cast<const LecternBlock *>(block) != nullptr)
+            return CircuitKind::Producer;
+        if (dynamic_cast<const TrapDoorBlock *>(block) != nullptr || dynamic_cast<const FenceGateBlock *>(block) != nullptr
+            || dynamic_cast<const TntBlock *>(block) != nullptr || dynamic_cast<const DispenserBlock *>(block) != nullptr
+            || dynamic_cast<const CrafterBlock *>(block) != nullptr || CommandBlock::matches(state.mName)
+            || isConsumerName(state.mName))
+            return CircuitKind::Consumer;
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+        if (custom != nullptr && custom->mRedstoneConsumer)
+            return CircuitKind::Consumer;
+        return CircuitKind::None;
     }
 
-    void updateSurroundingRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool force) {
-        const BlockState state = stateAt(level, position);
-        if (!isA<RedStoneWireBlock>(state))
-            return;
+    bool hasCircuitKind(const BlockState &state) {
+        return kindOf(state) != CircuitKind::None;
+    }
 
-        const int meta = wireSignal(state);
-        int maxStrength = meta;
-        const int power = wireIndirectPower(owner, level, position);
-
-        if (power > 0 && power > maxStrength - 1)
-            maxStrength = power;
-
+    // the signal a producer block gives out, the strongest of its faces
+    int producerSignal(Level &level, const Vector3i &position, const BlockState &state) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
         int strength = 0;
-
-        for (int face = RedstoneFace::NORTH; face <= RedstoneFace::EAST; ++face) {
-            const Vector3i adjacent = RedstoneFace::relative(position, face);
-
-            strength = maxCurrentStrength(level, adjacent, strength);
-
-            const Vector3i above = RedstoneFace::relative(position, RedstoneFace::UP);
-            const Vector3i adjacentAbove = RedstoneFace::relative(adjacent, RedstoneFace::UP);
-            if (maxCurrentStrength(level, adjacentAbove, strength) > strength
-                && !RedstoneSystem::isNormalBlock(stateAt(level, above)) && !isTopSlab(stateAt(level, adjacent)))
-                strength = maxCurrentStrength(level, adjacentAbove, strength);
-
-            const Vector3i adjacentBelow = RedstoneFace::relative(adjacent, RedstoneFace::DOWN);
-            if (maxCurrentStrength(level, adjacentBelow, strength) > strength
-                && !RedstoneSystem::isNormalBlock(stateAt(level, adjacent)))
-                strength = maxCurrentStrength(level, adjacentBelow, strength);
-        }
-
-        if (strength > maxStrength)
-            maxStrength = strength - 1;
-        else if (maxStrength > 0)
-            --maxStrength;
-        else
-            maxStrength = 0;
-
-        if (power > maxStrength - 1)
-            maxStrength = power;
-        else if (power < maxStrength && strength <= maxStrength)
-            maxStrength = std::max(power, strength - 1);
-
-        if (meta != maxStrength)
-            maxStrength = redstoneChange(owner, level, position, meta, maxStrength);
-
-        if (meta != maxStrength) {
-            Tag states = state.mStates;
-            states.putInt("redstone_signal", maxStrength);
-            level.setBlock(position, BlockState(state.mName, states), false);
-
-            RedstoneSystem::updateAllAroundRedstone(owner, level, position);
-            return;
-        }
-
-        if (!force)
-            return;
-
         for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-            RedstoneSystem::updateAroundRedstone(owner, level, RedstoneFace::relative(position, face),
-                                                 RedstoneFace::opposite(face));
+            int emitted = DetectorSystem::weakPower(level, position, state, face);
+            if (emitted < 0 && block != nullptr)
+                emitted = block->getEmittedSignal(level, position, state, face, false);
+            strength = std::max(strength, emitted);
+        }
+        if (dynamic_cast<const RedstoneBlock *>(block) != nullptr)
+            return RedstoneSystem::MAX_SIGNAL;
+        if (dynamic_cast<const LeverBlock *>(block) != nullptr)
+            return stateBool(state, "open_bit", false) ? RedstoneSystem::MAX_SIGNAL : 0;
+        if (dynamic_cast<const ButtonBlock *>(block) != nullptr)
+            return stateBool(state, "button_pressed_bit", false) ? RedstoneSystem::MAX_SIGNAL : 0;
+        if (dynamic_cast<const LecternBlock *>(block) != nullptr)
+            return stateBool(state, "powered_bit", false) ? RedstoneSystem::MAX_SIGNAL : 0;
+        if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr
+            || dynamic_cast<const DaylightDetectorBlock *>(block) != nullptr)
+            return std::clamp(stateInt(state, "redstone_signal", 0), 0, RedstoneSystem::MAX_SIGNAL);
+        if (dynamic_cast<const TrappedChestBlock *>(block) != nullptr)
+            return trappedChestSignal(level, position);
+        return std::clamp(strength, 0, RedstoneSystem::MAX_SIGNAL);
+    }
+
+    struct ProducerShape {
+        uint8_t mDirection = CircuitFace::NONE;
+        bool mAllowAttachments = true;
+        bool mNoWireStepDown = true;
+    };
+
+    // the face a producer strongly powers, the block it hangs on: the game's setup of each block
+    ProducerShape producerShape(const BlockState &state) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        ProducerShape shape;
+        if (dynamic_cast<const LeverBlock *>(block) != nullptr) {
+            shape.mDirection = (uint8_t) RedstoneFace::opposite(leverPointing(state));
+        } else if (dynamic_cast<const ButtonBlock *>(block) != nullptr) {
+            shape.mDirection = (uint8_t) RedstoneFace::opposite(buttonFacing(state));
+        } else if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr
+                   || dynamic_cast<const TrappedChestBlock *>(block) != nullptr
+                   || dynamic_cast<const DetectorRailBlock *>(block) != nullptr
+                   || dynamic_cast<const SculkSensorBlock *>(block) != nullptr) {
+            shape.mDirection = CircuitFace::DOWN;
+        } else if (dynamic_cast<const LecternBlock *>(block) != nullptr) {
+            shape.mDirection = CircuitFace::DOWN;
+            shape.mNoWireStepDown = false;
+        } else if (dynamic_cast<const DaylightDetectorBlock *>(block) != nullptr) {
+            shape.mDirection = CircuitFace::UP;
+            shape.mAllowAttachments = false;
+        } else if (DetectorSystem::isHook(state)) {
+            shape.mDirection = (uint8_t) RedstoneFace::opposite(DetectorSystem::hookFacing(state));
+        } else if (dynamic_cast<const LightningRodBlock *>(block) != nullptr) {
+            const int facing = std::clamp(stateInt(state, "facing_direction", RedstoneFace::UP), 0, RedstoneFace::COUNT - 1);
+            shape.mDirection = (uint8_t) RedstoneFace::opposite(facing);
+        } else if (DetectorSystem::isTarget(state)) {
+            shape.mAllowAttachments = false;
+        } else if (dynamic_cast<const RedstoneBlock *>(block) != nullptr) {
+            shape.mAllowAttachments = false;
+            shape.mNoWireStepDown = false;
+        }
+        return shape;
+    }
+
+    // doors, trapdoors, fence gates and note blocks skip the update a new consumer gets
+    bool ignoresFirstUpdate(const BlockState &state) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        return dynamic_cast<const DoorOrientationBlock *>(block) != nullptr
+               || dynamic_cast<const TrapDoorBlock *>(block) != nullptr
+               || dynamic_cast<const FenceGateBlock *>(block) != nullptr || state.mName == "minecraft:noteblock";
+    }
+
+    void setupComponent(Level &level, const Vector3i &position, const BlockState &state) {
+        CircuitSystem &circuit = *stateOf(level).mCircuit;
+        switch (kindOf(state)) {
+            case CircuitKind::Wire:
+                circuit.create<TransporterComponent>(position, CircuitFace::DOWN);
+                break;
+            case CircuitKind::Torch: {
+                auto *torch = circuit.create<RedstoneTorchCapacitor>(position, torchDirection(state));
+                if (torch != nullptr)
+                    torch->setOn(blockAs<RedstoneTorchBlock>(state)->isLit());
+                break;
+            }
+            case CircuitKind::Repeater: {
+                auto *repeater = circuit.create<RepeaterCapacitor>(position, (uint8_t) cardinalFacing(state));
+                if (repeater != nullptr) {
+                    repeater->setDelay(stateInt(state, "repeater_delay", 0));
+                    repeater->setStrength(isDiodePowered(state) ? RedstoneSystem::MAX_SIGNAL : 0);
+                }
+                break;
+            }
+            case CircuitKind::Comparator: {
+                auto *comparator = circuit.create<ComparatorCapacitor>(position, (uint8_t) cardinalFacing(state));
+                if (comparator != nullptr)
+                    comparator->setSubtractMode(stateBool(state, "output_subtract_bit", false));
+                break;
+            }
+            case CircuitKind::Observer: {
+                auto *observer = circuit.create<PulseCapacitor>(position, (uint8_t) observerFacing(state));
+                if (observer != nullptr) {
+                    observer->setAllowAttachments(true);
+                    observer->setBlocksWireStepDown(true);
+                    if (stateBool(state, "powered_bit", false))
+                        observer->setStrength(RedstoneSystem::MAX_SIGNAL);
+                }
+                break;
+            }
+            case CircuitKind::Producer: {
+                const ProducerShape shape = producerShape(state);
+                auto *producer = circuit.create<ProducerComponent>(position, shape.mDirection);
+                if (producer != nullptr) {
+                    producer->setAllowAttachments(shape.mAllowAttachments);
+                    producer->setBlocksWireStepDown(shape.mNoWireStepDown);
+                    producer->setStrength(producerSignal(level, position, state));
+                }
+                break;
+            }
+            case CircuitKind::Piston: {
+                // the search reaches the head from in front moving against the push: that face takes no power
+                const auto face = (uint8_t) RedstoneFace::opposite(PistonSystem::getPistonFace(state));
+                auto *piston = circuit.create<PistonConsumerComponent>(position, face);
+                if (piston != nullptr)
+                    piston->setBlockedFace(face);
+                break;
+            }
+            case CircuitKind::Lamp:
+            case CircuitKind::Consumer:
+            case CircuitKind::Door: {
+                auto *consumer = circuit.create<ConsumerComponent>(position, CircuitFace::NONE);
+                if (consumer != nullptr)
+                    consumer->setIgnoreFirstUpdate(ignoresFirstUpdate(state));
+                break;
+            }
+            case CircuitKind::None:
+                break;
         }
     }
 
-    void wireUpdateAround(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
-        const BlockState state = stateAt(level, position);
-        if (!isA<RedStoneWireBlock>(state))
+    // a block change that kept the block: what the component reads off the state follows it
+    void refreshComponent(Level &level, const Vector3i &position, const BlockState &state) {
+        CircuitSystem &circuit = *stateOf(level).mCircuit;
+        BaseCircuitComponent *component = circuit.findComponent(position);
+        if (component == nullptr)
             return;
-
-        RedstoneSystem::updateAroundRedstone(owner, level, position, face);
-
-        for (int side = 0; side < RedstoneFace::COUNT; ++side) {
-            RedstoneSystem::updateAroundRedstone(owner, level, RedstoneFace::relative(position, side),
-                                                 RedstoneFace::opposite(side));
+        switch (kindOf(state)) {
+            case CircuitKind::Repeater:
+                static_cast<RepeaterCapacitor *>(component)->setDelay(stateInt(state, "repeater_delay", 0));
+                break;
+            case CircuitKind::Comparator:
+                static_cast<ComparatorCapacitor *>(component)
+                        ->setSubtractMode(stateBool(state, "output_subtract_bit", false));
+                break;
+            case CircuitKind::Producer:
+                component->setStrength(producerSignal(level, position, state));
+                break;
+            default:
+                break;
         }
     }
 
-    bool isTorchPoweredFromSide(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                const BlockState &state) {
-        const int face = RedstoneFace::opposite(torchFacing(state));
-        return RedstoneSystem::isSidePowered(owner, level, RedstoneFace::relative(position, face), face);
-    }
-
-    int diodeCalculateInputStrength(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                    const BlockState &state) {
-        const int face = diodeFacing(state);
-        const Vector3i front = RedstoneFace::relative(position, face);
-        const int power = RedstoneSystem::getRedstonePower(owner, level, front, face);
-
-        if (power >= RedstoneSystem::MAX_SIGNAL)
+    int redstoneChange(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int previousPower,
+                       int power) {
+        EventSignal<RedstoneChangeBeforeEvent> &redstone = owner.getEventBus().before().mRedstoneChange;
+        if (!redstone.hasSubscribers())
             return power;
 
-        const BlockState frontState = stateAt(level, front);
-        return std::max(power, isA<RedStoneWireBlock>(frontState) ? wireSignal(frontState) : 0);
+        RedstoneChangeBeforeEvent event(level, position, previousPower, power);
+        redstone.emit(event);
+        return event.mPower;
     }
 
-    int comparatorSignalAt(Level &level, const Vector3i &position) {
-        const BlockState state = stateAt(level, position);
-        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-        return block == nullptr ? -1 : block->getComparatorSignal(level, position, state);
+    // the circuit's own state changes keep the graph as it is
+    void setLockedBlock(Level &level, const Vector3i &position, const BlockState &state) {
+        CircuitSystem &circuit = *stateOf(level).mCircuit;
+        const bool locked = circuit.isLocked();
+        circuit.setLocked(true);
+        level.setBlock(position, state, false);
+        circuit.setLocked(locked);
     }
 
-    // the block behind, or the one past it through a solid
-    // block that is no power source; -1 when neither gives an analog signal
+    // the block the comparator reads: the one behind, or past it through a solid block
     int comparatorAnalogInput(Level &level, const Vector3i &position, const BlockState &state) {
-        const int facing = diodeFacing(state);
+        const int facing = cardinalFacing(state);
         const Vector3i front = RedstoneFace::relative(position, facing);
-        const int signal = comparatorSignalAt(level, front);
+        const auto signalAt = [&](const Vector3i &at) {
+            const BlockState found = stateAt(level, at);
+            const Block *block = VanillaBlocks::fromIdentifier(found.mName);
+            return block == nullptr ? -1 : block->getComparatorSignal(level, at, found);
+        };
+        const int signal = signalAt(front);
         if (signal >= 0 || !RedstoneSystem::isNormalBlock(stateAt(level, front)))
             return signal;
-
-        return comparatorSignalAt(level, RedstoneFace::relative(front, facing));
+        return signalAt(RedstoneFace::relative(front, facing));
     }
 
-    int comparatorCalculateInputStrength(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                         const BlockState &state) {
-        const int signal = comparatorAnalogInput(level, position, state);
-        if (signal >= 0)
-            return signal;
+    void onConsumerUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                          int strength) {
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        if (PistonSystem::isPiston(state.mName)) {
+            PistonSystem::onRedstoneUpdate(owner, level, position, state);
+        } else if (CommandBlock::matches(state.mName)) {
+            CommandBlockSystem::setPowered(owner, level, position, strength > 0);
+        } else if (dynamic_cast<const DoorOrientationBlock *>(block) != nullptr) {
+            DoorBlock::onRedstoneUpdate(owner, level, position, state);
+        } else if (dynamic_cast<const TrapDoorBlock *>(block) != nullptr
+                   || dynamic_cast<const FenceGateBlock *>(block) != nullptr) {
+            OpenableBlock::onRedstoneUpdate(owner, level, position, state);
+        } else if (dynamic_cast<const TntBlock *>(block) != nullptr) {
+            if (strength > 0)
+                TntBlock::prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+        } else if (dynamic_cast<const DispenserBlock *>(block) != nullptr) {
+            DispenserBlock::onRedstoneUpdate(owner, level, position, state);
+        } else if (dynamic_cast<const CrafterBlock *>(block) != nullptr) {
+            CrafterBlock::onRedstoneUpdate(owner, level, position, state);
+        } else if (block != nullptr) {
+            block->onRedstonePower(owner, level, position, state);
+        }
 
-        return diodeCalculateInputStrength(owner, level, position, state);
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+        if (custom != nullptr && custom->mRedstoneConsumer)
+            owner.getScriptEngine().onCustomBlockRedstone(level, state.mName, position, strength);
     }
 
-    int diodePowerOnSide(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int side, bool repeater) {
+    // the circuit handed the component at `position` its new strength
+    void onComponentUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int strength) {
         const BlockState state = stateAt(level, position);
-        const bool alternate = repeater ? isA<RedstoneDiodeBlock>(state) : RedstoneSystem::isPowerSource(state);
-        if (!alternate)
-            return 0;
-
-        if (isA<RedstoneBlock>(state))
-            return RedstoneSystem::MAX_SIGNAL;
-
-        if (isA<RedStoneWireBlock>(state))
-            return wireSignal(state);
-
-        return RedstoneSystem::getStrongPower(owner, level, position, side);
-    }
-
-    int diodePowerOnSides(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                          const BlockState &state) {
-        const bool repeater = isA<RedstoneRepeaterBlock>(state);
-        const int face = diodeFacing(state);
-        const int left = RedstoneFace::rotateY(face);
-        const int right = RedstoneFace::rotateYCounterClockwise(face);
-
-        return std::max(diodePowerOnSide(owner, level, RedstoneFace::relative(position, left), left, repeater),
-                        diodePowerOnSide(owner, level, RedstoneFace::relative(position, right), right, repeater));
-    }
-
-    bool diodeShouldBePowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &state) {
-        if (!isA<RedstoneComparatorBlock>(state))
-            return diodeCalculateInputStrength(owner, level, position, state) > 0;
-
-        const int input = comparatorCalculateInputStrength(owner, level, position, state);
-        if (input >= RedstoneSystem::MAX_SIGNAL)
-            return true;
-
-        if (input == 0)
-            return false;
-
-        const int sidePower = diodePowerOnSides(owner, level, position, state);
-        return sidePower == 0 || input >= sidePower;
-    }
-
-    bool diodeIsLocked(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
-        if (!isA<RedstoneRepeaterBlock>(state))
-            return false;
-
-        return diodePowerOnSides(owner, level, position, state) > 0;
-    }
-
-    int comparatorCalculateOutput(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                  const BlockState &state) {
-        const int input = comparatorCalculateInputStrength(owner, level, position, state);
-        if (!stateBool(state, "output_subtract_bit", false))
-            return input;
-
-        return std::max(input - diodePowerOnSides(owner, level, position, state), 0);
-    }
-
-    void diodeUpdateState(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                          const BlockState &state) {
-        if (isA<RedstoneComparatorBlock>(state)) {
-            if (level.isUpdateScheduled(position))
+        switch (kindOf(state)) {
+            case CircuitKind::Wire: {
+                const int previous = wireSignal(state);
+                const int shown = previous == strength ? strength : redstoneChange(owner, level, position, previous,
+                                                                                   strength);
+                if (shown == previous)
+                    return;
+                Tag states = state.mStates;
+                states.putInt("redstone_signal", std::clamp(shown, 0, RedstoneSystem::MAX_SIGNAL));
+                setLockedBlock(level, position, BlockState(state.mName, states));
                 return;
-
-            const int output = comparatorCalculateOutput(owner, level, position, state);
-            const int power = RedstoneSystem::getComparatorOutput(level, position);
-
-            if (output != power || isDiodePowered(state) != diodeShouldBePowered(owner, level, position, state))
-                level.scheduleUpdate(position, COMPARATOR_DELAY);
-
-            return;
+            }
+            case CircuitKind::Torch: {
+                const bool lit = strength > 0;
+                if (blockAs<RedstoneTorchBlock>(state)->isLit() != lit)
+                    setLockedBlock(level, position, lit ? RedstoneTorchBlock::getLitState(state)
+                                                        : RedstoneTorchBlock::getUnlitState(state));
+                return;
+            }
+            case CircuitKind::Repeater:
+            case CircuitKind::Comparator: {
+                const bool powered = strength > 0;
+                if (isDiodePowered(state) == powered)
+                    return;
+                const RedstoneDiodeBlock *diode = blockAs<RedstoneDiodeBlock>(state);
+                setLockedBlock(level, position, powered ? diode->getPoweredState(state) : diode->getUnpoweredState(state));
+                return;
+            }
+            case CircuitKind::Lamp:
+                if (strength > 0) {
+                    level.cancelUpdate(position);
+                    if (!blockAs<RedstoneLampBlock>(state)->isLit()) {
+                        setLockedBlock(level, position, RedstoneLampBlock::getLitState(state));
+                    }
+                } else {
+                    level.scheduleUpdate(position, LIT_LAMP_TURN_OFF_DELAY);
+                }
+                return;
+            case CircuitKind::Consumer:
+            case CircuitKind::Door:
+            case CircuitKind::Piston:
+                onConsumerUpdate(owner, level, position, state, strength);
+                return;
+            default:
+                return;
         }
-
-        if (diodeIsLocked(owner, level, position, state))
-            return;
-
-        const bool shouldBePowered = diodeShouldBePowered(owner, level, position, state);
-        if (isDiodePowered(state) != shouldBePowered)
-            level.scheduleUpdate(position, diodeDelay(state));
     }
 
-    void comparatorOnChange(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-        const BlockState state = stateAt(level, position);
-        if (!isA<RedstoneComparatorBlock>(state))
-            return;
+    void scanChunk(Level &level, const LevelChunk &chunk) {
+        for (int section = 0; section < LevelChunk::SUB_CHUNK_COUNT; ++section) {
+            const SubChunk &subChunk = chunk.getSubChunk(section);
+            if (!subChunk.paletteMatches(SubChunk::PaletteQuery::Circuit, hasCircuitKind))
+                continue;
 
-        const int output = comparatorCalculateOutput(owner, level, position, state);
-        const int currentOutput = RedstoneSystem::getComparatorOutput(level, position);
-        RedstoneSystem::setComparatorOutput(level, position, output);
-
-        const bool subtractMode = stateBool(state, "output_subtract_bit", false);
-        if (currentOutput == output && subtractMode)
-            return;
-
-        const bool shouldBePowered = diodeShouldBePowered(owner, level, position, state);
-        const bool powered = isDiodePowered(state);
-
-        if (powered && !shouldBePowered) {
-            level.setBlock(position, diodeUnpoweredState(state), false);
-            RedstoneSystem::updateComparatorOutputLevel(owner, level, position);
-        } else if (!powered && shouldBePowered) {
-            level.setBlock(position, diodePoweredState(state), false);
-            RedstoneSystem::updateComparatorOutputLevel(owner, level, position);
+            for (int x = 0; x < 16; ++x) {
+                for (int z = 0; z < 16; ++z) {
+                    for (int y = 0; y < 16; ++y) {
+                        const BlockState &state = subChunk.getBlock(x, y, z);
+                        if (!hasCircuitKind(state))
+                            continue;
+                        const Vector3i position(chunk.getX() * 16 + x,
+                                                (section + LevelChunk::LOWEST_SUB_CHUNK_Y) * 16 + y,
+                                                chunk.getZ() * 16 + z);
+                        setupComponent(level, position, state);
+                    }
+                }
+            }
         }
-
-        const Vector3i behind = RedstoneFace::relative(position, RedstoneFace::opposite(diodeFacing(state)));
-        level.updateAt(behind, BlockUpdateType::Redstone);
-        RedstoneSystem::updateAroundRedstone(owner, level, behind);
     }
 
     int pressurePlateComputeStrength(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -748,9 +769,6 @@ namespace {
             level.setBlock(position, updated, false);
             owner.getScriptEngine().onPressurePlate(level, position, oldStrength, strength, source);
 
-            RedstoneSystem::updateAroundRedstone(owner, level, position);
-            RedstoneSystem::updateAroundRedstone(owner, level, RedstoneFace::relative(position, RedstoneFace::DOWN));
-
             const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.1f, (float) position.z + 0.5f);
             if (!powered && wasPowered)
                 owner.playBlockSound(level, SOUND_POWER_OFF, center, updated.getHash());
@@ -762,37 +780,33 @@ namespace {
             level.scheduleUpdate(position, PRESSURE_PLATE_RECHECK_TICKS);
     }
 
+
+    int buttonHoldTicks(const BlockState &state) {
+        const std::string &name = state.mName;
+        return name == "minecraft:stone_button" || name == "minecraft:polished_blackstone_button" ? STONE_BUTTON_TICKS
+                                                                                                    : WOODEN_BUTTON_TICKS;
+    }
+
+    // the game's observer: the pulse is the component's, the block only shows it
     void observerOnScheduled(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state) {
-        const int facing = observerFacing(state);
-        const Vector3i behind = RedstoneFace::relative(position, RedstoneFace::opposite(facing));
-
+        (void) owner;
         Tag states = state.mStates;
-
         if (!stateBool(state, "powered_bit", false)) {
             states.putByte("powered_bit", 1);
-            level.setBlock(position, BlockState(state.mName, states), false);
-
-            level.updateAt(behind, BlockUpdateType::Redstone);
-            RedstoneSystem::updateAroundRedstone(owner, level, behind);
+            setLockedBlock(level, position, BlockState(state.mName, states));
+            stateOf(level).mCircuit->setStrength(position, RedstoneSystem::MAX_SIGNAL);
             level.scheduleUpdate(position, OBSERVER_PULSE_TICKS);
             return;
         }
 
         states.putByte("powered_bit", 0);
-        level.setBlock(position, BlockState(state.mName, states), false);
-
-        level.updateAt(behind, BlockUpdateType::Redstone);
-        RedstoneSystem::updateAroundRedstone(owner, level, behind);
+        setLockedBlock(level, position, BlockState(state.mName, states));
     }
-
 }
 
 int64_t RedstoneSystem::packPosition(const Vector3i &position) {
-    const int64_t x = (int64_t) (position.x & 0x3ffffff);
-    const int64_t y = (int64_t) (position.y & 0xfff);
-    const int64_t z = (int64_t) (position.z & 0x3ffffff);
-    return (x << 38) | (y << 26) | z;
+    return CircuitSceneGraph::key(position);
 }
 
 Vector3i RedstoneSystem::unpackPosition(int64_t packed) {
@@ -803,10 +817,6 @@ Vector3i RedstoneSystem::unpackPosition(int64_t packed) {
 
     return Vector3i(signExtend((packed >> 38) & 0x3ffffff, 26), signExtend((packed >> 26) & 0xfff, 12),
                     signExtend(packed & 0x3ffffff, 26));
-}
-
-bool RedstoneSystem::canConnectWireTo(Level &level, const Vector3i &position, int side) {
-    return canConnectTo(level, position, side);
 }
 
 bool RedstoneSystem::isNormalBlock(const BlockState &state) {
@@ -826,6 +836,19 @@ bool RedstoneSystem::isNormalBlock(const BlockState &state) {
     return normal;
 }
 
+bool RedstoneSystem::canConnectWireTo(Level &level, const Vector3i &position, int side) {
+    const BlockState state = stateAt(level, position);
+    if (isA<RedStoneWireBlock>(state))
+        return true;
+
+    if (isA<RedstoneDiodeBlock>(state)) {
+        const int facing = cardinalFacing(state);
+        return facing == side || RedstoneFace::opposite(facing) == side;
+    }
+
+    return isPowerSource(state) && side != RedstoneFace::NONE;
+}
+
 bool RedstoneSystem::isPowerSource(const BlockState &state) {
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
     if (block == nullptr)
@@ -839,282 +862,71 @@ bool RedstoneSystem::isPowerSource(const BlockState &state) {
     return block->isSignalSource();
 }
 
-// unlike strong power, never travels through a solid block
+CircuitSystem &RedstoneSystem::circuitOf(Level &level) {
+    return *stateOf(level).mCircuit;
+}
+
+int RedstoneSystem::getStrength(Level &level, const Vector3i &position) {
+    return std::max(stateOf(level).mCircuit->getStrength(position), 0);
+}
+
 int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
-    const BlockState state = stateAt(level, position);
-    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-    const int detector = DetectorSystem::weakPower(level, position, state, face);
-    if (detector >= 0)
-        return detector;
-
-    if (block != nullptr) {
-        const int emitted = block->getEmittedSignal(level, position, state, face, false);
-        if (emitted >= 0)
-            return emitted;
-    }
-
-    if (dynamic_cast<const RedstoneBlock *>(block) != nullptr)
-        return MAX_SIGNAL;
-
-    if (const RedstoneTorchBlock *torch = dynamic_cast<const RedstoneTorchBlock *>(block)) {
-        if (!torch->isLit())
-            return 0;
-
-        return torchFacing(state) != face ? MAX_SIGNAL : 0;
-    }
-
-    if (dynamic_cast<const LeverBlock *>(block) != nullptr)
-        return stateBool(state, "open_bit", false) ? MAX_SIGNAL : 0;
-
-    if (dynamic_cast<const ButtonBlock *>(block) != nullptr)
-        return stateBool(state, "button_pressed_bit", false) ? MAX_SIGNAL : 0;
-
-    // 15 while a page turn holds powered_bit
-    if (dynamic_cast<const LecternBlock *>(block) != nullptr)
-        return stateBool(state, "powered_bit", false) ? MAX_SIGNAL : 0;
-
-    if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr
-        || dynamic_cast<const DaylightDetectorBlock *>(block) != nullptr)
-        return std::clamp(stateInt(state, "redstone_signal", 0), 0, MAX_SIGNAL);
-
-    if (dynamic_cast<const TrappedChestBlock *>(block) != nullptr)
-        return trappedChestSignal(level, position);
-
-    if (dynamic_cast<const ObserverBlock *>(block) != nullptr)
-        return getStrongPower(owner, level, position, face);
-
-    if (const RedstoneDiodeBlock *diode = dynamic_cast<const RedstoneDiodeBlock *>(block)) {
-        if (!diode->isPowered(state))
-            return 0;
-
-        if (diodeFacing(state) != face)
-            return 0;
-
-        if (dynamic_cast<const RedstoneComparatorBlock *>(diode) != nullptr)
-            return getComparatorOutput(level, position);
-
-        return MAX_SIGNAL;
-    }
-
-    if (dynamic_cast<const RedStoneWireBlock *>(block) == nullptr)
+    (void) owner, (void) face;
+    const BaseCircuitComponent *component = stateOf(level).mCircuit->findComponent(position);
+    if (component == nullptr)
         return 0;
-
-    if (!isPowerSource(state))
+    const CircuitComponentType base = component->getBaseType();
+    if (base == CircuitComponentType::Consumer || base == CircuitComponentType::PoweredBlock)
         return 0;
-
-    const int power = wireSignal(state);
-    if (power == 0)
-        return 0;
-
-    if (face == RedstoneFace::UP)
-        return power;
-
-    bool connected[RedstoneFace::COUNT] = {false, false, false, false, false, false};
-    bool anyConnected = false;
-
-    for (int side = RedstoneFace::NORTH; side <= RedstoneFace::EAST; ++side) {
-        if (wireIsPowerSourceAt(level, position, side)) {
-            connected[side] = true;
-            anyConnected = true;
-        }
-    }
-
-    // an unconnected dot powers every side; else only a side it points straight into, not the blocks
-    // beside a turn or a passing line
-    if (RedstoneFace::isHorizontal(face) && !anyConnected)
-        return power;
-
-    if (face < 0 || face >= RedstoneFace::COUNT)
-        return 0;
-
-    const int left = RedstoneFace::rotateYCounterClockwise(face);
-    const int right = RedstoneFace::rotateY(face);
-    if (connected[face] && (left == RedstoneFace::NONE || !connected[left])
-        && (right == RedstoneFace::NONE || !connected[right]))
-        return power;
-
-    return 0;
+    return std::clamp(component->getStrength(), 0, MAX_SIGNAL);
 }
 
-// a redstone block never charges a block; a torch only charges the block above
+// only through the block a producer hangs on, or the one a capacitor or wire points into
 int RedstoneSystem::getStrongPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
-    const BlockState state = stateAt(level, position);
-    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-    const int detector = DetectorSystem::strongPower(level, position, state, face);
-    if (detector >= 0)
-        return detector;
-
-    if (block != nullptr) {
-        const int emitted = block->getEmittedSignal(level, position, state, face, true);
-        if (emitted >= 0)
-            return emitted;
-    }
-
-    if (const RedstoneTorchBlock *torch = dynamic_cast<const RedstoneTorchBlock *>(block)) {
-        if (!torch->isLit())
-            return 0;
-
-        return face == RedstoneFace::DOWN ? getWeakPower(owner, level, position, face) : 0;
-    }
-
-    if (dynamic_cast<const RedstoneBlock *>(block) != nullptr)
+    const BaseCircuitComponent *component = stateOf(level).mCircuit->findComponent(position);
+    if (component == nullptr || face < 0 || face >= RedstoneFace::COUNT)
         return 0;
-
-    if (dynamic_cast<const LeverBlock *>(block) != nullptr) {
-        if (!stateBool(state, "open_bit", false))
+    const auto towards = (uint8_t) RedstoneFace::opposite(face);
+    switch (component->getBaseType()) {
+        case CircuitComponentType::Producer: {
+            const auto *producer = static_cast<const ProducerComponent *>(component);
+            return producer->allowsAttachments() && producer->getDirection() == towards ? getWeakPower(owner, level,
+                                                                                                         position, face)
+                                                                                       : 0;
+        }
+        case CircuitComponentType::Capacitor:
+            return component->getPoweroutDirection() == towards ? getWeakPower(owner, level, position, face) : 0;
+        default:
             return 0;
-
-        return leverFacing(state) == face ? MAX_SIGNAL : 0;
     }
-
-    if (dynamic_cast<const ButtonBlock *>(block) != nullptr) {
-        if (!stateBool(state, "button_pressed_bit", false))
-            return 0;
-
-        return buttonFacing(state) == face ? MAX_SIGNAL : 0;
-    }
-
-    if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr)
-        return face == RedstoneFace::UP ? std::clamp(stateInt(state, "redstone_signal", 0), 0, MAX_SIGNAL) : 0;
-
-    if (dynamic_cast<const TrappedChestBlock *>(block) != nullptr)
-        return face == RedstoneFace::UP ? trappedChestSignal(level, position) : 0;
-
-    if (dynamic_cast<const ObserverBlock *>(block) != nullptr) {
-        return stateBool(state, "powered_bit", false) && face == observerFacing(state) ? MAX_SIGNAL : 0;
-    }
-
-    if (dynamic_cast<const RedstoneDiodeBlock *>(block) != nullptr)
-        return getWeakPower(owner, level, position, face);
-
-    if (dynamic_cast<const RedStoneWireBlock *>(block) != nullptr)
-        return isPowerSource(state) ? getWeakPower(owner, level, position, face) : 0;
-
-    return 0;
-}
-
-int RedstoneSystem::getStrongPowerAround(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    int result = 0;
-
-    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        result = std::max(result, getStrongPower(owner, level, RedstoneFace::relative(position, face), face));
-
-        if (result >= MAX_SIGNAL)
-            return result;
-    }
-
-    return result;
 }
 
 int RedstoneSystem::getRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
-    const BlockState state = stateAt(level, position);
-    return isNormalBlock(state) ? getStrongPowerAround(owner, level, position)
-                                : getWeakPower(owner, level, position, face);
-}
-
-bool RedstoneSystem::isSidePowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int face) {
-    return getRedstonePower(owner, level, position, face) > 0;
-}
-
-bool RedstoneSystem::isBlockPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        if (getRedstonePower(owner, level, RedstoneFace::relative(position, face), face) > 0)
-            return true;
-    }
-
-    return false;
+    const BaseCircuitComponent *component = stateOf(level).mCircuit->getComponent(position);
+    if (component != nullptr && component->getBaseType() == CircuitComponentType::PoweredBlock)
+        return std::clamp(component->getStrength(), 0, MAX_SIGNAL);
+    return getWeakPower(owner, level, position, face);
 }
 
 int RedstoneSystem::isBlockIndirectlyGettingPowered(ServerNetworkHandler &owner, Level &level,
                                                     const Vector3i &position) {
-    int power = 0;
-
-    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        const int blockPower = getRedstonePower(owner, level, RedstoneFace::relative(position, face), face);
-
-        if (blockPower >= MAX_SIGNAL)
-            return MAX_SIGNAL;
-
-        if (blockPower > power)
-            power = blockPower;
-    }
-
-    return power;
+    (void) owner;
+    return std::clamp(stateOf(level).mCircuit->getStrength(position), 0, MAX_SIGNAL);
 }
 
 bool RedstoneSystem::isGettingPower(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        if (isSidePowered(owner, level, RedstoneFace::relative(position, face), face))
-            return true;
-    }
-
-    return isBlockPowered(owner, level, position);
+    return isBlockIndirectlyGettingPowered(owner, level, position) > 0;
 }
 
-void RedstoneSystem::updateAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                          int ignoredFace) {
-    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        if (face == ignoredFace)
-            continue;
-
-        level.updateAt(RedstoneFace::relative(position, face), BlockUpdateType::Redstone);
-    }
+void RedstoneSystem::updateAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+    (void) owner;
+    if (!isChunkReady(level, position))
+        return;
+    refreshComponent(level, position, stateAt(level, position));
 }
 
-// neighbours' neighbours too: a charged solid block changes what it feeds
-void RedstoneSystem::updateAllAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                             int ignoredFace) {
-    updateAroundRedstone(owner, level, position, ignoredFace);
-
-    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        if (face == ignoredFace)
-            continue;
-
-        updateAroundRedstone(owner, level, RedstoneFace::relative(position, face), RedstoneFace::opposite(face));
-    }
-}
-
-void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    for (int face = RedstoneFace::NORTH; face <= RedstoneFace::EAST; ++face) {
-        const Vector3i side = RedstoneFace::relative(position, face);
-        if (!isChunkReady(level, side))
-            continue;
-
-        // two plain blocks in a row, the usual case under an explosion: neither is an observer or a diode
-        const BlockState *sidePeek = level.peekBlockPtr(side.x, side.y, side.z);
-        if (sidePeek != nullptr && isPlain(*sidePeek)) {
-            if (!isNormalBlock(*sidePeek))
-                continue;
-            const Vector3i beyondPlain = RedstoneFace::relative(side, face);
-            const BlockState *beyondPeek = isChunkReady(level, beyondPlain)
-                                                   ? level.peekBlockPtr(beyondPlain.x, beyondPlain.y, beyondPlain.z)
-                                                   : nullptr;
-            if (beyondPeek != nullptr && isPlain(*beyondPeek))
-                continue;
-        }
-
-        const BlockState sideState = stateAt(level, side);
-
-        if (isA<ObserverBlock>(sideState))
-            continue;
-
-        if (isA<RedstoneDiodeBlock>(sideState)) {
-            level.updateAt(side, BlockUpdateType::Redstone);
-            continue;
-        }
-
-        if (!isNormalBlock(sideState))
-            continue;
-
-        // comparators read a container through one solid block: the diode beyond re-evaluates too
-        const Vector3i beyond = RedstoneFace::relative(side, face);
-        if (isA<RedstoneDiodeBlock>(stateAt(level, beyond)))
-            level.updateAt(beyond, BlockUpdateType::Redstone);
-    }
-
-}
-
-void RedstoneSystem::onBlockChanged(Level &level, const Vector3i &position) {
+void RedstoneSystem::onBlockChanged(Level &level, const Vector3i &position, const BlockState &previous,
+                                    const BlockState &current) {
     for (int face = 0; face < RedstoneFace::COUNT; ++face) {
         const Vector3i side = RedstoneFace::relative(position, face);
         const BlockState *watcher = level.peekBlockPtr(side.x, side.y, side.z);
@@ -1127,6 +939,18 @@ void RedstoneSystem::onBlockChanged(Level &level, const Vector3i &position) {
             continue;
         level.scheduleUpdate(side, OBSERVER_PULSE_TICKS);
     }
+
+    CircuitSystem &circuit = *stateOf(level).mCircuit;
+    if (circuit.isLocked())
+        return;
+    if (previous.mName != current.mName) {
+        circuit.removeComponents(position);
+        if (hasCircuitKind(current))
+            setupComponent(level, position, current);
+    } else {
+        refreshComponent(level, position, current);
+    }
+    circuit.getSceneGraph().invalidatePosition(position);
 }
 
 // the game lights a moved observer; one already lit keeps its light and gets a tick here to put it out, since
@@ -1144,310 +968,47 @@ void RedstoneSystem::onObserverMoved(ServerNetworkHandler &owner, Level &level, 
     observerOnScheduled(owner, level, position, state);
 }
 
+// the circuit drives every power change: only the blocks' own ticks are left here
 void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                       const BlockState &state, BlockUpdateType type) {
+    if (type != BlockUpdateType::Scheduled)
+        return;
+
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-    const RedstoneTorchBlock *torch = dynamic_cast<const RedstoneTorchBlock *>(block);
-    const RedstoneLampBlock *lamp = dynamic_cast<const RedstoneLampBlock *>(block);
-
-    if (dynamic_cast<const RedStoneWireBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            updateSurroundingRedstone(owner, level, position, false);
-    } else if (torch != nullptr && torch->isLit()) {
-        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone) {
-            level.scheduleUpdate(position, TORCH_TICK_RATE);
-        } else if (type == BlockUpdateType::Scheduled && isTorchPoweredFromSide(owner, level, position, state)) {
-            level.setBlock(position, RedstoneTorchBlock::getUnlitState(state), false);
-            updateAllAroundRedstone(owner, level, position, RedstoneFace::opposite(torchFacing(state)));
-        }
-    } else if (torch != nullptr) {
-        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone) {
-            level.scheduleUpdate(position, TORCH_TICK_RATE);
-        } else if (type == BlockUpdateType::Scheduled && !isTorchPoweredFromSide(owner, level, position, state)) {
-            level.setBlock(position, RedstoneTorchBlock::getLitState(state), false);
-            updateAllAroundRedstone(owner, level, position, RedstoneFace::opposite(torchFacing(state)));
-        }
-    } else if (dynamic_cast<const RedstoneComparatorBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Scheduled)
-            comparatorOnChange(owner, level, position);
-        else if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            diodeUpdateState(owner, level, position, state);
-    } else if (dynamic_cast<const RedstoneRepeaterBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Scheduled) {
-            if (!diodeIsLocked(owner, level, position, state)) {
-                const bool shouldBePowered = diodeShouldBePowered(owner, level, position, state);
-                const bool powered = isDiodePowered(state);
-                bool changed = false;
-
-                if (powered && !shouldBePowered) {
-                    level.setBlock(position, diodeUnpoweredState(state), false);
-                    changed = true;
-                } else if (!powered) {
-                    level.setBlock(position, diodePoweredState(state), false);
-                    changed = true;
-                }
-
-                if (changed) {
-                    const Vector3i behind = RedstoneFace::relative(position,
-                                                                   RedstoneFace::opposite(diodeFacing(state)));
-                    level.updateAt(behind, BlockUpdateType::Redstone);
-                    updateAroundRedstone(owner, level, behind);
-                }
-            }
-        } else if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone) {
-            diodeUpdateState(owner, level, position, state);
-        }
-    } else if (lamp != nullptr && !lamp->isLit()) {
-        if ((type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            && isGettingPower(owner, level, position)) {
-            updateComparatorOutputLevel(owner, level, position);
-            level.setBlock(position, RedstoneLampBlock::getLitState(state), false);
-        }
-    } else if (lamp != nullptr) {
-        if ((type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            && !isGettingPower(owner, level, position)) {
-            level.scheduleUpdate(position, LIT_LAMP_TURN_OFF_DELAY);
-        } else if (type == BlockUpdateType::Scheduled && !isGettingPower(owner, level, position)) {
-            updateComparatorOutputLevel(owner, level, position);
-            level.setBlock(position, RedstoneLampBlock::getUnlitState(state), false);
-        }
+    if (const RedstoneLampBlock *lamp = dynamic_cast<const RedstoneLampBlock *>(block)) {
+        if (lamp->isLit() && getStrength(level, position) == 0)
+            setLockedBlock(level, position, RedstoneLampBlock::getUnlitState(state));
     } else if (dynamic_cast<const ObserverBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Scheduled)
-            observerOnScheduled(owner, level, position, state);
+        observerOnScheduled(owner, level, position, state);
     } else if (dynamic_cast<const ButtonBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Scheduled && stateBool(state, "button_pressed_bit", false)) {
-            Tag states = state.mStates;
-            states.putByte("button_pressed_bit", 0);
-            const BlockState released = BlockState(state.mName, states);
-            level.setBlock(position, released, false);
-            owner.playBlockSound(level, SOUND_POWER_OFF, centerOf(position), released.getHash());
-            level.postGameEvent(GameEvents::BLOCK_DEACTIVATE, centerOf(position));
-
-            const int facing = buttonFacing(state);
-            updateAroundRedstone(owner, level, position);
-            updateAroundRedstone(owner, level, RedstoneFace::relative(position, RedstoneFace::opposite(facing)),
-                                 facing);
-        }
+        if (!stateBool(state, "button_pressed_bit", false))
+            return;
+        Tag states = state.mStates;
+        states.putByte("button_pressed_bit", 0);
+        const BlockState released = BlockState(state.mName, states);
+        level.setBlock(position, released, false);
+        owner.playBlockSound(level, SOUND_POWER_OFF, centerOf(position), released.getHash());
+        level.postGameEvent(GameEvents::BLOCK_DEACTIVATE, centerOf(position));
     } else if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Scheduled) {
-            const int power = std::clamp(stateInt(state, "redstone_signal", 0), 0, MAX_SIGNAL);
-            if (power > 0)
-                pressurePlateUpdateState(owner, level, position, power);
-        }
-    } else if (dynamic_cast<const DoorOrientationBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Redstone)
-            DoorBlock::onRedstoneUpdate(owner, level, position, state);
-    } else if (dynamic_cast<const TrapDoorBlock *>(block) != nullptr
-               || dynamic_cast<const FenceGateBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Redstone)
-            OpenableBlock::onRedstoneUpdate(owner, level, position, state);
-    } else if (dynamic_cast<const TntBlock *>(block) != nullptr) {
-        if ((type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            && isGettingPower(owner, level, position))
-            TntBlock::prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
-    } else if (dynamic_cast<const DispenserBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            DispenserBlock::onRedstoneUpdate(owner, level, position, state);
-    } else if (dynamic_cast<const CrafterBlock *>(block) != nullptr) {
-        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
-            CrafterBlock::onRedstoneUpdate(owner, level, position, state);
+        const int power = std::clamp(stateInt(state, "redstone_signal", 0), 0, MAX_SIGNAL);
+        if (power > 0)
+            pressurePlateUpdateState(owner, level, position, power);
     } else if (DetectorSystem::isWire(state)) {
-        if (type == BlockUpdateType::Scheduled)
-            DetectorSystem::onWireScheduled(owner, level, position, state);
-    } else if (block != nullptr && (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)) {
-        block->onRedstonePower(owner, level, position, state);
+        DetectorSystem::onWireScheduled(owner, level, position, state);
     }
-}
-
-void RedstoneSystem::onRedstonePlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                      const BlockState &state) {
-    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-    const RedstoneTorchBlock *torch = dynamic_cast<const RedstoneTorchBlock *>(block);
-    const RedstoneLampBlock *lamp = dynamic_cast<const RedstoneLampBlock *>(block);
-
-    if (dynamic_cast<const RedStoneWireBlock *>(block) != nullptr) {
-        updateSurroundingRedstone(owner, level, position, true);
-
-        for (int face = RedstoneFace::DOWN; face <= RedstoneFace::UP; ++face) {
-            updateAroundRedstone(owner, level, RedstoneFace::relative(position, face), RedstoneFace::opposite(face));
-        }
-
-        for (int face = RedstoneFace::DOWN; face <= RedstoneFace::UP; ++face) {
-            wireUpdateAround(owner, level, RedstoneFace::relative(position, face), RedstoneFace::opposite(face));
-        }
-
-        for (int face = RedstoneFace::NORTH; face <= RedstoneFace::EAST; ++face) {
-            const Vector3i side = RedstoneFace::relative(position, face);
-
-            if (isNormalBlock(stateAt(level, side)))
-                wireUpdateAround(owner, level, RedstoneFace::relative(side, RedstoneFace::UP), RedstoneFace::DOWN);
-            else
-                wireUpdateAround(owner, level, RedstoneFace::relative(side, RedstoneFace::DOWN), RedstoneFace::UP);
-        }
-        return;
-    }
-
-    if (torch != nullptr && torch->isLit()) {
-        if (isTorchPoweredFromSide(owner, level, position, state)) {
-            level.setBlock(position, RedstoneTorchBlock::getUnlitState(state), false);
-            updateAllAroundRedstone(owner, level, position, RedstoneFace::opposite(torchFacing(state)));
-        } else {
-            updateAllAroundRedstone(owner, level, position, RedstoneFace::opposite(torchFacing(state)));
-        }
-        return;
-    }
-
-    if (dynamic_cast<const RedstoneBlock *>(block) != nullptr) {
-        updateAroundRedstone(owner, level, position);
-        return;
-    }
-
-    if (dynamic_cast<const RedstoneDiodeBlock *>(block) != nullptr) {
-        if (dynamic_cast<const RedstoneComparatorBlock *>(block) != nullptr)
-            setComparatorOutput(level, position, comparatorCalculateOutput(owner, level, position, state));
-
-        if (diodeShouldBePowered(owner, level, position, state))
-            level.scheduleUpdate(position, DIODE_PLACE_DELAY);
-
-        level.updateAround(position);
-        updateAroundRedstone(owner, level, position);
-        return;
-    }
-
-    if (lamp != nullptr && !lamp->isLit()) {
-        if (isGettingPower(owner, level, position))
-            level.setBlock(position, RedstoneLampBlock::getLitState(state), false);
-        return;
-    }
-
-    level.updateAround(position);
-    updateAroundRedstone(owner, level, position);
-    updateComparatorOutputLevel(owner, level, position);
-}
-
-void RedstoneSystem::onRedstoneBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                      const BlockState &previous) {
-    const Block *block = VanillaBlocks::fromState(previous);
-
-    RedstoneState &redstone = stateOf(level);
-    redstone.mComparatorOutputs.erase(packPosition(position));
-    OpenableBlock::setManualOverride(level, position, false);
-
-    // a plain block is none of the parts below
-    if (block != nullptr && block->isPlainClass()) {
-        // six neighbours no update does anything to, the usual case under an explosion: none is run, so
-        // nothing can change in between
-        bool quiet = true;
-        for (int face = 0; face < RedstoneFace::COUNT && quiet; ++face) {
-            const Vector3i side = RedstoneFace::relative(position, face);
-            const BlockState *neighbour = level.peekBlockPtr(side.x, side.y, side.z);
-            quiet = neighbour != nullptr && BlockUpdates::ignores(*neighbour);
-        }
-        if (!quiet) {
-            level.updateAround(position);
-            updateAroundRedstone(owner, level, position);
-        }
-        updateComparatorOutputLevel(owner, level, position);
-        return;
-    }
-
-    if (dynamic_cast<const RedStoneWireBlock *>(block) != nullptr) {
-        for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-            updateAroundRedstone(owner, level, RedstoneFace::relative(position, face));
-        }
-
-        for (int face = RedstoneFace::NORTH; face <= RedstoneFace::EAST; ++face) {
-            const Vector3i side = RedstoneFace::relative(position, face);
-
-            if (isNormalBlock(stateAt(level, side)))
-                wireUpdateAround(owner, level, RedstoneFace::relative(side, RedstoneFace::UP), RedstoneFace::DOWN);
-            else
-                wireUpdateAround(owner, level, RedstoneFace::relative(side, RedstoneFace::DOWN), RedstoneFace::UP);
-        }
-        return;
-    }
-
-    if (dynamic_cast<const RedstoneTorchBlock *>(block) != nullptr) {
-        updateAllAroundRedstone(owner, level, position, RedstoneFace::opposite(torchFacing(previous)));
-        return;
-    }
-
-    if (dynamic_cast<const RedstoneDiodeBlock *>(block) != nullptr) {
-        updateAllAroundRedstone(owner, level, position);
-        return;
-    }
-
-    if (dynamic_cast<const LeverBlock *>(block) != nullptr) {
-        if (stateBool(previous, "open_bit", false)) {
-            const int facing = leverFacing(previous);
-            level.updateAround(RedstoneFace::relative(position, RedstoneFace::opposite(facing)));
-            updateAroundRedstone(owner, level, position);
-            updateAroundRedstone(owner, level, RedstoneFace::relative(position, RedstoneFace::opposite(facing)),
-                                 facing);
-        }
-        return;
-    }
-
-    if (dynamic_cast<const ButtonBlock *>(block) != nullptr) {
-        if (stateBool(previous, "button_pressed_bit", false)) {
-            const int facing = buttonFacing(previous);
-            level.updateAround(RedstoneFace::relative(position, RedstoneFace::opposite(facing)));
-        }
-        updateAroundRedstone(owner, level, position);
-        return;
-    }
-
-    if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr) {
-        if (std::clamp(stateInt(previous, "redstone_signal", 0), 0, MAX_SIGNAL) > 0) {
-            updateAroundRedstone(owner, level, position);
-            updateAroundRedstone(owner, level, RedstoneFace::relative(position, RedstoneFace::DOWN));
-        }
-        return;
-    }
-
-    level.updateAround(position);
-    updateAroundRedstone(owner, level, position);
-    updateComparatorOutputLevel(owner, level, position);
 }
 
 void RedstoneSystem::onChunkLoaded(ServerNetworkHandler &owner, Level &level, const LevelChunk &chunk) {
-    // saved comparators need a fresh circuit output
-    for (int section = 0; section < LevelChunk::SUB_CHUNK_COUNT; ++section) {
-        const SubChunk &subChunk = chunk.getSubChunk(section);
-        if (!subChunk.paletteMatches(SubChunk::PaletteQuery::Comparator, isComparatorState))
-            continue;
-
-        for (int x = 0; x < 16; ++x) {
-            for (int z = 0; z < 16; ++z) {
-                for (int y = 0; y < 16; ++y) {
-                    const BlockState &state = subChunk.getBlock(x, y, z);
-                    if (!isComparatorState(state))
-                        continue;
-
-                    const Vector3i position(chunk.getX() * 16 + x,
-                                            (section + LevelChunk::LOWEST_SUB_CHUNK_Y) * 16 + y,
-                                            chunk.getZ() * 16 + z);
-                    setComparatorOutput(level, position, 0);
-                    diodeUpdateState(owner, level, position, state);
-                }
-            }
-        }
-    }
+    (void) owner;
+    scanChunk(level, chunk);
+    stateOf(level).mCircuit->getSceneGraph().onChunkLoaded(chunk.getX(), chunk.getZ());
 }
 
 void RedstoneSystem::onChunkUnloaded(Level &level, int32_t chunkX, int32_t chunkZ) {
     const auto found = gStates.find(&level);
     if (found == gStates.end())
         return;
-
-    std::unordered_map<int64_t, int32_t> &outputs = found->second.mComparatorOutputs;
-    for (auto it = outputs.begin(); it != outputs.end();) {
-        const Vector3i position = unpackPosition(it->first);
-        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ)
-            it = outputs.erase(it);
-        else
-            ++it;
-    }
+    found->second.mCircuit->removeChunk(chunkX, chunkZ);
 }
 
 void RedstoneSystem::forgetLevel(Level &level) {
@@ -1460,10 +1021,11 @@ void RedstoneSystem::moveLevelState(Level &from, Level &to) {
 
     gStates.erase(&to);
     auto state = gStates.extract(&from);
-    if (!state.empty()) {
-        state.key() = &to;
-        gStates.insert(std::move(state));
-    }
+    if (state.empty())
+        return;
+    state.key() = &to;
+    state.mapped().mSource = std::make_unique<LevelCircuitSource>(to);
+    gStates.insert(std::move(state));
 }
 
 void RedstoneSystem::onLeverActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -1476,10 +1038,6 @@ void RedstoneSystem::onLeverActivated(ServerNetworkHandler &owner, Level &level,
     level.setBlock(position, toggled, false);
 
     owner.playBlockSound(level, powered ? SOUND_POWER_ON : SOUND_POWER_OFF, centerOf(position), toggled.getHash());
-
-    const int facing = leverFacing(toggled);
-    updateAroundRedstone(owner, level, position);
-    updateAroundRedstone(owner, level, RedstoneFace::relative(position, RedstoneFace::opposite(facing)), facing);
 }
 
 void RedstoneSystem::onButtonActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -1487,7 +1045,7 @@ void RedstoneSystem::onButtonActivated(ServerNetworkHandler &owner, Level &level
     if (stateBool(state, "button_pressed_bit", false))
         return;
 
-    level.scheduleUpdate(position, BUTTON_HOLD_TICKS);
+    level.scheduleUpdate(position, buttonHoldTicks(state));
 
     Tag states = state.mStates;
     states.putByte("button_pressed_bit", 1);
@@ -1496,14 +1054,11 @@ void RedstoneSystem::onButtonActivated(ServerNetworkHandler &owner, Level &level
 
     owner.playBlockSound(level, SOUND_POWER_ON, centerOf(position), pressed.getHash());
     level.postGameEvent(GameEvents::BLOCK_ACTIVATE, centerOf(position), source);
-
-    const int facing = buttonFacing(pressed);
-    updateAroundRedstone(owner, level, position);
-    updateAroundRedstone(owner, level, RedstoneFace::relative(position, RedstoneFace::opposite(facing)), facing);
 }
 
 void RedstoneSystem::onRepeaterActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &state) {
+    (void) owner;
     const int delay = stateInt(state, "repeater_delay", 0);
 
     Tag states = state.mStates;
@@ -1513,60 +1068,41 @@ void RedstoneSystem::onRepeaterActivated(ServerNetworkHandler &owner, Level &lev
 
 void RedstoneSystem::onComparatorActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                            const BlockState &state) {
+    (void) owner;
     Tag states = state.mStates;
     states.putByte("output_subtract_bit", stateBool(state, "output_subtract_bit", false) ? 0 : 1);
     level.setBlock(position, BlockState(state.mName, states), false);
-
-    updateComparatorOutputLevel(owner, level, position);
-    comparatorOnChange(owner, level, position);
 }
 
 int RedstoneSystem::getComparatorOutput(Level &level, const Vector3i &position) {
-    const std::unordered_map<int64_t, int32_t> &outputs = stateOf(level).mComparatorOutputs;
-    const auto it = outputs.find(packPosition(position));
-    if (it == outputs.end())
+    const BaseCircuitComponent *component = stateOf(level).mCircuit->getComponent(position);
+    if (component == nullptr || component->getInstanceType() != CircuitComponentType::Comparator)
         return 0;
-
-    return it->second;
-}
-
-void RedstoneSystem::setComparatorOutput(Level &level, const Vector3i &position, int output) {
-    stateOf(level).mComparatorOutputs[packPosition(position)] = std::clamp(output, 0, MAX_SIGNAL);
+    return component->getStrength();
 }
 
 void RedstoneSystem::queueRedstoneNotification(Level &level, const Vector3i &position) {
     stateOf(level).mPendingNotifications.push_back(position);
 }
 
+void RedstoneSystem::tickCircuit(ServerNetworkHandler &owner, Level &level) {
+    (void) owner;
+    RedstoneState &redstone = stateOf(level);
+    redstone.mCircuit->tickRedstone(redstone.mSource.get());
+}
+
 void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
     RedstoneState &redstone = stateOf(level);
+    CircuitSystem &circuit = *redstone.mCircuit;
 
     if (!redstone.mPendingNotifications.empty()) {
         const std::vector<Vector3i> notifications = std::move(redstone.mPendingNotifications);
         redstone.mPendingNotifications.clear();
-
         for (const Vector3i &position: notifications)
             updateAroundRedstone(owner, level, position);
     }
 
-    // the comparator block actor reads its analog input every tick, no change event involved;
-    // keys first: an update chain can place or break another comparator and rehash the table
-    std::vector<int64_t> comparators;
-    comparators.reserve(redstone.mComparatorOutputs.size());
-    for (const auto &entry: redstone.mComparatorOutputs)
-        comparators.push_back(entry.first);
-    for (const int64_t key: comparators) {
-        const Vector3i position = unpackPosition(key);
-        if (!isChunkReady(level, position))
-            continue;
-
-        const BlockState state = stateAt(level, position);
-        if (isA<RedstoneComparatorBlock>(state) && comparatorAnalogInput(level, position, state) >= 0)
-            diodeUpdateState(owner, level, position, state);
-    }
-
     std::unordered_set<int64_t> visited;
-
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead() || !player.isIn(level))
@@ -1606,6 +1142,36 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 
     DetectorSystem::tick(owner, level, actorInWire);
+
+    // the comparator block reads the block behind it every tick
+    for (auto &chunk: circuit.getSceneGraph().getChunkLists()) {
+        for (const CircuitSceneGraph::ChunkEntry &entry: chunk.second.mEntries) {
+            if (entry.mComponent == nullptr || entry.mComponent->isRemoved()
+                || entry.mComponent->getInstanceType() != CircuitComponentType::Comparator
+                || !isChunkReady(level, entry.mPos))
+                continue;
+            const BlockState state = stateAt(level, entry.mPos);
+            if (isA<RedstoneComparatorBlock>(state))
+                static_cast<ComparatorCapacitor *>(entry.mComponent)
+                        ->setRearAnalogStrength(comparatorAnalogInput(level, entry.mPos, state));
+        }
+    }
+
+    std::vector<int64_t> chunks;
+    for (const auto &chunk: circuit.getSceneGraph().getChunkLists())
+        chunks.push_back(chunk.first);
+    const CircuitBlockUpdate update = [&](const Vector3i &position, int strength, int previous, bool firstTime) {
+        (void) previous, (void) firstTime;
+        onComponentUpdate(owner, level, position, strength);
+    };
+    for (const int64_t key: chunks) {
+        const auto chunkX = (int32_t) (key >> 32);
+        const auto chunkZ = (int32_t) (uint32_t) key;
+        if (level.isChunkResident(chunkX, chunkZ))
+            circuit.updateBlocks(chunkX, chunkZ, update);
+    }
+
+    circuit.updateDependencies(redstone.mSource.get());
 }
 
 void RedstoneSystem::_touchPressurePlate(ServerNetworkHandler &owner, Level &level, Actor &actor,

@@ -7,10 +7,12 @@
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/DetectorRailBlock.h"
 #include "World/Level/Block/LightningRodBlock.h"
+#include "World/Level/Block/Circuit/CircuitSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Inventory/Container.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/BlockTickingQueue.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
 
@@ -40,6 +42,8 @@ namespace {
         Level &mLevel;
 
         RedstoneFixture() : mLevel(mWorld.getLevel(DimensionType::Overworld)) {
+            mLevel.setOwner(&mOwner);
+            mLevel.setActiveColumns({BlockTickingQueue::column(0, 0)});
             mLevel.getChunk(0, 0);
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
@@ -47,6 +51,15 @@ namespace {
                         mLevel.setBlockState(x, y, z, BlockState(BlockNames::AIR));
                     mLevel.setBlockState(x, 63, z, VanillaBlocks::STONE().toBlockState());
                 }
+            }
+        }
+
+        // the server's order: the circuit, the scheduled ticks, then the components hear their strength
+        void run(int ticks) {
+            for (int tick = 0; tick < ticks; ++tick) {
+                RedstoneSystem::tickCircuit(mOwner, mLevel);
+                mLevel.tickBlockUpdates();
+                RedstoneSystem::tick(mOwner, mLevel);
             }
         }
 
@@ -142,19 +155,18 @@ namespace {
         BlockState comparator = VanillaBlocks::UNPOWERED_COMPARATOR().toBlockState();
         comparator.mStates.putString("minecraft:cardinal_direction", "east");
         fixture.set(ORIGIN, comparator);
-        RedstoneSystem::onRedstonePlaced(fixture.mOwner, fixture.mLevel, ORIGIN, comparator);
+        fixture.run(6);
         require(RedstoneSystem::getComparatorOutput(fixture.mLevel, ORIGIN) == 15,
                 "a comparator did not read a full hopper through a solid block");
 
         fixture.set(solid, BlockState(BlockNames::AIR));
-        RedstoneSystem::onRedstonePlaced(fixture.mOwner, fixture.mLevel, ORIGIN, comparator);
+        fixture.run(6);
         require(RedstoneSystem::getComparatorOutput(fixture.mLevel, ORIGIN) == 0,
                 "a comparator read a hopper two blocks away through air");
     }
 
     void comparatorReload() {
         RedstoneFixture fixture;
-        fixture.mLevel.setOwner(&fixture.mOwner);
 
         fixture.set(Vector3i(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z), VanillaBlocks::STONE().toBlockState());
         const Vector3i hopperPosition(ORIGIN.x + 2, ORIGIN.y, ORIGIN.z);
@@ -163,19 +175,16 @@ namespace {
         for (int slot = 0; slot < 5; ++slot)
             hopper.getContainer()->setContainerItem(slot, fixture.mOwner.createItemStack("minecraft:dirt", 64));
 
-        BlockState comparator = VanillaBlocks::POWERED_COMPARATOR().toBlockState();
+        BlockState comparator = VanillaBlocks::UNPOWERED_COMPARATOR().toBlockState();
         comparator.mStates.putString("minecraft:cardinal_direction", "east");
         fixture.set(ORIGIN, comparator);
 
-        // mimic a reload with no cached circuit output
+        // a reload rebuilds the circuit from the blocks
         LevelChunk saved = fixture.mLevel.extractChunk(0, 0);
         fixture.mLevel.insertChunk(std::move(saved));
+        fixture.run(6);
 
         require(fixture.signal(hopperPosition) == 15, "the reloaded hopper did not retain its full inventory");
-        require(fixture.mLevel.isUpdateScheduled(ORIGIN),
-                "a reloaded comparator with a different analog input was not scheduled");
-        RedstoneSystem::onRedstoneUpdate(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN),
-                                         BlockUpdateType::Scheduled);
         const int output = RedstoneSystem::getComparatorOutput(fixture.mLevel, ORIGIN);
         require(output == 15, "a reloaded comparator restored output " + std::to_string(output));
         require(fixture.at(ORIGIN).mName == BlockNames::POWERED_COMPARATOR,
@@ -186,9 +195,13 @@ namespace {
         RedstoneFixture fixture;
         Level other("Other", 4, 0, DimensionType::Overworld);
 
-        RedstoneSystem::setComparatorOutput(fixture.mLevel, ORIGIN, 12);
-        require(RedstoneSystem::getComparatorOutput(other, ORIGIN) == 0,
-                "one world's comparator output leaked into another world");
+        BlockState comparator = VanillaBlocks::UNPOWERED_COMPARATOR().toBlockState();
+        fixture.set(ORIGIN, comparator);
+        fixture.run(4);
+        require(RedstoneSystem::circuitOf(fixture.mLevel).getComponent(ORIGIN) != nullptr,
+                "a placed comparator got no circuit component");
+        require(RedstoneSystem::circuitOf(other).getComponent(ORIGIN) == nullptr,
+                "one world's comparator leaked into another world");
     }
 
     void lightningRod() {
@@ -231,28 +244,28 @@ namespace {
         require(block != nullptr, "the hopper has no block class");
 
         const Vector3i source(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z);
+        fixture.run(4);
         fixture.set(source, VanillaBlocks::REDSTONE_BLOCK().toBlockState());
-        block->onRedstonePower(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN));
+        fixture.run(4);
         require(fixture.at(ORIGIN).mStates.getByte("toggle_bit", 0) == 1, "a powered hopper was not locked");
 
         fixture.set(source, BlockState(BlockNames::AIR));
-        block->onRedstonePower(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN));
+        fixture.run(4);
         require(fixture.at(ORIGIN).mStates.getByte("toggle_bit", 0) == 0, "an unpowered hopper stayed locked");
     }
 
     // the game's hopper takes the first update a new block gets: placed beside power, it starts locked
     void hopperPlacedPowered() {
         RedstoneFixture fixture;
-        fixture.mLevel.setOwner(&fixture.mOwner);
 
         fixture.set(ORIGIN, VanillaBlocks::HOPPER().toBlockState());
-        fixture.mLevel.onBlockPlaced(ORIGIN, fixture.at(ORIGIN));
+        fixture.run(4);
         require(fixture.at(ORIGIN).mStates.getByte("toggle_bit", 0) == 0, "a hopper placed without power was locked");
 
         const Vector3i placed(ORIGIN.x + 2, ORIGIN.y, ORIGIN.z);
         fixture.set(Vector3i(ORIGIN.x + 3, ORIGIN.y, ORIGIN.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
         fixture.set(placed, VanillaBlocks::HOPPER().toBlockState());
-        fixture.mLevel.onBlockPlaced(placed, fixture.at(placed));
+        fixture.run(4);
         require(fixture.at(placed).mStates.getByte("toggle_bit", 0) == 1,
                 "a hopper placed beside a redstone block was not locked");
     }
@@ -267,7 +280,7 @@ namespace {
         const Vector3i source(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z);
         const auto pulse = [&](bool powered) {
             fixture.set(source, powered ? VanillaBlocks::REDSTONE_BLOCK().toBlockState() : BlockState(BlockNames::AIR));
-            block->onScheduledUpdate(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN));
+            fixture.run(6);
         };
         const auto lit = [&]() { return fixture.at(ORIGIN).mStates.getByte("lit", 0) != 0; };
 
@@ -286,8 +299,6 @@ namespace {
 
     void detectorRail() {
         RedstoneFixture fixture;
-        // World::open hands the level its owner, the rail reads the minecarts through it
-        fixture.mLevel.setOwner(&fixture.mOwner);
 
         fixture.set(ORIGIN, VanillaBlocks::DETECTOR_RAIL().toBlockState());
         const auto powered = [&]() { return fixture.at(ORIGIN).mStates.getByte("rail_data_bit", 0) != 0; };

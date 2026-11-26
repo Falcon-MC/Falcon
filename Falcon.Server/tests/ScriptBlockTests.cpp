@@ -1,3 +1,4 @@
+#include "CircuitTicks.h"
 #include "Core/Json/Json.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/BehaviorPackManager.h"
@@ -582,6 +583,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         EntityDefinitions::initialize();
         World &world = owner.getWorlds().getDefault();
         Level &level = world.getOverworld();
+        // the circuit follows block changes on a level the server owns
+        level.setOwner(&owner);
         for (int32_t chunkX = -1; chunkX <= 3; ++chunkX) {
             for (int32_t chunkZ = -1; chunkZ <= 3; ++chunkZ)
                 level.insertChunk(LevelChunk(chunkX, chunkZ));
@@ -638,11 +641,11 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         engine.onProjectileHitBlock(*cow, 50, 99, 50, Vector3f(50.25f, 101.0f, 50.75f),
                                     Vector3f(50.25f, 99.5f, 50.75f));
 
-        // the piston pushes as soon as a redstone block powers it
+        // the piston pushes once the circuit hands it the redstone block's power
         const Vector3i pistonAt(25, 101, 5);
         level.setBlock(pistonAt, vanilla("minecraft:piston"), false);
         level.setBlock(Vector3i(26, 101, 5), vanilla("minecraft:redstone_block"), false);
-        PistonSystem::onRedstoneUpdate(owner, level, pistonAt, level.getBlockState(pistonAt.x, pistonAt.y, pistonAt.z));
+        settleCircuit(owner, level);
 
         // a wire between two hooks facing each other, tripped by the player standing on it
         BlockState eastHook = vanilla("minecraft:tripwire_hook");

@@ -1,3 +1,4 @@
+#include "CircuitTicks.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
@@ -70,8 +71,8 @@ namespace {
         }
 
         void update(const Vector3i &position) {
-            const BlockState state = mLevel->getBlockState(position.x, position.y, position.z);
-            VanillaBlocks::fromIdentifier(state.mName)->onRedstonePower(mOwner, *mLevel, position, state);
+            (void) position;
+            settleCircuit(mOwner, *mLevel);
         }
 
         MobActor &mob(const char *identifier, const Vector3f &position) {

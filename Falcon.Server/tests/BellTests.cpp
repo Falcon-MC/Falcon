@@ -1,3 +1,4 @@
+#include "CircuitTicks.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Misc/ItemActor.h"
@@ -102,8 +103,7 @@ namespace {
         void power(const Vector3i &position, bool on) {
             mLevel->setBlock(Vector3i(position.x + 1, position.y, position.z),
                              BlockState(on ? "minecraft:redstone_block" : "minecraft:air"), false);
-            const BlockState state = at(position);
-            block(position).onRedstonePower(mOwner, *mLevel, position, state);
+            settleCircuit(mOwner, *mLevel);
         }
 
         void tick(int32_t ticks) {
@@ -158,11 +158,12 @@ namespace {
         require(!arena.ringing(bell), "power going off rang the bell");
         arena.power(bell, true);
         require(arena.ringing(bell), "power coming back did not ring the bell");
-        // placed beside a live source, it rings at once
+        // placed beside a live source, it rings with the circuit's first update
         const Vector3i placed = arena.bell(36, "standing", 0);
         arena.mLevel->setBlock(Vector3i(37, 100, 0), BlockState("minecraft:redstone_block"), false);
         const BlockState state = arena.at(placed);
         arena.block(placed).onPlaced(arena.mOwner, *arena.mPlayer, placed, state, ItemStack::air(), 1);
+        settleCircuit(arena.mOwner, *arena.mLevel);
         require(arena.ringing(placed), "a bell placed by power did not ring");
     }
 
