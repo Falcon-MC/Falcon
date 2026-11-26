@@ -39,8 +39,12 @@ namespace {
             mOwner.setProperties(PropertiesSettings(path.string()));
             mLevel = &mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
             for (int32_t x = -2; x <= 2; x++) {
-                for (int32_t z = -2; z <= 2; z++)
+                for (int32_t z = -2; z <= 2; z++) {
+                    // the opened world has generated the chunk its random seed spawns in, and an existing chunk wins
+                    // the insert
+                    mLevel->dropChunk(x, z);
                     mLevel->insertChunk(LevelChunk(x, z)).setPopulated(true);
+                }
             }
             for (int32_t x = -32; x < 48; x++) {
                 for (int32_t z = -32; z < 48; z++)

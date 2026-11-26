@@ -36,6 +36,8 @@ namespace {
             std::ofstream(path) << "difficulty=normal\n";
             mOwner.setProperties(PropertiesSettings(path.string()));
             mLevel = &mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+            // the opened world has generated the chunk its random seed spawns in, and an existing chunk wins the insert
+            mLevel->dropChunk(0, 0);
             mLevel->insertChunk(LevelChunk(0, 0)).setPopulated(true);
         }
 
