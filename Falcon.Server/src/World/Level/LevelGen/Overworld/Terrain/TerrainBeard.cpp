@@ -93,6 +93,23 @@ namespace {
         return (double) ((float) beard(dx, dz, dy, dy) * (1.5f - distance / radius));
     }
 
+    // the village table of the game: the same beard, built in floats with the float fast inverse square root
+    float villageBeard(int32_t dx, int32_t dy, int32_t dz) {
+        const float horizontal = (float) (dz * dz + dx * dx);
+        const float ground = (float) ((double) dy + 0.5);
+        const float kernel = std::pow(2.7182817f, -(ground * ground * 0.0625f + horizontal * 0.0625f));
+        const float half = ground * ground * 0.5f + horizontal * 0.5f;
+
+        uint32_t bits;
+        std::memcpy(&bits, &half, sizeof(bits));
+        bits = 0x5F3759DFu - (bits >> 1);
+        float inverse;
+        std::memcpy(&inverse, &bits, sizeof(inverse));
+
+        const float root = (1.5f - half * 0.5f * inverse * inverse) * inverse;
+        return -ground * root * 0.5f * kernel;
+    }
+
     // max(0, 1 - length / 6) on half steps, stored as a float
     double bury(double x, double y, double z) {
         const double length = std::sqrt(x * x + y * y + z * z) * 0.16666666666666666;
@@ -137,8 +154,30 @@ void TerrainBeard::addBuriedBox(int32_t chunkX, int32_t chunkZ, const Box &box) 
     mMaxY = std::max(mMaxY, box.mMaxY + 11);
 }
 
-float TerrainBeard::buried(int32_t x, int32_t y, int32_t z) const {
+void TerrainBeard::addVillagePiece(int32_t chunkX, int32_t chunkZ, const Box &box, int32_t groundY) {
+    const int32_t minX = chunkX * 16;
+    const int32_t minZ = chunkZ * 16;
+    if (box.mMaxX < minX - 12 || box.mMinX > minX + 27 || box.mMaxZ < minZ - 12 || box.mMinZ > minZ + 27)
+        return;
+
+    mVillagePieces.push_back(
+            {{box.mMinX - 2, box.mMinY, box.mMinZ - 2, box.mMaxX + 2, box.mMaxY, box.mMaxZ + 2}, groundY});
+    mMinY = std::min(mMinY, std::min(box.mMinY, groundY) - 12);
+    mMaxY = std::max(mMaxY, std::max(box.mMaxY, groundY) + 11);
+}
+
+float TerrainBeard::adjust(int32_t x, int32_t y, int32_t z, float density) const {
     float total = 0.0f;
+    for (const VillagePiece &piece: mVillagePieces) {
+        const int32_t dx = std::max(outside(x, piece.mBox.mMinX, piece.mBox.mMaxX), 0);
+        const int32_t dz = std::max(outside(z, piece.mBox.mMinZ, piece.mBox.mMaxZ), 0);
+        const int32_t dy = y - piece.mGroundY;
+        if (dx <= 11 && (uint32_t) (dy + 12) <= 23u && dz <= 11)
+            total += villageBeard(dx, dy, dz) * 0.8f;
+    }
+    if (density + total > 0.0f)
+        return total;
+
     for (const Box &box: mBuried) {
         const int32_t nearestY = std::min(std::max(y, box.mMinY), box.mMaxY);
         const int32_t dx = std::max(outside(x, box.mMinX, box.mMaxX), 0);
