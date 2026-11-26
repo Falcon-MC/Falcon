@@ -6,6 +6,7 @@
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Level.h"
 #include "World/Level/Particle/GenericLevelEventParticle.h"
+#include "World/Level/Sculk/SculkWorld.h"
 
 #include <algorithm>
 #include <array>
@@ -64,9 +65,6 @@ namespace {
         return Vector3i(a.x + b.x, a.y + b.y, a.z + b.z);
     }
 
-    BlockState blockAt(Level &level, const Vector3i &position) {
-        return level.getBlockState(position.x, position.y, position.z);
-    }
 
     int32_t opposite(int32_t face) {
         return face ^ 1;
@@ -103,13 +101,13 @@ namespace {
     }
 
     // nothing sturdy blocks the way out of from through face
-    bool isUnobstructed(Level &level, const Vector3i &from, int32_t face) {
+    bool isUnobstructed(SculkWorld &world, const Vector3i &from, int32_t face) {
         const Vector3i next = add(from, faceStep(face));
-        return !PlacementHelpers::hasSolidFace(blockAt(level, next), opposite(face));
+        return !PlacementHelpers::hasSolidFace(world.getBlock(next), opposite(face));
     }
 
     // a diagonal step needs one of its two sides open
-    bool isMovementUnobstructed(Level &level, const Vector3i &from, const Vector3i &to) {
+    bool isMovementUnobstructed(SculkWorld &world, const Vector3i &from, const Vector3i &to) {
         const int32_t manhattan = std::abs(to.x - from.x) + std::abs(to.y - from.y) + std::abs(to.z - from.z);
         if (manhattan == 1)
             return true;
@@ -122,7 +120,7 @@ namespace {
             first = widthFace(from.x, to.x);
             second = from.y == to.y ? depthFace(from.z, to.z) : verticalFace(from.y, to.y);
         }
-        return isUnobstructed(level, from, first) || isUnobstructed(level, from, second);
+        return isUnobstructed(world, from, first) || isUnobstructed(world, from, second);
     }
 
     Tag chargeEvent(const Vector3i &position) {
@@ -187,8 +185,8 @@ bool SculkSpreader::isReplaceable(const BlockState &state) const {
     return mSettings.mWorldGeneration && worldGenerationExtras().count(state.mName) != 0;
 }
 
-// the first shuffled neighbour that is sculk or a vein holding onto something sculk can take over
-bool SculkSpreader::_findMovement(Level &level, const Vector3i &from, std::mt19937 &random, Vector3i &to) const {
+// the last shuffled neighbour that is sculk or a vein, or the first vein holding onto something sculk can take over
+bool SculkSpreader::_findMovement(SculkWorld &world, const Vector3i &from, std::mt19937 &random, Vector3i &to) const {
     std::array<Vector3i, 18> offsets = NON_CORNER_NEIGHBOURS;
     for (size_t index = 1; index < offsets.size(); ++index) {
         const size_t swap = (size_t) (random() % (uint32_t) (index + 1));
@@ -196,55 +194,48 @@ bool SculkSpreader::_findMovement(Level &level, const Vector3i &from, std::mt199
             std::swap(offsets[index], offsets[swap]);
     }
 
+    bool found = false;
     for (const Vector3i &offset: offsets) {
         const Vector3i next = add(from, offset);
-        const BlockState state = blockAt(level, next);
+        const BlockState &state = world.getBlock(next);
         const SculkBehaviours::Kind kind = SculkBehaviours::kindOf(state);
-        if (kind == SculkBehaviours::Kind::Default || !isMovementUnobstructed(level, from, next))
+        if (kind == SculkBehaviours::Kind::Default || !isMovementUnobstructed(world, from, next))
             continue;
-        if (kind == SculkBehaviours::Kind::Sculk) {
-            to = next;
-            return true;
-        }
-        for (int32_t face = 0; face < 6; ++face) {
-            if (SculkBehaviours::hasFace(state, face) && isReplaceable(blockAt(level, add(next, faceStep(face))))) {
-                to = next;
+        to = next;
+        found = true;
+        if (kind == SculkBehaviours::Kind::Sculk)
+            continue;
+        for (int32_t face: {1, 0, 2, 3, 4, 5}) {
+            if (SculkBehaviours::hasFace(state, face) && isReplaceable(world.getBlock(add(next, faceStep(face)))))
                 return true;
-            }
         }
     }
-    return false;
+    return found;
 }
 
-void SculkSpreader::_updateCursor(ServerNetworkHandler *owner, Level &level, const Vector3i &origin,
-                                  std::mt19937 &random, bool convertBlocks, SculkChargeCursor &cursor) {
+void SculkSpreader::_updateCursor(SculkWorld &world, const Vector3i &origin, std::mt19937 &random, bool convertBlocks,
+                                  SculkChargeCursor &cursor) {
     if (cursor.mUpdateDelay > 0) {
         --cursor.mUpdateDelay;
         return;
     }
 
-    SculkBehaviours::Kind kind = SculkBehaviours::kindOf(blockAt(level, cursor.mPosition));
-    if (convertBlocks
-        && SculkBehaviours::attemptSpreadVein(kind, owner, level, cursor.mPosition, cursor.mFacing,
-                                              mSettings.mWorldGeneration)) {
+    SculkBehaviours::Kind kind = SculkBehaviours::kindOf(world.getBlock(cursor.mPosition));
+    if (convertBlocks && SculkBehaviours::attemptSpreadVein(kind, world, cursor.mPosition, cursor.mFacing)) {
         if (SculkBehaviours::canChangeBlockStateOnSpread(kind))
-            kind = SculkBehaviours::kindOf(blockAt(level, cursor.mPosition));
-        if (owner != nullptr)
-            owner->playLevelSound(level, SOUND_SPREAD, Vector3f((float) cursor.mPosition.x,
-                                                                (float) cursor.mPosition.y,
-                                                                (float) cursor.mPosition.z));
+            kind = SculkBehaviours::kindOf(world.getBlock(cursor.mPosition));
+        world.playSound(SOUND_SPREAD, cursor.mPosition);
     }
 
-    cursor.mCharge = SculkBehaviours::attemptUseCharge(kind, owner, level, origin, cursor, random, *this,
-                                                       convertBlocks);
+    cursor.mCharge = SculkBehaviours::attemptUseCharge(kind, world, origin, cursor, random, *this, convertBlocks);
     if (cursor.mCharge <= 0) {
-        SculkBehaviours::onDischarged(kind, level, cursor.mPosition);
+        SculkBehaviours::onDischarged(kind, world, cursor.mPosition);
         return;
     }
 
     Vector3i next;
-    if (_findMovement(level, cursor.mPosition, random, next)) {
-        SculkBehaviours::onDischarged(kind, level, cursor.mPosition);
+    if (_findMovement(world, cursor.mPosition, random, next)) {
+        SculkBehaviours::onDischarged(kind, world, cursor.mPosition);
         cursor.mPosition = next;
         if (mSettings.mWorldGeneration) {
             const int64_t dx = (int64_t) next.x - origin.x;
@@ -257,7 +248,7 @@ void SculkSpreader::_updateCursor(ServerNetworkHandler *owner, Level &level, con
         }
     }
 
-    const BlockState state = blockAt(level, cursor.mPosition);
+    const BlockState &state = world.getBlock(cursor.mPosition);
     const SculkBehaviours::Kind here = SculkBehaviours::kindOf(state);
     if (here != SculkBehaviours::Kind::Default) {
         cursor.mFacing = SculkBehaviours::facingsOf(here, state, cursor.mFacing);
@@ -267,11 +258,31 @@ void SculkSpreader::_updateCursor(ServerNetworkHandler *owner, Level &level, con
     cursor.mDecayDelay = SculkBehaviours::updateDecayDelay(kind, cursor.mDecayDelay);
 }
 
-// SculkSpreader::updateCursors: each cursor steps, cursors meeting on a block merge, and the client sees the charge
+// each cursor steps, cursors meeting on a block merge, and the client sees the charge; world generation merges
+// nothing and shows nothing
 void SculkSpreader::updateCursors(ServerNetworkHandler *owner, Level &level, const Vector3i &origin,
                                   std::mt19937 &random, bool convertBlocks) {
+    LevelSculkWorld world(owner, level);
+    updateCursors(world, origin, random, convertBlocks);
+}
+
+void SculkSpreader::updateCursors(SculkWorld &world, const Vector3i &origin, std::mt19937 &random, bool convertBlocks) {
     if (mCursors.empty())
         return;
+
+    if (mSettings.mWorldGeneration) {
+        size_t kept = 0;
+        for (SculkChargeCursor &cursor: mCursors) {
+            if (cursor.mCharge <= 0)
+                continue;
+            if (world.isTicking(cursor.mPosition))
+                _updateCursor(world, origin, random, convertBlocks, cursor);
+            if (cursor.mCharge > 0)
+                mCursors[kept++] = cursor;
+        }
+        mCursors.resize(kept);
+        return;
+    }
 
     std::vector<SculkChargeCursor> next;
     next.reserve(mCursors.size());
@@ -281,16 +292,15 @@ void SculkSpreader::updateCursors(ServerNetworkHandler *owner, Level &level, con
 
     for (SculkChargeCursor cursor: mCursors) {
         if (cursor.mCharge <= 0) {
-            level.addParticle(GenericLevelEventParticle(EVENT_SCULK_CHARGE_POP, centerOf(cursor.mPosition),
+            world.addParticle(GenericLevelEventParticle(EVENT_SCULK_CHARGE_POP, centerOf(cursor.mPosition),
                                                         chargeEvent(cursor.mPosition)));
             continue;
         }
 
-        const bool ticking = level.isColumnActive(cursor.mPosition.x >> 4, cursor.mPosition.z >> 4);
-        if (ticking)
-            _updateCursor(owner, level, origin, random, convertBlocks, cursor);
+        if (world.isTicking(cursor.mPosition))
+            _updateCursor(world, origin, random, convertBlocks, cursor);
         if (cursor.mCharge <= 0) {
-            level.addParticle(GenericLevelEventParticle(EVENT_SCULK_CHARGE_POP, centerOf(cursor.mPosition),
+            world.addParticle(GenericLevelEventParticle(EVENT_SCULK_CHARGE_POP, centerOf(cursor.mPosition),
                                                         chargeEvent(cursor.mPosition)));
             continue;
         }
@@ -317,7 +327,7 @@ void SculkSpreader::updateCursors(ServerNetworkHandler *owner, Level &level, con
         Tag data = chargeEvent(position);
         data.putShort("charge", (int16_t) entry.second);
         data.putShort("facing", (int16_t) mCursors[cursorAt[entry.first]].mFacing);
-        level.addParticle(GenericLevelEventParticle(EVENT_SCULK_CHARGE, centerOf(position), std::move(data)));
+        world.addParticle(GenericLevelEventParticle(EVENT_SCULK_CHARGE, centerOf(position), std::move(data)));
     }
 }
 
@@ -343,4 +353,35 @@ void SculkSpreader::load(const Tag &data) {
         if (entry.isCompound() && mCursors.size() < MAX_CURSORS)
             mCursors.push_back(SculkChargeCursor::load(entry));
     }
+}
+
+const BlockState &LevelSculkWorld::getBlock(const Vector3i &position) {
+    return mLevel.getChunk(position.x >> 4, position.z >> 4).getBlock(position.x & 15, position.y, position.z & 15);
+}
+
+void LevelSculkWorld::setBlock(const Vector3i &position, const BlockState &state) {
+    mLevel.setBlock(position, state, true);
+}
+
+bool LevelSculkWorld::isWaterSource(const Vector3i &position) {
+    const LiquidInfo liquid = mLevel.getLiquidInfo(position.x, position.y, position.z);
+    return liquid.water && liquid.source;
+}
+
+void LevelSculkWorld::placeGrowth(const Vector3i &position, const BlockState &state) {
+    mLevel.setBlock(position, state, true);
+    mLevel.onBlockPlaced(position, state);
+}
+
+bool LevelSculkWorld::isTicking(const Vector3i &position) {
+    return mLevel.isColumnActive(position.x >> 4, position.z >> 4);
+}
+
+void LevelSculkWorld::playSound(const char *sound, const Vector3i &position) {
+    if (mOwner != nullptr)
+        mOwner->playLevelSound(mLevel, sound, Vector3f((float) position.x, (float) position.y, (float) position.z));
+}
+
+void LevelSculkWorld::addParticle(const GenericLevelEventParticle &particle) {
+    mLevel.addParticle(particle);
 }

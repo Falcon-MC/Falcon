@@ -21,3 +21,15 @@ void BedBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) 
 
     mColor = data.getByte(TAG_COLOR, 0);
 }
+
+bool BedBlockActor::claimPet(int64_t uniqueId) {
+    if (mPetId != NO_PET && mPetId != uniqueId)
+        return false;
+    mPetId = uniqueId;
+    return true;
+}
+
+void BedBlockActor::releasePet(int64_t uniqueId) {
+    if (mPetId == uniqueId)
+        mPetId = NO_PET;
+}

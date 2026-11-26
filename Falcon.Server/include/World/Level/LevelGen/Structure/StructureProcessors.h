@@ -28,6 +28,8 @@ public:
         int32_t mOutputValue;
         int32_t mVerticalRange = 0;
         float mVerticalChance = 0.0f;
+        // world blocks the rule leaves alone, tested after the input
+        const std::vector<std::string> *mLocationExcluded = nullptr;
     };
 
     static const std::vector<Rule> &get(const std::string &name);

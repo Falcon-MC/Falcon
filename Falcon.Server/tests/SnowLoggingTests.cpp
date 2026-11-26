@@ -49,6 +49,8 @@ namespace {
         EntityDefinitions::initialize();
 
         Level &level = owner.getWorlds().getDefault().getOverworld();
+        // the opened world has generated the chunk its random seed spawns in, and an existing chunk wins the insert
+        level.dropChunk(0, 0);
         level.insertChunk(LevelChunk(0, 0)).setPopulated(true);
         const Vector3i plant(4, 100, 4);
         level.setBlockState(plant.x, plant.y - 1, plant.z, BlockState("minecraft:dirt"));

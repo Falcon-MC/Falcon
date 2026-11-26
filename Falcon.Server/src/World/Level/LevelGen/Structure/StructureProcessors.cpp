@@ -378,6 +378,10 @@ BlockState StructureProcessors::apply(const std::vector<const Rule *> &rules, co
             continue;
         if (rule->mLocationBlock != nullptr && world.mName != rule->mLocationBlock)
             continue;
+        if (rule->mLocationExcluded != nullptr
+            && std::find(rule->mLocationExcluded->begin(), rule->mLocationExcluded->end(), world.mName)
+                       != rule->mLocationExcluded->end())
+            continue;
 
         if (rule->mVerticalRange > 0) {
             const float fraction = std::min((float) std::abs(relativeY) / (float) rule->mVerticalRange, 1.0f);
