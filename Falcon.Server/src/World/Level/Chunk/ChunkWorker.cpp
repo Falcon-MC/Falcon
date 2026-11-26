@@ -344,23 +344,13 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
     } else if (!chunk->isPopulated() && sourceIndex < mSources.size()) {
         std::vector<Tag> blockActors;
         std::vector<Tag> entities;
-        // an older world's neighbour parked its share of its features here: its decoration is not replayed again
-        uint16_t skipped = 0;
-        if (!spilled.empty() && mStorage.isOpen()) {
-            for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
-                for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
-                    if ((offsetX != 0 || offsetZ != 0) && mStorage.hasChunk(result.mX + offsetX, result.mZ + offsetZ))
-                        skipped |= (uint16_t) (1u << ((offsetX + 1) * 3 + offsetZ + 1));
-                }
-            }
-        }
         if (generated) {
             _shareNeeds(result.mX, result.mZ, sourceIndex);
-            *chunk = mSources[sourceIndex]->generate(result.mX, result.mZ, blockActors, entities, skipped);
+            *chunk = mSources[sourceIndex]->generate(result.mX, result.mZ, blockActors, entities);
         } else {
             if (!chunk->hasHeightmap())
                 LightSystem::computeHeightmap(*chunk);
-            mSources[sourceIndex]->populate(*chunk, blockActors, entities, skipped);
+            mSources[sourceIndex]->populate(*chunk, blockActors, entities);
         }
         // spills of an older world, whose neighbours' decorations wrote into absent chunks
         applySpilled();
