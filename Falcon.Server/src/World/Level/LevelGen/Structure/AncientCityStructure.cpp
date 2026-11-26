@@ -39,8 +39,9 @@ namespace {
     const int32_t START_HEIGHT = -27;
     const int32_t MAX_DEPTH = 7;
     const int32_t MAX_DISTANCE = 128;
-    // the pieces stay within the max distance of the start, plus a piece
-    const int32_t REACH = 9;
+    // the pieces stay within the max distance of the start, with the same slack as the other jigsaw structures:
+    // the terrain shaver reaches past the last piece
+    const int32_t REACH = (MAX_DISTANCE + 15) / 16 + 2;
 
     struct Slot {
         // null: the empty element
