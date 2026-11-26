@@ -432,11 +432,16 @@ public:
         mGolden = golden;
     }
 
+    void setUphill(uint8_t face) {
+        mUphill = face;
+    }
+
 private:
     void addRailSource(BaseCircuitComponent *component, int dampening, const Vector3i &position, uint8_t direction,
                        int reach);
 
     bool mGolden = false;
+    uint8_t mUphill = CircuitFace::NONE;
 };
 
 class PistonConsumerComponent : public ConsumerComponent {

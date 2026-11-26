@@ -33,5 +33,6 @@ private:
     int32_t mLastTargetX = 0;
     int32_t mLastTargetY = 0;
     int32_t mLastTargetZ = 0;
+    int32_t mTicksUntilRepath = 0;
     bool mHasLastTarget = false;
 };

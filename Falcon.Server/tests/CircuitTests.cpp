@@ -1,5 +1,6 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/BaseRailBlock.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/Circuit/CircuitSystem.h"
@@ -278,6 +279,21 @@ namespace {
                 require(fixture.at(at).mName == "minecraft:redstone_torch",
                         "a ring torch was off while the ring's block was powered from outside");
         }
+
+        fixture.flip(Vector3i(centre.x, centre.y - 1, centre.z));
+        fixture.run(10);
+        unsigned litTorches = 0;
+        for (int tick = 0; tick < 12; ++tick) {
+            fixture.run(1);
+            unsigned litThisTick = 0;
+            for (unsigned index = 0; index < 4; ++index) {
+                if (fixture.at(torches[index]).mName == "minecraft:redstone_torch")
+                    litThisTick |= 1u << index;
+            }
+            if (litThisTick != 0 && (litThisTick & (litThisTick - 1)) == 0)
+                litTorches |= litThisTick;
+        }
+        require(litTorches == 15, "the light did not go around the ring again after outside power fell");
     }
 
     // the lamp lights with the evaluation and goes out four ticks after it loses power
@@ -521,6 +537,29 @@ namespace {
             require(!powered(east(source, step)), "rail " + std::to_string(step) + " stayed powered without a source");
     }
 
+    void railSlopeConnection() {
+        Fixture fixture;
+        const Vector3i lower = ORIGIN;
+        const Vector3i upper(lower.x + 1, lower.y + 1, lower.z);
+        BlockState flat = fixture.block("minecraft:golden_rail");
+        flat.mStates.putInt("rail_direction", BaseRailBlock::STRAIGHT_EAST_WEST);
+        fixture.set(Vector3i(upper.x, upper.y - 1, upper.z), fixture.block("minecraft:stone"));
+        fixture.set(lower, flat);
+        fixture.set(upper, flat);
+        fixture.set(east(lower, -1), fixture.block("minecraft:redstone_block"));
+        fixture.run(8);
+        require(fixture.at(lower).mStates.getByte("rail_data_bit", 0) != 0, "the lower rail had no input");
+        require(fixture.at(upper).mStates.getByte("rail_data_bit", 0) == 0,
+                "two flat rails at different heights shared power");
+
+        BlockState slope = flat;
+        slope.mStates.putInt("rail_direction", BaseRailBlock::ASCENDING_EAST);
+        fixture.set(lower, slope);
+        fixture.run(8);
+        require(fixture.at(upper).mStates.getByte("rail_data_bit", 0) != 0,
+                "the upper rail did not get power from the slope connected to it");
+    }
+
     // the game's movable table: what a piston pushes, pulls, breaks or stops at
     void pistonMovableTable() {
         const auto movement = [](const char *name) { return PistonMovable::of(name).mMovement; };
@@ -649,6 +688,7 @@ int main() {
         consumerSetups();
         lampPassesPowerOn();
         railLine();
+        railSlopeConnection();
         pistonMovableTable();
         pistonMoves();
         std::cout << "circuit checks passed\n";

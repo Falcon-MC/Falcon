@@ -32,6 +32,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/BlockPileFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/CactusFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/SculkPatchFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeTemperature.h"
@@ -47,6 +48,7 @@
 #include <cctype>
 #include <climits>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -301,12 +303,15 @@ namespace {
             }
         }
 
-        // the rule's variable.origin*, left by the last scatter
+        // the rule's variable.origin*: where the previous rule's scatter left them, then back at the chunk origin
+        // for the rules after it
         static ScatterVariables forRule(BlockManager &blocks, const int32_t origin[3]) {
             ScatterVariables variables(blocks, origin);
             if (placementContext.mSharesOrigin) {
-                for (size_t axis = 0; axis < 3; axis++)
+                for (size_t axis = 0; axis < 3; axis++) {
                     variables.mOriginVariable[axis] = placementContext.mOrigin[axis];
+                    placementContext.mOrigin[axis] = static_cast<float>(origin[axis]);
+                }
             }
             return variables;
         }
@@ -416,6 +421,23 @@ namespace {
             drawnZ = drawnZ || axis == 2;
         }
         return true;
+    }
+
+    // a scatter leaving the chunk reads the biome of the chunk it lands in; past the decorated 3x3 or the build
+    // height the game falls back to the ocean
+    int32_t biomeAt(BlockManager &blocks, const LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
+        if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+            return BiomeIds::OCEAN;
+
+        const int32_t chunkX = x >> 4;
+        const int32_t chunkZ = z >> 4;
+        if (chunkX == chunk.getX() && chunkZ == chunk.getZ())
+            return static_cast<int32_t>(chunk.getBiomeAt(x & 15, y, z & 15));
+
+        const LevelChunk *other = std::abs(chunkX - chunk.getX()) <= 1 && std::abs(chunkZ - chunk.getZ()) <= 1
+                                          ? blocks.getLevel().peekChunkPtr(chunkX, chunkZ)
+                                          : nullptr;
+        return other != nullptr ? static_cast<int32_t>(other->getBiomeAt(x & 15, y, z & 15)) : BiomeIds::OCEAN;
     }
 
     bool isWater(const BlockState &state) {
@@ -924,6 +946,10 @@ struct OverworldRulePlacer::LegacyTreeDefinition {
         JungleEdge,
         // nextInt(20) != 0 ? (nextInt(20) > 2 ? (nextInt(10) > 6 ? fourth : third) : second) : first
         BambooJungle,
+        // nextInt(3) > 0 ? first : (nextInt(10) != 0 ? third : second)
+        ExtremeHills,
+        // nextBoolean() ? first : second
+        Meadow,
         // nextInt(5) > 0 ? first : second
         Savanna
     };
@@ -1160,6 +1186,13 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              {{&VanillaBlocks::REDSTONE_ORE, {"minecraft:stone"}},
               {&VanillaBlocks::DEEPSLATE_REDSTONE_ORE, {"minecraft:deepslate"}}}},
             {"minecraft:tuff_feature", 64, 0.0f, {{&VanillaBlocks::TUFF, {"minecraft:stone", "minecraft:deepslate"}}}},
+            // the game's own silverfish feature, not the pack's stone-only one: veins of 9 in the four stones and in
+            // deepslate and tuff, as the game's output shows
+            {"minecraft:silverfish_feature",
+             8,
+             0.0f,
+             {{&VanillaBlocks::INFESTED_STONE, {"minecraft:stone"}},
+              {&VanillaBlocks::INFESTED_DEEPSLATE, {"minecraft:deepslate"}}}},
             {"minecraft:nether_soul_sand_underground_feature",
              12,
              0.0f,
@@ -1618,6 +1651,37 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                                                  {},
                                                  &MEGA_PINE}};
 
+    // in the server's own definitions, which no vanilla pack overrides: the birch_forest_mutated trees
+    static const TreeDefinition SUPER_BIRCH_TREES[] = {{{"minecraft:super_birch_tree_feature",
+                                                         Tree::Trunk::Simple,
+                                                         &VanillaBlocks::BIRCH_LOG,
+                                                         {5, 8},
+                                                         {0, 7},
+                                                         Tree::Canopy::Simple,
+                                                         &VanillaBlocks::BIRCH_LEAVES,
+                                                         {0, 0},
+                                                         {0, 0},
+                                                         {0, 0},
+                                                         0,
+                                                         0.0f,
+                                                         false},
+                                                        nullptr,
+                                                        {}},
+                                                       {{"minecraft:fallen_super_birch_tree_feature",
+                                                         Tree::Trunk::Fallen,
+                                                         &VanillaBlocks::BIRCH_LOG,
+                                                         {5, 8},
+                                                         {0, 7},
+                                                         Tree::Canopy::None,
+                                                         nullptr,
+                                                         {0, 0},
+                                                         {0, 0},
+                                                         {0, 0},
+                                                         0,
+                                                         0.0f,
+                                                         true},
+                                                        nullptr,
+                                                        scatter(LOG_MUSHROOMS)}};
     static const auto optional = [](const char *identifier, const Placed &places, int32_t denominator) {
         return ScatterDefinition{identifier, "1", {ZERO, ZERO, ZERO}, 0, places, 1, denominator};
     };
@@ -1626,7 +1690,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             optional("minecraft:optional_oak_tree_with_vines_feature", tree(TREES[1]), 12),
             optional("minecraft:optional_fallen_birch_tree_feature", tree(TREES[5]), 80),
             optional("minecraft:optional_fallen_spruce_tree_feature", tree(TREES[8]), 80),
-            optional("minecraft:optional_spruce_tree_with_vines_feature", tree(TREES[7]), 12)};
+            optional("minecraft:optional_spruce_tree_with_vines_feature", tree(TREES[7]), 12),
+            optional("minecraft:optional_fallen_super_birch_tree_feature", tree(SUPER_BIRCH_TREES[1]), 80)};
     static const ScatterDefinition OPTIONAL_BEEHIVE = {
             "minecraft:optional_beehive_feature",
             "1",
@@ -1657,6 +1722,18 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             "minecraft:birch_tree_with_optional_beehive_feature", {tree(TREES[4]), scatter(OPTIONAL_BEEHIVE)}, 1};
     static const AggregateDefinition SELECT_BIRCH = {
             "minecraft:select_birch_tree_feature", {scatter(OPTIONAL_TREES[2]), aggregate(BIRCH_WITH_BEEHIVE)}, 2};
+    static const AggregateDefinition SUPER_BIRCH_WITH_BEEHIVE = {
+            "minecraft:super_birch_tree_with_optional_beehive_feature",
+            {tree(SUPER_BIRCH_TREES[0]), scatter(OPTIONAL_BEEHIVE)},
+            1};
+    static const AggregateDefinition SELECT_SUPER_BIRCH = {
+            "minecraft:select_super_birch_tree_feature",
+            {scatter(OPTIONAL_TREES[5]), aggregate(SUPER_BIRCH_WITH_BEEHIVE)},
+            2};
+    static const AggregateDefinition FANCY_WITH_NEST = {
+            "minecraft:fancy_oak_tree_with_beehive_feature", {tree(TREES[2]), BEEHIVE_SEARCH}, 1};
+    static const AggregateDefinition SUPER_BIRCH_WITH_NEST = {
+            "minecraft:super_birch_tree_with_beehive_feature", {tree(SUPER_BIRCH_TREES[0]), BEEHIVE_SEARCH}, 1};
     static const AggregateDefinition STANDING_SPRUCE = {
             "minecraft:select_standing_spruce_tree_feature", {scatter(OPTIONAL_TREES[4]), tree(TREES[6])}, 2};
     static const AggregateDefinition SELECT_SPRUCE = {
@@ -1927,13 +2004,26 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
              Pick::Forest,
              {aggregate(WITH_LEAF_LITTER[0]), aggregate(WITH_LEAF_LITTER[1]), aggregate(WITH_LEAF_LITTER[2])}},
             {"minecraft:legacy:ice_tree_feature", 0.1f, Pick::First, {aggregate(SELECT_SPRUCE)}},
-            // types 1 and 2 of the constructor; the mutated forest's second feature, select_super_birch_tree_feature,
-            // is in none of the game's packs and places nothing
+            // types 1 and 2 of the constructor
             {"minecraft:legacy:birch_forest_tree_feature", 10.0f, Pick::First, {aggregate(SELECT_BIRCH)}},
             {"minecraft:legacy:birch_forest_mutated_tree_feature",
              10.0f,
              Pick::BirchMutated,
-             {aggregate(SELECT_BIRCH)}},
+             {aggregate(SELECT_BIRCH), aggregate(SELECT_SUPER_BIRCH)}},
+            // types 3, 4, 5 and 10; the mesa's carries the leaf litter
+            {"minecraft:legacy:extreme_hills_plus_trees_tree_feature",
+             3.0f,
+             Pick::ExtremeHills,
+             {aggregate(SELECT_SPRUCE), tree(TREES[2]), aggregate(SELECT_OAK)}},
+            {"minecraft:legacy:flower_forest_tree_feature",
+             6.0f,
+             Pick::Forest,
+             {aggregate(SELECT_BIRCH), aggregate(FANCY_WITH_BEEHIVE), aggregate(OAK_WITH_BEEHIVE)}},
+            {"minecraft:legacy:meadow_trees_feature",
+             0.01f,
+             Pick::Meadow,
+             {aggregate(FANCY_WITH_NEST), aggregate(SUPER_BIRCH_WITH_NEST)}},
+            {"minecraft:legacy:mesa_plateau_stone_tree_feature", 5.0f, Pick::First, {aggregate(WITH_LEAF_LITTER[2])}},
             {"minecraft:legacy:plains_tree_feature",
              0.05f,
              Pick::OneInThree,
@@ -2024,6 +2114,16 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                                                      "minecraft:sulfur", "minecraft:cinnabar"}};
     static const ThresholdDefinition UNDERGROUND_GLOW_LICHEN = {"minecraft:underground_glow_lichen_feature",
                                                                 multiface(GLOW_LICHEN), 2};
+    // features/sculk_vein_feature.json; planks is no block of the game any more
+    static const MultifaceDefinition SCULK_VEIN = {"minecraft:sculk_vein_feature",
+                                                   &VanillaBlocks::SCULK_VEIN,
+                                                   20,
+                                                   {0, 1, 2, 3, 4, 5},
+                                                   1.0f,
+                                                   {"minecraft:stone", "minecraft:deepslate",
+                                                    "minecraft:cobbled_deepslate", "minecraft:deepslate_tiles",
+                                                    "minecraft:cracked_deepslate_tiles", "minecraft:deepslate_bricks",
+                                                    "minecraft:cracked_deepslate_bricks", "minecraft:tuff"}};
 
     // BDS 1.26.61 behavior packs, features/small_dripstone*.json; the scatter keeps the default xyz order
     static const DripstoneDefinition DRIPSTONE = {&dripstoneBlocks, 3, 5, {0.1f, 0.3f, 0.1f, 1.0f}};
@@ -2465,6 +2565,13 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     Feature feature;
     if (entry.mPass == AFTER_SURFACE_PASS) {
         feature.mKelp = entry.mFeature == "minecraft:kelp_feature";
+        // the silverfish veins come after the surface
+        if (entry.mFeature == "minecraft:silverfish_feature") {
+            for (const OreDefinition &ore: ORES) {
+                if (entry.mFeature == ore.mIdentifier)
+                    feature.mOre = &ore;
+            }
+        }
         if (entry.mFeature == UNDERWATER_MAGMA_UNDERGROUND.mIdentifier)
             feature.mPlaced.mThreshold = &UNDERWATER_MAGMA_UNDERGROUND;
         if (entry.mFeature == SMALL_DRIPSTONE.mIdentifier)
@@ -2529,6 +2636,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     }
     if (entry.mPass == "after_underground_pass" && entry.mFeature == UNDERGROUND_GLOW_LICHEN.mIdentifier)
         feature.mPlaced.mThreshold = &UNDERGROUND_GLOW_LICHEN;
+    if (entry.mPass == "after_underground_pass" && entry.mFeature == SCULK_VEIN.mIdentifier)
+        feature.mPlaced.mMultiface = &SCULK_VEIN;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:sculk_patch_feature")
+        feature.mPlaced.mFunction = &SculkPatchFeature::place;
     if (entry.mPass == FIRST_PASS) {
         feature.mForestFoliage = entry.mFeature == "minecraft:legacy:forest_foliage_feature";
         feature.mForestRock = entry.mFeature == "minecraft:legacy:forest_rock_feature";
@@ -2857,8 +2968,7 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
         int32_t position[3] = {0, 0, 0};
         scatterPosition(axes, entry.mEvalOrder, origin, variables, scatter, position);
 
-        if (biomeFilter >= 0
-            && static_cast<int32_t>(chunk.getBiomeAt(position[0] & 15, position[1], position[2] & 15)) != biomeFilter)
+        if (biomeFilter >= 0 && biomeAt(blocks, chunk, position[0], position[1], position[2]) != biomeFilter)
             continue;
 
         if (feature.mOre != nullptr)
@@ -3061,13 +3171,16 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
         maxZ = std::max(maxZ, static_cast<int32_t>(std::floor(sphere->mZ + sphere->mRadius)));
     }
 
-    // built once per thread: a vein is tried hundreds of times a chunk
-    thread_local std::unordered_map<const OreDefinition *, std::vector<BlockState>> placedStates;
-    std::vector<BlockState> &states = placedStates[&ore];
-    if (states.size() != ore.mRules.size()) {
-        states.clear();
-        for (const ReplaceRule &rule: ore.mRules)
-            states.push_back(rule.mPlaces().toBlockState());
+    // built once per thread and block: a vein is tried hundreds of times a chunk. keyed by the block, not the
+    // definition: the nether veins build theirs on the stack, one address for every ore
+    thread_local std::unordered_map<Block (*)(), BlockState> placedStates;
+    thread_local std::vector<const BlockState *> states;
+    states.clear();
+    for (const ReplaceRule &rule: ore.mRules) {
+        auto found = placedStates.find(rule.mPlaces);
+        if (found == placedStates.end())
+            found = placedStates.emplace(rule.mPlaces, rule.mPlaces().toBlockState()).first;
+        states.push_back(&found->second);
     }
 
     bool placed = false;
@@ -3113,7 +3226,7 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
                     if (!contains(ore.mRules[index].mMayReplace, current))
                         continue;
 
-                    const BlockState &state = states[index];
+                    const BlockState &state = *states[index];
                     if (current.getHash() == state.getHash() && current == state)
                         continue;
 
@@ -4765,6 +4878,10 @@ void OverworldRulePlacer::_placeLegacyTrees(BlockManager &blocks, const LegacyTr
             picked = nextInt(random, 10) != 0 ? (nextInt(random, 2) != 0 ? 2 : 1) : 0;
         else if (trees.mPick == Pick::Savanna)
             picked = nextInt(random, 5) > 0 ? 0 : 1;
+        else if (trees.mPick == Pick::ExtremeHills)
+            picked = nextInt(random, 3) > 0 ? 0 : (nextInt(random, 10) != 0 ? 2 : 1);
+        else if (trees.mPick == Pick::Meadow)
+            picked = nextBoolean(random) ? 0 : 1;
         else if (trees.mPick == Pick::BambooJungle)
             picked = nextInt(random, 20) != 0 ? (nextInt(random, 20) > 2 ? (nextInt(random, 10) > 6 ? 3 : 2) : 1) : 0;
 

@@ -84,15 +84,16 @@ namespace {
         }
     }
 
-    // a lichen on every face of a stone box has nowhere to go: the bone meal is kept
+    // a lichen on every face inside a solid stone cube has nowhere to go, not even around a corner: the bone meal
+    // is kept
     void lichenBoxedIn() {
         Arena arena;
         const BlockState stone = VanillaBlocks::STONE().toBlockState();
         const Vector3i position(8, 70, 8);
-        for (int face = 0; face < 6; ++face) {
-            const Vector3i side = PlacementOrientation::relativePosition(position, face);
-            arena.set(side.x, side.y, side.z, stone);
-        }
+        for (int32_t x = -1; x <= 1; ++x)
+            for (int32_t y = -1; y <= 1; ++y)
+                for (int32_t z = -1; z <= 1; ++z)
+                    arena.set(position.x + x, position.y + y, position.z + z, stone);
         arena.set(position.x, position.y, position.z, lichen(63));
         require(!arena.fertilize(position), "a boxed-in lichen took the bone meal");
     }

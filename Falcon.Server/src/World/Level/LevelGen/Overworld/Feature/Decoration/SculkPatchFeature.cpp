@@ -1,199 +1,114 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/SculkPatchFeature.h"
 
+#include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
-#include "World/Level/LevelGen/Biome/BiomeIds.h"
+#include "World/Level/Block/WaterBlock.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
-#include "World/Level/LevelGen/Noise/SimplexF.h"
-#include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
-#include "World/Level/Level.h"
-#include "World/Level/Chunk/LevelChunk.h"
-
-#include <array>
-#include <map>
-#include <memory>
-#include <tuple>
-#include <vector>
+#include "World/Level/LevelGen/Random/GameRandom.h"
+#include "World/Level/Sculk/SculkSpreader.h"
+#include "World/Level/Sculk/SculkWorld.h"
 
 namespace {
+    // the deep dark's features/sculk_patch_feature.json; extra_growth_chance is absent and reads 0 to 0
+    const int32_t CURSOR_COUNT = 10;
+    const int32_t CHARGE_AMOUNT = 32;
+    const int32_t SPREAD_ATTEMPTS = 64;
+    const int32_t GROWTH_ROUNDS = 0;
+    const int32_t SPREAD_ROUNDS = 1;
+    const float CENTRAL_BLOCK_CHANCE = 0.5f;
 
-    using Position = std::tuple<int32_t, int32_t, int32_t>;
+    // the world generation spreader of the game
+    const SculkSpreader::Settings SETTINGS = {true, 50, 1, 5, 10};
 
-    const BlockState &sculkState() {
-        static const BlockState state = VanillaBlocks::SCULK().toBlockState();
-        return state;
+    const BlockState &airState() {
+        static const BlockState air(BlockNames::AIR);
+        return air;
     }
 
-    const BlockState &sculkVeinState() {
-        static const BlockState state = VanillaBlocks::SCULK_VEIN().toBlockState();
-        return state;
+    bool isWater(const BlockState &state) {
+        return state.mName == BlockNames::WATER || state.mName == BlockNames::FLOWING_WATER;
     }
 
-    const SimplexF *sculkNoise() {
-        const FeatureNoiseHolder *holder = FeatureNoiseHolder::get();
-        if (holder == nullptr)
-            return nullptr;
+    // a decoration's blocks: a vein keeps the water it grows in as its second block
+    class DecorationSculkWorld : public SculkWorld {
+    public:
+        explicit DecorationSculkWorld(BlockManager &blocks) : mBlocks(blocks) {}
 
-        return &holder->getSculkPatch();
+        const BlockState &getBlock(const Vector3i &position) override {
+            return mBlocks.getBlockAt(position.x, position.y, position.z);
+        }
+
+        // as in a level: air taking a waterlogged block's place lets its water back to the first layer
+        void setBlock(const Vector3i &position, const BlockState &state) override {
+            const BlockState &replaced = mBlocks.getBlockAt(position.x, position.y, position.z);
+            const BlockState &extra = mBlocks.getExtraBlockAt(position.x, position.y, position.z);
+            const BlockState water = isWater(replaced) ? replaced : extra;
+            if (!isWater(water)) {
+                mBlocks.setBlockStateAt(position.x, position.y, position.z, state);
+                return;
+            }
+
+            const bool holdsWater = !isWater(state) && LiquidPhysicsSystem::getWaterloggingLevel(state) > 0;
+            mBlocks.setBlockStateAt(position.x, position.y, position.z,
+                                    DecorationSupport::isAir(state) && isWater(extra) ? extra : state);
+            if (holdsWater)
+                mBlocks.setExtraBlockAt(position.x, position.y, position.z, water);
+            else if (isWater(extra))
+                mBlocks.setExtraBlockAt(position.x, position.y, position.z, airState());
+        }
+
+        bool isWaterSource(const Vector3i &position) override {
+            const BlockState &state = mBlocks.getBlockAt(position.x, position.y, position.z);
+            const BlockState &extra = mBlocks.getExtraBlockAt(position.x, position.y, position.z);
+            return (isWater(state) && WaterBlock::isSource(state)) || (isWater(extra) && WaterBlock::isSource(extra));
+        }
+
+    private:
+        BlockManager &mBlocks;
+    };
+
+    // air or a water source, against a solid block on one side; or sculk and veins already
+    bool canSpreadFrom(DecorationSculkWorld &world, const Vector3i &origin) {
+        const BlockState state = world.getBlock(origin);
+        if (state.mName == BlockNames::SCULK || state.mName == BlockNames::SCULK_VEIN)
+            return true;
+        if (!DecorationSupport::isAir(state) && !(isWater(state) && WaterBlock::isSource(state)))
+            return false;
+
+        static const Vector3i SIDES[6] = {Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, -1),
+                                          Vector3i(0, 0, 1), Vector3i(0, -1, 0), Vector3i(0, 1, 0)};
+        for (const Vector3i &side: SIDES) {
+            const Vector3i next(origin.x + side.x, origin.y + side.y, origin.z + side.z);
+            if (BlockSupport::isSolid(world.getBlock(next)))
+                return true;
+        }
+        return false;
     }
-
-    const int32_t FACE_INDEX[6] = {0, 1, 4, 2, 3, 5};
-    const int32_t OPPOSITE_INDEX[6] = {1, 0, 2, 4, 5, 3};
-
-    bool isSculkVein(const BlockState &state) {
-        return state.mName == "minecraft:sculk_vein";
-    }
-
-    int32_t veinBits(const BlockState &state) {
-        if (!isSculkVein(state))
-            return 0;
-
-        const Tag *tag = state.mStates.get("multi_face_direction_bits");
-        if (tag == nullptr)
-            return 0;
-
-        return tag->asInt();
-    }
-
 }
 
-const char *SculkPatchFeature::name() const {
-    return "minecraft:sculk_patch_feature";
-}
+bool SculkPatchFeature::place(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+    DecorationSculkWorld world(blocks);
+    const Vector3i origin(x, y, z);
+    if (!canSpreadFrom(world, origin))
+        return false;
 
-void SculkPatchFeature::apply(ChunkGenerateContext &context) {
-    LevelChunk &chunk = context.getChunk();
-    Level &level = context.getLevel();
-    const int32_t chunkX = chunk.getX();
-    const int32_t chunkZ = chunk.getZ();
-
-    mRandom.setSeed(level.getSeed() ^ DecorationSupport::chunkHash(chunkX, chunkZ));
-    const SimplexF *noisePtr = sculkNoise();
-    if (noisePtr == nullptr)
-        return;
-
-    const SimplexF &noise = *noisePtr;
-
-    BlockManager manager(level);
-    std::vector<Position> placedSculk;
-
-    for (int32_t x = 0; x < 16; x++) {
-        const int32_t baseX = (chunkX << 4) + x;
-        for (int32_t z = 0; z < 16; z++) {
-            const int32_t baseZ = (chunkZ << 4) + z;
-            for (int32_t y = LevelChunk::MAX_Y; y > LevelChunk::MIN_Y; y--) {
-                if ((int32_t) chunk.getBiomeAt(x, y, z) != BiomeIds::DEEP_DARK)
-                    continue;
-
-                if (DecorationSupport::isAir(manager.getBlockAt(baseX, y, baseZ)))
-                    continue;
-
-                bool air = false;
-                for (const DecorationSupport::FaceOffset &face: DecorationSupport::ALL_FACES) {
-                    const int32_t sideX = baseX + face.mX;
-                    const int32_t sideY = y + face.mY;
-                    const int32_t sideZ = baseZ + face.mZ;
-                    if ((sideX >> 4) != chunkX || (sideZ >> 4) != chunkZ)
-                        continue;
-
-                    if (DecorationSupport::isAir(manager.getBlockAt(sideX, sideY, sideZ))) {
-                        air = true;
-                        break;
-                    }
-                }
-
-                if (!air)
-                    continue;
-
-                if (noise.noise3D((float) baseX * 5.5f, (float) y * 5.5f, (float) baseZ * 5.5f, true) < 0.1f) {
-                    manager.setBlockStateAt(baseX, y, baseZ, sculkState());
-                    placedSculk.emplace_back(baseX, y, baseZ);
-                }
-            }
-        }
+    SculkSpreader spreader(SETTINGS);
+    for (int32_t round = 0; round < GROWTH_ROUNDS + SPREAD_ROUNDS; round++) {
+        for (int32_t cursor = 0; cursor < CURSOR_COUNT; cursor++)
+            spreader.addCursors(origin, CHARGE_AMOUNT);
+        for (int32_t attempt = 0; attempt < SPREAD_ATTEMPTS; attempt++)
+            spreader.updateCursors(world, origin, random, round < SPREAD_ROUNDS);
+        spreader.clearCursors();
     }
 
-    std::map<Position, int32_t> veinsToPlace;
+    const Vector3i below(x, y - 1, z);
+    if (CENTRAL_BLOCK_CHANCE >= GameRandom::nextFloat(random) && BlockSupport::isSolid(world.getBlock(below)))
+        world.setBlock(origin, VanillaBlocks::SCULK_CATALYST().toBlockState());
 
-    for (const Position &sculkPos: placedSculk) {
-        const int32_t sculkX = std::get<0>(sculkPos);
-        const int32_t sculkY = std::get<1>(sculkPos);
-        const int32_t sculkZ = std::get<2>(sculkPos);
-
-        for (int32_t faceIndex = 0; faceIndex < 6; faceIndex++) {
-            const DecorationSupport::FaceOffset &face = DecorationSupport::ALL_FACES[faceIndex];
-            const int32_t neighborX = sculkX + face.mX;
-            const int32_t neighborY = sculkY + face.mY;
-            const int32_t neighborZ = sculkZ + face.mZ;
-            if (neighborY <= LevelChunk::MIN_Y)
-                continue;
-
-            if ((neighborX >> 4) != (sculkX >> 4) || (neighborZ >> 4) != (sculkZ >> 4))
-                continue;
-
-            const BlockState neighbor = manager.getBlockAt(neighborX, neighborY, neighborZ);
-            const bool freeSpot = DecorationSupport::isAir(neighbor) || isSculkVein(neighbor);
-            const bool carrierBlock = DecorationSupport::isSolid(neighbor) && neighbor.mName != "minecraft:sculk"
-                                      && !isSculkVein(neighbor);
-
-            if (freeSpot) {
-                int32_t bits = veinBits(neighbor);
-
-                for (int32_t supportIndex = 0; supportIndex < 6; supportIndex++) {
-                    const DecorationSupport::FaceOffset &supportFace = DecorationSupport::ALL_FACES[supportIndex];
-                    const BlockState support = manager.getBlockAt(
-                            neighborX + supportFace.mX, neighborY + supportFace.mY, neighborZ + supportFace.mZ);
-                    if (!DecorationSupport::isSolid(support) || support.mName == "minecraft:sculk"
-                        || isSculkVein(support))
-                        continue;
-
-                    bits |= 1 << FACE_INDEX[supportIndex];
-                }
-
-                if (bits != 0) {
-                    const Position key(neighborX, neighborY, neighborZ);
-                    veinsToPlace[key] = veinsToPlace.count(key) == 0 ? bits : (veinsToPlace[key] | bits);
-                }
-            }
-
-            if (carrierBlock) {
-                for (int32_t outerIndex = 0; outerIndex < 6; outerIndex++) {
-                    const DecorationSupport::FaceOffset &outerFace = DecorationSupport::ALL_FACES[outerIndex];
-                    const int32_t veinX = neighborX + outerFace.mX;
-                    const int32_t veinY = neighborY + outerFace.mY;
-                    const int32_t veinZ = neighborZ + outerFace.mZ;
-
-                    if ((veinX >> 4) != (sculkX >> 4) || (veinZ >> 4) != (sculkZ >> 4))
-                        continue;
-
-                    const BlockState existing = manager.getBlockAt(veinX, veinY, veinZ);
-                    if (!DecorationSupport::isAir(existing) && !isSculkVein(existing))
-                        continue;
-
-                    int32_t bits = veinBits(existing);
-                    bits |= 1 << OPPOSITE_INDEX[outerIndex];
-
-                    const Position key(veinX, veinY, veinZ);
-                    veinsToPlace[key] = veinsToPlace.count(key) == 0 ? bits : (veinsToPlace[key] | bits);
-                }
-            }
-        }
-    }
-
-    for (const std::pair<const Position, int32_t> &entry: veinsToPlace) {
-        const int32_t veinX = std::get<0>(entry.first);
-        const int32_t veinY = std::get<1>(entry.first);
-        const int32_t veinZ = std::get<2>(entry.first);
-
-        const BlockState existing = manager.getBlockAt(veinX, veinY, veinZ);
-        const int32_t mergedBits = veinBits(existing) | entry.second;
-        if (mergedBits == 0)
-            continue;
-
-        manager.setBlockStateAt(
-                veinX, veinY, veinZ,
-                DecorationSupport::withState(sculkVeinState(), "multi_face_direction_bits", mergedBits));
-    }
-
-    queueObject(manager);
+    // the extra shriekers: 0 to 0 still draws its count
+    GameRandom::nextInt(random, 1);
+    return true;
 }

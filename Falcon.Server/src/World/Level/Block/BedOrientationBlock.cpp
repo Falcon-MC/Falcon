@@ -19,6 +19,12 @@ bool BedOrientationBlock::matches(const std::string &identifier) {
     return BedBlock::matches(identifier);
 }
 
+bool BedOrientationBlock::seatsPet(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return state.mStates.getByte("head_piece_bit", 0) == 0;
+}
+
 std::vector<BlockPlacementEntry> BedOrientationBlock::getPlacementBlocks(Level &level, const Vector3i &position,
                                                                          const BlockState &state,
                                                                          int playerFacing) const {

@@ -45,6 +45,12 @@ bool ChestBlock::matches(const std::string &identifier) {
     return identifier == CHEST || identifier == TRAPPED_CHEST;
 }
 
+bool ChestBlock::seatsPet(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+    const ChestBlockActor *chest = level.getBlockActors().find<ChestBlockActor>(position);
+    return chest == nullptr || chest->getViewerCount() == 0;
+}
+
 ChestBlockActor &ChestBlock::getOrCreate(Level &level, const Vector3i &position) {
     return level.getBlockActors().getOrCreate<ChestBlockActor>(position);
 }

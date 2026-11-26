@@ -599,8 +599,8 @@ void VillageStructure::addBeard(const ChunkGenerator &generator, int32_t chunkX,
                 continue;
 
             const JigsawBox &box = piece.mBox;
-            beard.addPiece(chunkX, chunkZ,
-                           {box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ, piece.mGroundLevelDelta});
+            beard.addVillagePiece(chunkX, chunkZ, {box.mMinX, box.mMinY, box.mMinZ, box.mMaxX, box.mMaxY, box.mMaxZ},
+                                  box.mMinY + piece.mGroundLevelDelta);
         }
     }
 }
