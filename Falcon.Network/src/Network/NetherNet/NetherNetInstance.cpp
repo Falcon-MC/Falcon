@@ -198,7 +198,7 @@ bool NetherNetInstance::host(const ConnectionDefinition &definition) {
             [this](const std::string &networkID, const std::string &offer, std::string &answer, int &errorCode,
                    bool localSender, size_t answerBudget) {
                 return _negotiate(networkID, offer, answer, errorCode, std::string(),
-                                  localSender && mAnonymousLanClientsAllowed, answerBudget);
+                                  localSender && mAnonymousLanClientsAllowed, answerBudget, localSender);
             };
 
     mDiscovery.start(mNetworkId, dataProvider, lanHandler);
@@ -428,10 +428,10 @@ void NetherNetInstance::_addRemoteCandidate(const std::string &signalKey, const 
 
 bool NetherNetInstance::_negotiate(const std::string &networkID, const std::string &offer, std::string &answer,
                                    int &errorCode, const std::string &signalKey, bool anonymousAllowed,
-                                   size_t lanAnswerBudget) {
+                                   size_t lanAnswerBudget, bool localLanAnswer) {
     int clientCheck = 0;
     const bool accepted = _negotiateOffer(networkID, offer, answer, errorCode, signalKey, clientCheck,
-                                          anonymousAllowed, lanAnswerBudget);
+                                          anonymousAllowed, lanAnswerBudget, localLanAnswer);
     if (!accepted && mNegotiationFailureObserver)
         mNegotiationFailureObserver(errorCode, clientCheck);
     return accepted;
@@ -439,7 +439,7 @@ bool NetherNetInstance::_negotiate(const std::string &networkID, const std::stri
 
 bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std::string &offer, std::string &answer,
                                         int &errorCode, const std::string &signalKey, int &clientCheck,
-                                        bool anonymousAllowed, size_t lanAnswerBudget) {
+                                        bool anonymousAllowed, size_t lanAnswerBudget, bool localLanAnswer) {
     const int offerCheck = mUnofficialClientsAllowed ? 0 : nethernet::Description::inspectOffer(offer);
     if (offerCheck != 0) {
         LOG_WARN(LogAreaID::Network, "NetherNet offer from %s rejected: client check %d", networkID.c_str(),
@@ -676,7 +676,7 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
     parameters.mFingerprints = localFingerprints;
     parameters.mSetupRole = setupRoleName(localDescription.role());
 
-    if (lanAnswerBudget == 0) {
+    if (!localLanAnswer) {
         if (!mIdentity.issueToken()) {
             LOG_ERROR(LogAreaID::Network, "Failed to issue the NetherNet server token");
             connection->close();
