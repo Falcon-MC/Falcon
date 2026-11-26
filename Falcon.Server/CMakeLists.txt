@@ -411,6 +411,7 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     falcon_add_test(client-side-generation FalconClientSideGenerationTests tests/ClientSideGenerationTests.cpp
             TIMEOUT 120)
     falcon_add_test(tree-generation FalconTreeGenerationTests tests/TreeGenerationTests.cpp)
+    falcon_add_test(nether-ore-veins FalconNetherOreTests tests/NetherOreTests.cpp)
     falcon_add_test(bed FalconBedTests tests/BedTests.cpp)
     falcon_add_test(cauldron-dye FalconCauldronDyeTests tests/CauldronDyeTests.cpp)
     falcon_add_test(pack-optimizer FalconPackOptimizerTests tests/PackOptimizerTests.cpp)

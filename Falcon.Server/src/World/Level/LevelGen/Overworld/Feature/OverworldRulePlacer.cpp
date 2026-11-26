@@ -3061,13 +3061,16 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
         maxZ = std::max(maxZ, static_cast<int32_t>(std::floor(sphere->mZ + sphere->mRadius)));
     }
 
-    // built once per thread: a vein is tried hundreds of times a chunk
-    thread_local std::unordered_map<const OreDefinition *, std::vector<BlockState>> placedStates;
-    std::vector<BlockState> &states = placedStates[&ore];
-    if (states.size() != ore.mRules.size()) {
-        states.clear();
-        for (const ReplaceRule &rule: ore.mRules)
-            states.push_back(rule.mPlaces().toBlockState());
+    // built once per thread and block: a vein is tried hundreds of times a chunk. keyed by the block, not the
+    // definition: the nether veins build theirs on the stack, one address for every ore
+    thread_local std::unordered_map<Block (*)(), BlockState> placedStates;
+    thread_local std::vector<const BlockState *> states;
+    states.clear();
+    for (const ReplaceRule &rule: ore.mRules) {
+        auto found = placedStates.find(rule.mPlaces);
+        if (found == placedStates.end())
+            found = placedStates.emplace(rule.mPlaces, rule.mPlaces().toBlockState()).first;
+        states.push_back(&found->second);
     }
 
     bool placed = false;
@@ -3113,7 +3116,7 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
                     if (!contains(ore.mRules[index].mMayReplace, current))
                         continue;
 
-                    const BlockState &state = states[index];
+                    const BlockState &state = *states[index];
                     if (current.getHash() == state.getHash() && current == state)
                         continue;
 
