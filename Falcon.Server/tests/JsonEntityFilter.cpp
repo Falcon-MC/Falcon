@@ -968,7 +968,14 @@ bool JsonEntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandl
         return applyBoolean(village != nullptr, value, op);
     }
 
-    if (test == "is_raider" || test == "has_trade_supply" || test == "trusts" || test == "is_leashed_to")
+    if (test == "is_raider") {
+        const MobActor *mob = dynamic_cast<const MobActor *>(target);
+        return applyBoolean(mob != nullptr && mob->getDweller().isActive()
+                                    && mob->getDweller().getRole() == DwellerRole::Hostile,
+                            value, op);
+    }
+
+    if (test == "has_trade_supply" || test == "trusts" || test == "is_leashed_to")
         return applyBoolean(false, value, op);
 
     return false;

@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/AI/Goal/RangedAttackGoal.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/Component/MobShooter.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
@@ -164,6 +165,44 @@ namespace {
         require(closeTo(speedOf(*potions.front()), 0.75f, 0.01f), "the shooter's power wins");
     }
 
+    // is_raider: a raid witch heals a hurt raider (aux 21) and gives a healthy one regeneration (aux 28)
+    void witchHealsRaiders() {
+        Field field;
+        const auto spawnForRaid = [&field](const char *identifier, const Vector3f &position) -> MobActor & {
+            const auto forRaid = [](ServerActor &actor) {
+                static_cast<MobActor &>(actor).setSpawnEvent("minecraft:spawn_for_raid");
+            };
+            MobActor *mob =
+                    dynamic_cast<MobActor *>(field.mOwner.spawnActor(field.mLevel, identifier, position, forRaid));
+            require(mob != nullptr, identifier);
+            mob->startDefinition(field.mOwner);
+            return *mob;
+        };
+        MobActor &witch = spawnForRaid("minecraft:witch", Vector3f(0.5f, 64.0f, 0.5f));
+        MobActor &vindicator = spawnForRaid("minecraft:vindicator", Vector3f(0.5f, 64.0f, 5.5f));
+        MobActor &pig = field.spawn("minecraft:pig", Vector3f(5.5f, 64.0f, 0.5f));
+        // the dwellers read their role on their first tick
+        field.mOwner.tickActors();
+
+        const std::unique_ptr<json::Value> raider = json::parse(R"({"test": "is_raider", "subject": "other"})");
+        require(EntityFilter::test(*raider, field.mOwner, witch, &vindicator), "a raid vindicator is no raider");
+        require(!EntityFilter::test(*raider, field.mOwner, witch, &pig), "a pig is a raider");
+
+        const auto thrown = [&field]() {
+            const std::vector<SplashPotionActor *> potions = field.all<SplashPotionActor>();
+            require(potions.size() == 1, "one splash potion");
+            const int32_t id = potions.front()->getPotionId();
+            field.mOwner.removeActor(potions.front()->getUniqueId());
+            return id;
+        };
+        vindicator.setHealth(3.0f);
+        require(MobShooter::shootAt(field.mOwner, witch, vindicator), "the witch throws at a hurt raider");
+        require(thrown() == 21, "no healing for a hurt raider");
+        vindicator.setHealth(vindicator.getMaxHealth());
+        require(MobShooter::shootAt(field.mOwner, witch, vindicator), "the witch throws at a healthy raider");
+        require(thrown() == 28, "no regeneration for a healthy raider");
+    }
+
     void impactDamage() {
         std::mt19937 random(1);
         const std::unique_ptr<json::Value> fixed = json::parse(R"({"damage": {"min": 8, "max": 8}})");
@@ -207,6 +246,7 @@ int main() {
         skeletonArrow();
         drownedTrident();
         witchPotion();
+        witchHealsRaiders();
         attackTimeline();
     } catch (const std::exception &error) {
         std::cout << "FAILED: " << error.what() << std::endl;
