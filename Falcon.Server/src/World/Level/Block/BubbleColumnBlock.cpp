@@ -77,31 +77,32 @@ void BubbleColumnBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &
         ticks.write(position, 0, BlockState());
 }
 
-// one tick for a change below, two otherwise, never merged
+// any neighbour, six ticks later, never merged
 void BubbleColumnBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position,
                                                const BlockState &state, const Vector3i &changed) const {
     (void) state;
-    const bool below = changed.x == position.x && changed.z == position.z && changed.y < position.y;
-    ticks.queueTick(position, this, below ? 1 : 2);
+    (void) changed;
+    ticks.queueTick(position, this, 6);
 }
 
 // gone without support, else one higher
 void BubbleColumnBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position,
                                      const BlockState &state) const {
-    if (!_isSupported(ticks, position, state)) {
+    if (!_followBelow(ticks, position, state)) {
         ticks.write(position, 0, BlockState());
         return;
     }
     growAbove(ticks, position);
 }
 
-// vfunc 976: magma under a pulling column, soul sand under a lifting one, or the same column
-bool BubbleColumnBlock::_isSupported(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) {
+// soul sand, magma or a column below hold the column: the game turns its drag to match instead of removing it
+bool BubbleColumnBlock::_followBelow(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) {
     const BlockState &below = ticks.stateAt(Vector3i(position.x, position.y - 1, position.z));
-    const bool dragDown = state.mStates.getBool("drag_down", false);
-    if (is<MagmaBlock>(below))
-        return dragDown;
-    if (is<SoulSandBlock>(below))
-        return !dragDown;
-    return is<BubbleColumnBlock>(below) && below.mStates.getBool("drag_down", false) == dragDown;
+    if (!is<SoulSandBlock>(below) && !is<MagmaBlock>(below) && !is<BubbleColumnBlock>(below))
+        return false;
+
+    const bool dragDown = dragOf(below);
+    if (state.mStates.getBool("drag_down", false) != dragDown)
+        ticks.write(position, 0, column(dragDown));
+    return true;
 }

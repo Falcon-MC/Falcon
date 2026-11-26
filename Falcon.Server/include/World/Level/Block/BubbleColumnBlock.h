@@ -16,6 +16,11 @@ public:
     // the column one higher over a water source; false when nothing grew
     static bool growAbove(LiquidPhysicsSystem &ticks, const Vector3i &position);
 
+    bool canBeReplaced(const BlockState &state) const override {
+        (void) state;
+        return true;
+    }
+
     bool usesBlockTicks() const override {
         return true;
     }
@@ -28,5 +33,5 @@ public:
     void onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const override;
 
 private:
-    static bool _isSupported(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state);
+    static bool _followBelow(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state);
 };
