@@ -276,6 +276,44 @@ namespace {
         require(fromRepeater == 0, "a repeater beside a cell powered it");
     }
 
+    // the game's own conductivity table: full blocks it lists conduct, glowstone conducts but stops wire stepping
+    // down, a hopper neither, a top slab only stops the step down
+    void conductivity() {
+        const auto of = [](const char *name) { return RedstoneConductivity::of(BlockState(name)); };
+        require(of("minecraft:stone").mConductor && of("minecraft:cobblestone").mConductor
+                        && of("minecraft:white_wool").mConductor && of("minecraft:redstone_lamp").mConductor,
+                "a listed full block did not conduct");
+        require(!of("minecraft:glass").mConductor && of("minecraft:glass").mAllowsWireToStepDown,
+                "glass conducted or stopped wire stepping down");
+        require(of("minecraft:glowstone").mConductor && !of("minecraft:glowstone").mAllowsWireToStepDown,
+                "glowstone did not conduct and stop the step down");
+        require(!of("minecraft:hopper").mConductor && !of("minecraft:hopper").mAllowsWireToStepDown,
+                "a hopper conducted or let wire step down");
+        BlockState slab("minecraft:smooth_stone_slab");
+        slab.mStates.putString("minecraft:vertical_half", "top");
+        require(!RedstoneConductivity::of(slab).mConductor && !RedstoneConductivity::of(slab).mAllowsWireToStepDown,
+                "a top slab conducted or let wire step down");
+        require(of("minecraft:white_concrete_double_slab").mConductor && !of("minecraft:white_concrete_slab").mConductor,
+                "the data-driven concrete slabs lost their conductivity");
+    }
+
+    // a lever strongly powers the block it hangs on; the lamp beyond hears it only through a conductor
+    void strongPowerThroughConductors() {
+        for (const char *support: {"minecraft:cobblestone", "minecraft:glass"}) {
+            Fixture fixture;
+            const Vector3i block = ORIGIN;
+            fixture.set(block, fixture.block(support));
+            BlockState lever = fixture.lever(true);
+            lever.mStates.putString("lever_direction", "west");
+            fixture.set(east(block, -1), lever);
+            fixture.set(east(block, 1), fixture.block("minecraft:redstone_lamp"));
+            fixture.run(8);
+            const bool lit = fixture.at(east(block, 1)).mName == "minecraft:lit_redstone_lamp";
+            require(lit == (std::string(support) == "minecraft:cobblestone"),
+                    std::string("a lamp behind ") + support + (lit ? " lit" : " stayed dark"));
+        }
+    }
+
     // no quasi-connectivity: power above and beside a piston's top does nothing
     void pistonNoQuasiConnectivity() {
         Fixture fixture;
@@ -305,6 +343,8 @@ int main() {
         chunkBorder();
         pistonRetry();
         powerAtAirCell();
+        conductivity();
+        strongPowerThroughConductors();
         std::cout << "circuit checks passed\n";
         return 0;
     } catch (const std::exception &error) {
