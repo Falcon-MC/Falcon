@@ -62,6 +62,7 @@
 #include "World/Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
 #include "World/Actor/AI/Goal/MoveTowardsTargetGoal.h"
 #include "World/Actor/AI/Goal/NearestAttackableTargetGoal.h"
+#include "World/Actor/AI/Goal/OcelotSitOnBlockGoal.h"
 #include "World/Actor/AI/Goal/OfferFlowerGoal.h"
 #include "World/Actor/AI/Goal/OpenDoorGoal.h"
 #include "World/Actor/AI/Goal/OwnerTargetGoal.h"
@@ -159,6 +160,10 @@ namespace {
     const float FOLLOW_OWNER_STOP = 2.0f;
 
     const float WORK_DEFAULT_SPEED = 0.5f;
+    // the definition gives no search fields: eight blocks around, one layer up and down
+    const int32_t OCELOT_SIT_SEARCH_RANGE = 8;
+    const int32_t OCELOT_SIT_SEARCH_HEIGHT = 1;
+    const float OCELOT_SIT_GOAL_RADIUS = 1.0f;
     const float SLEEP_DEFAULT_Y_OFFSET = 1.0f;
 
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
@@ -1547,6 +1552,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                                TRADE_INTEREST_DEFAULT_SWITCH_SECONDS);
         settings.mCooldownTicks = secondsAsTicks(component, "cooldown", TRADE_INTEREST_DEFAULT_COOLDOWN_SECONDS);
         return std::make_unique<TradeInterestGoal>(settings);
+    }
+
+    if (behavior == "ocelot_sit_on_block") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mSearchRange = OCELOT_SIT_SEARCH_RANGE;
+        settings.mSearchHeight = OCELOT_SIT_SEARCH_HEIGHT;
+        settings.mGoalRadius = OCELOT_SIT_GOAL_RADIUS;
+        return std::make_unique<OcelotSitOnBlockGoal>(settings);
     }
 
     if (behavior == "inspect_bookshelf") {

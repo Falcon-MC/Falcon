@@ -1,6 +1,7 @@
 #include "World/Level/Block/FurnaceBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(FurnaceBlock, 20);
 
@@ -21,6 +22,12 @@ bool FurnaceBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:furnace" || identifier == "minecraft:lit_furnace"
            || identifier == "minecraft:blast_furnace" || identifier == "minecraft:lit_blast_furnace"
            || identifier == "minecraft:smoker" || identifier == "minecraft:lit_smoker";
+}
+
+bool FurnaceBlock::seatsPet(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return state.mName == BlockNames::LIT_FURNACE;
 }
 
 FurnaceKind FurnaceBlock::kind(const BlockState &state) {

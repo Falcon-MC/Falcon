@@ -325,6 +325,14 @@ public:
         return false;
     }
 
+    // a tamed cat or ocelot goes and sits on top of it
+    virtual bool seatsPet(Level &level, const Vector3i &position, const BlockState &state) const {
+        (void) level;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
     // true in every class overriding onRandomTick: random ticks skip inert blocks
     virtual bool hasRandomTick() const {
         return false;
