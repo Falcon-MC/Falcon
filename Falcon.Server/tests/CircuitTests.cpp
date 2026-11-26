@@ -427,6 +427,49 @@ namespace {
                 "a lever, plate or button on the floor did not strongly power the block under it");
     }
 
+    // the game's consumer setups: only the trapdoor skips its first update, trapdoors and fence gates stop dust
+    // stepping down past them, and a torch hung on a lamp does not light it
+    void consumerSetups() {
+        Fixture fixture;
+        const Vector3i trapdoor = ORIGIN;
+        const Vector3i gate = east(ORIGIN, 2);
+        const Vector3i door = east(ORIGIN, 4);
+        const Vector3i note = east(ORIGIN, 6);
+        fixture.set(trapdoor, fixture.block("minecraft:trapdoor"));
+        fixture.set(gate, fixture.block("minecraft:fence_gate"));
+        BlockState upper = fixture.block("minecraft:wooden_door");
+        upper.mStates.putByte("upper_block_bit", 1);
+        // both halves at once, without the neighbour checks that would break a lone half
+        fixture.mLevel.setBlock(door, fixture.block("minecraft:wooden_door"), false);
+        fixture.mLevel.setBlock(Vector3i(door.x, door.y + 1, door.z), upper, false);
+        fixture.set(note, fixture.block("minecraft:noteblock"));
+        fixture.run(4);
+        CircuitSystem &circuit = RedstoneSystem::circuitOf(fixture.mLevel);
+        const auto component = [&circuit, &fixture](const Vector3i &at) {
+            const BaseCircuitComponent *found = circuit.getComponent(at);
+            require(found != nullptr, "a " + fixture.at(at).mName + " had no circuit component");
+            return found;
+        };
+        require(component(trapdoor)->ignoresFirstUpdate(), "a trapdoor took its first update");
+        require(!component(gate)->ignoresFirstUpdate() && !component(door)->ignoresFirstUpdate()
+                        && !component(note)->ignoresFirstUpdate(),
+                "a fence gate, door or note block was marked to skip its first update");
+        require(component(trapdoor)->blocksWireStepDown() && component(gate)->blocksWireStepDown(),
+                "a trapdoor or fence gate let dust step down past it");
+        require(!component(door)->blocksWireStepDown() && !component(note)->blocksWireStepDown(),
+                "a door or note block stopped dust stepping down past it");
+
+        const Vector3i lamp(8, 64, 12);
+        fixture.set(lamp, fixture.block("minecraft:redstone_lamp"));
+        BlockState torch = fixture.block("minecraft:redstone_torch");
+        // hung on the lamp's east side: its support is west of it
+        torch.mStates.putString("torch_facing_direction", "west");
+        fixture.set(east(lamp, 1), torch);
+        fixture.run(10);
+        require(fixture.at(east(lamp, 1)).mName == "minecraft:redstone_torch", "the torch on the lamp was not lit");
+        require(fixture.at(lamp).mName == "minecraft:redstone_lamp", "a torch hung on a lamp lit it");
+    }
+
     // the game's movable table: what a piston pushes, pulls, breaks or stops at
     void pistonMovableTable() {
         const auto movement = [](const char *name) { return PistonMovable::of(name).mMovement; };
@@ -552,6 +595,7 @@ int main() {
         conductivity();
         strongPowerThroughConductors();
         producerSetups();
+        consumerSetups();
         pistonMovableTable();
         pistonMoves();
         std::cout << "circuit checks passed\n";
