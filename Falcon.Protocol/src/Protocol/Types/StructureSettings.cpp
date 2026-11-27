@@ -25,7 +25,8 @@ void StructureSettings::read(ReadOnlyBinaryStream &stream) {
     mSize = stream.getBlockPosition();
     mOffset = stream.getBlockPosition();
     mLastEditedByActorId = stream.getVarLong();
-    mRotation = (StructureRotation) stream.getByte();
+    const auto rotation = stream.getByte();
+    mRotation = (StructureRotation) (rotation >= 4 && rotation <= 6 ? rotation - 3 : rotation);
     mMirror = (StructureMirror) stream.getByte();
     mAnimationMode = (StructureAnimationMode) stream.getByte();
     mAnimationSeconds = stream.getLFloat();

@@ -294,13 +294,17 @@ namespace {
         auto step = std::make_shared<int64_t>(0);
         ServerNetworkHandler *owner = &api->host();
         Level *target = &level;
-        api->addTickJob([structure, place, owner, target, at, ticks, units, unitCells, step]() {
+        auto pendingBlockUpdates = std::make_shared<std::vector<Vector3i>>();
+        api->addTickJob([structure, place, owner, target, at, ticks, units, unitCells, step, pendingBlockUpdates]() {
             const int64_t done = (*step)++;
             McStructure::PlaceOptions part = place;
             part.mFromCell = (units * done / ticks) * unitCells;
             part.mToCell = (units * (done + 1) / ticks) * unitCells;
-            part.mEntities = place.mEntities && done + 1 == ticks;
-            structure->place(*owner, *target, at, part);
+            part.mPendingBlockUpdates = pendingBlockUpdates.get();
+            part.mFinishBlockUpdates = done + 1 == ticks;
+            part.mEntities = place.mEntities && part.mFinishBlockUpdates;
+            if (part.mFromCell != part.mToCell || part.mFinishBlockUpdates)
+                structure->place(*owner, *target, at, part);
             return done + 1 < ticks;
         });
         return JS_UNDEFINED;

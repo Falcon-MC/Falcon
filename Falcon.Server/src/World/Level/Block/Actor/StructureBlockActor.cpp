@@ -31,6 +31,17 @@ namespace {
 
 Tag StructureBlockActor::saveNbt() const {
     Tag data = Tag::ofCompound();
+    _putFields(data);
+    return data;
+}
+
+Tag StructureBlockActor::getSpawnCompound() const {
+    Tag data = BlockActor::getSpawnCompound();
+    _putFields(data);
+    return data;
+}
+
+void StructureBlockActor::_putFields(Tag &data) const {
     data.putInt("data", (int32_t) mMode);
     data.putInt("redstoneSaveMode", mRedstoneSaveMode);
     data.putInt("xStructureOffset", mOffset.x);
@@ -55,7 +66,6 @@ Tag StructureBlockActor::saveNbt() const {
     data.putFloat("animationSeconds", mAnimationSeconds);
     data.putFloat("integrity", mIntegrity);
     data.putLong("seed", mSeed);
-    return data;
 }
 
 void StructureBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
@@ -83,6 +93,6 @@ void StructureBlockActor::loadNbt(const Tag &data, const PacketCodecContext &con
                                                                                    : 0.0f;
     mAnimationSeconds = std::max(floatOf(data, "animationSeconds"), fromTicks);
     // integrity is kept in [0, 100]
-    mIntegrity = std::min(100.0f, std::max(floatOf(data, "integrity"), 0.0f));
+    mIntegrity = std::min(100.0f, std::max(floatOf(data, "integrity", 100.0f), 0.0f));
     mSeed = longOf(data, "seed");
 }

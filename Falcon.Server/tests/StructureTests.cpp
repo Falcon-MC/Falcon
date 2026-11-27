@@ -1,3 +1,15 @@
+#include "CircuitTicks.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/BlockActorDataPacket.h"
+#include "Protocol/Packets/ContainerOpenPacket.h"
+#include "Protocol/Packets/StructureBlockUpdatePacket.h"
+#include "Protocol/Packets/StructureTemplateDataRequestPacket.h"
+#include "Protocol/Packets/StructureTemplateDataResponsePacket.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/RideSystem.h"
+#include "World/Level/Block/Actor/StructureBlockActor.h"
+#include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
@@ -37,6 +49,8 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <filesystem>
 #include <initializer_list>
 #include <map>
 #include <iostream>
@@ -51,6 +65,236 @@ namespace {
     void require(bool condition, const char *message) {
         if (!condition)
             throw std::runtime_error(message);
+    }
+
+    void checkStructureEditor() {
+        struct Fixture : ServerNetworkHandler {
+            Fixture() : ServerNetworkHandler("Structure Editor", "", 1) {}
+
+            void sendPacketTo(const NetworkIdentifier &, const Packet &packet) override {
+                if (const auto *data = dynamic_cast<const StructureTemplateDataResponsePacket *>(&packet))
+                    mResponse = *data;
+                if (const auto *open = dynamic_cast<const ContainerOpenPacket *>(&packet))
+                    mOpened = open->mType == ContainerType::StructureEditor;
+                if (const auto *actor = dynamic_cast<const BlockActorDataPacket *>(&packet))
+                    mActorData = actor->mData;
+            }
+
+            StructureTemplateDataResponsePacket mResponse;
+            bool mOpened = false;
+            Tag mActorData;
+        };
+
+        const auto root = std::filesystem::temp_directory_path() / ("falcon-structure-editor-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+        struct RemoveTemporaryWorld {
+            std::filesystem::path mPath;
+            ~RemoveTemporaryWorld() {
+                std::error_code error;
+                std::filesystem::remove_all(mPath, error);
+            }
+        } temporary{root};
+        std::filesystem::create_directories(root);
+        Fixture server;
+        World &world = server.getWorlds().getDefault();
+        Level &level = world.getOverworld();
+        level.setOwner(&server);
+        require(level.openStorage(root.string()), "could not open storage for the structure editor");
+        level.getChunk(0, 0);
+        level.setActiveColumns({BlockTickingQueue::column(0, 0)});
+
+        const NetworkIdentifier id("builder", server.allocateRuntimeId());
+        auto &player = server.getPlayers().try_emplace(id, id, server.allocateRuntimeId(), &server).first->second;
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        player.moveToLevel(level);
+        player.setPosition(Vector3f(8.5f, 200, 0.5f));
+        player.setGameType((int32_t) GameType::Creative);
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.getInventoryManager().attach(&player, &server);
+
+        const auto set = [&](const Vector3i &at, const BlockState &state) {
+            level.setBlockState(at.x, at.y, at.z, state);
+        };
+        const auto stateAt = [&](const Vector3i &at) { return level.getBlockState(at.x, at.y, at.z); };
+        const Vector3i editor(8, 200, 4), source(2, 202, 6), target(2, 204, 6);
+        const BlockState structureBlock = VanillaBlocks::STRUCTURE_BLOCK().toBlockState();
+        const BlockState structureVoid = VanillaBlocks::STRUCTURE_VOID().toBlockState();
+        const BlockState stone = VanillaBlocks::STONE().toBlockState();
+        set(editor, structureBlock);
+        set(source, structureBlock);
+        set(Vector3i(3, 202, 6), structureVoid);
+        set(Vector3i(4, 202, 6), BlockState(BlockNames::AIR));
+        auto &sourceActor = level.getBlockActors().getOrCreate<StructureBlockActor>(source);
+        sourceActor.mMode = StructureBlockActor::Mode::Corner;
+        sourceActor.mStructureName = "mystructure:marker";
+
+        StructureBlockUpdatePacket edit;
+        edit.mBlockPosition = editor;
+        edit.mEditorData.mType = StructureBlockType::Save;
+        edit.mEditorData.mName = "editor_test";
+        edit.mEditorData.mSettings.mSize = Vector3i(3, 1, 1);
+        edit.mEditorData.mSettings.mOffset = Vector3i(-6, 2, 2);
+        edit.mEditorData.mSettings.mIgnoringEntities = true;
+        edit.mEditorData.mSettings.mIntegrityValue = 100.0f;
+        edit.mTrigger = true;
+        edit.handle(id, server);
+
+        const std::string storageKey = std::string(ScriptStructureRegistry::WORLD_PREFIX) + "mystructure:editor_test";
+        require(!level.hasSavedData(storageKey), "a creative player without operator status saved a structure");
+        player.setOp(true);
+        const auto *block = VanillaBlocks::fromState(structureBlock);
+        require(block != nullptr && block->onInteract(server, player, editor, structureBlock)
+                && server.mOpened && server.mActorData.getString("id") == StructureBlockActor::BLOCK_ACTOR_ID,
+                "interacting with the block did not open the structure editor");
+
+        edit.mEditorData.mFilteredName = "filtered";
+        BinaryStream wire;
+        edit.write(wire, server.getCodecContext());
+        ReadOnlyBinaryStream reader(wire.getBuffer());
+        require(reader.getBlockPosition() == editor && reader.getString() == edit.mEditorData.mName
+                && reader.getOptionalPresent() && reader.getString() == "filtered",
+                "the structure editor name did not use the optional redacted-name field");
+        ReadOnlyBinaryStream editorFields(wire.getBuffer());
+        StructureBlockUpdatePacket decoded;
+        decoded.read(editorFields, server.getCodecContext());
+        decoded.handle(id, server);
+        Tag saved;
+        require(level.loadSavedData(storageKey, saved, false), "the editor did not save to the world database");
+        McStructure captured;
+        require(McStructure::fromNbt(saved, captured), "the editor saved invalid structure data");
+        const auto *airCell = captured.getBlock(Vector3i(2, 0, 0));
+        require(captured.getBlock(Vector3i(1, 0, 0)) == nullptr
+                && airCell != nullptr && airCell->mName == BlockNames::AIR,
+                "capture did not distinguish structure void from air");
+
+        StructureTemplateDataRequestPacket query;
+        query.mPosition = editor;
+        query.mName = "editor_test";
+        query.mOperation = StructureTemplateDataRequestPacket::Operation::QuerySavedStructure;
+        query.handle(id, server);
+        require(server.mResponse.mSave && server.mResponse.mType == StructureTemplateDataResponsePacket::Type::Query,
+                "the editor did not return the saved structure");
+        server.getScriptEngine().structures().clear();
+
+        for (int x = target.x; x < target.x + 3; ++x)
+            set(Vector3i(x, target.y, target.z), stone);
+        edit.mEditorData.mType = StructureBlockType::Load;
+        edit.mEditorData.mSettings.mOffset.y = 4;
+        edit.mEditorData.mSettings.mAnimationMode = StructureAnimationMode::Blocks;
+        edit.mEditorData.mSettings.mAnimationSeconds = 0.15f;
+        edit.handle(id, server);
+        require(stateAt(target).mName == BlockNames::STONE, "the editor skipped the animation");
+        for (int tick = 0; tick < 4; ++tick)
+            world.getStructureBlocks().tick(server, level);
+        const auto *copy = level.getBlockActors().find<StructureBlockActor>(target);
+        require(copy != nullptr && copy->mStructureName == "mystructure:marker"
+                && copy->getSpawnCompound().getInt("data") == (int32_t) StructureBlockActor::Mode::Corner,
+                "the editor load omitted the saved block actor settings");
+        require(stateAt(Vector3i(3, target.y, target.z)).mName == BlockNames::STONE
+                && stateAt(Vector3i(4, target.y, target.z)).mName == BlockNames::AIR,
+                "loading did not preserve the structure void or replace the air cell");
+
+        auto *original = server.spawnActor(level, "minecraft:pig", Vector3f(2.25f, 202.25f, 6.75f));
+        require(original != nullptr, "could not spawn a test entity for structure capture");
+        McStructure withEntity = McStructure::capture(server, level, source, Vector3i(4, 202, 6), false, true);
+        McStructure::PlaceOptions rotated;
+        rotated.mBlocks = false;
+        rotated.mRotation = 1;
+        withEntity.place(server, level, Vector3i(10, 204, 6), rotated);
+        require(std::any_of(server.getActors().begin(), server.getActors().end(), [&](const auto &entry) {
+                    const auto &entity = *entry.second;
+                    const auto &pos = entity.getPosition();
+                    return &entity != original && entity.getTypeId() == "minecraft:pig" && pos.x == 10.25f
+                           && pos.y == 204.25f && pos.z == 6.25f && entity.getRotation().y == 90.0f;
+                }), "placing a structure rounded or failed to rotate its entity position");
+
+        McStructure torchTemplate(Vector3i(2, 1, 1));
+        BlockState torch = VanillaBlocks::TORCH().toBlockState();
+        torch.mStates.putString("torch_facing_direction", "east");
+        torchTemplate.setBlock(Vector3i(0, 0, 0), &torch);
+        torchTemplate.setBlock(Vector3i(1, 0, 0), &stone);
+        const Vector3i instantTorch(8, 208, 7), animatedTorch(8, 210, 7);
+        const Vector3i instantSupport(9, 208, 7), animatedSupport(9, 210, 7);
+        for (const auto &position: {instantTorch, animatedTorch, instantSupport, animatedSupport})
+            set(position, BlockState(BlockNames::AIR));
+        McStructure::PlaceOptions blocksOnly;
+        blocksOnly.mEntities = false;
+        torchTemplate.place(server, level, instantTorch, blocksOnly);
+        require(stateAt(instantTorch).mName == torch.mName && stateAt(instantSupport).mName == stone.mName,
+                "loading a wall torch before its support destroyed it");
+        McStructure airTemplate(Vector3i(1, 1, 1));
+        const BlockState air;
+        airTemplate.setBlock(Vector3i(), &air);
+        airTemplate.place(server, level, instantSupport, blocksOnly);
+        require(stateAt(instantTorch).mName == BlockNames::AIR,
+                "structure placement stopped notifying blocks outside the template");
+
+        require(server.getScriptEngine().structures().store("torch_animation",
+                    std::make_shared<McStructure>(std::move(torchTemplate)), false), "could not store the torch template");
+        edit.mEditorData.mName = "torch_animation";
+        edit.mEditorData.mSettings.mOffset = Vector3i(0, 10, 3);
+        edit.mEditorData.mSettings.mAnimationSeconds = 0.1f;
+        edit.handle(id, server);
+        world.getStructureBlocks().tick(server, level);
+        require(stateAt(animatedTorch).mName == torch.mName && stateAt(animatedSupport).mName == BlockNames::AIR,
+                "the first animation slice did not leave the torch in place");
+        world.getStructureBlocks().tick(server, level);
+        require(stateAt(animatedTorch).mName == torch.mName && stateAt(animatedSupport).mName == stone.mName,
+                "the animated torch did not survive until its support was placed");
+
+        auto *vehicle = server.spawnActor(level, "minecraft:minecart", Vector3f(4.5f, 201.25f, 6.5f));
+        require(vehicle != nullptr && RideSystem::mount(server, *original, *vehicle, false),
+                "could not mount the original passenger");
+        McStructure riderTemplate = McStructure::capture(server, level, Vector3i(2, 201, 6), Vector3i(4, 203, 6),
+                                                          false, true);
+        McStructure::PlaceOptions entitiesOnly;
+        entitiesOnly.mBlocks = false;
+        riderTemplate.place(server, level, Vector3i(8, 213, 6), entitiesOnly);
+        server.spawnStoredActors(level, {});
+        require(original->getVehicleId() == vehicle->getUniqueId(), "structure loading moved the original passenger");
+        require(std::any_of(server.getActors().begin(), server.getActors().end(), [&](const auto &entry) {
+                    const auto &cart = *entry.second;
+                    if (&cart == vehicle || cart.getTypeId() != "minecraft:minecart" || cart.getPassengers().size() != 1)
+                        return false;
+                    const auto *passenger = server.getActor(cart.getPassengers().front());
+                    return passenger != nullptr && passenger != original && passenger->getTypeId() == "minecraft:pig"
+                           && passenger->getVehicleId() == cart.getUniqueId();
+                }), "the cloned passenger was not mounted on the cloned minecart");
+
+        McStructure cartOnly = McStructure::capture(server, level, Vector3i(4, 201, 6), Vector3i(4, 203, 6),
+                                                     false, false);
+        cartOnly.addEntity(vehicle->saveNbt());
+        cartOnly.place(server, level, Vector3i(8, 217, 6), entitiesOnly);
+        server.spawnStoredActors(level, {});
+        require(original->getVehicleId() == vehicle->getUniqueId(), "a template linked to an uncaptured passenger");
+        require(std::any_of(server.getActors().begin(), server.getActors().end(), [&](const auto &entry) {
+                    const auto &cart = *entry.second;
+                    return cart.getTypeId() == "minecraft:minecart" && cart.getPosition().y > 217.0f
+                           && cart.getPassengers().empty();
+                }), "the copied cart retained a link to a passenger outside the template");
+
+        const Vector3i nearCorner(1, 201, 5), farCorner(5, 203, 7);
+        for (const auto &position: {nearCorner, farCorner}) {
+            set(position, structureBlock);
+            auto &corner = level.getBlockActors().getOrCreate<StructureBlockActor>(position);
+            corner.mMode = StructureBlockActor::Mode::Corner;
+            corner.mStructureName = "mystructure:corner_test";
+        }
+        edit.mEditorData.mName = "corner_test";
+        edit.mEditorData.mType = StructureBlockType::Save;
+        edit.mEditorData.mSettings.mSize = Vector3i();
+        edit.mEditorData.mRedstoneSaveMode = StructureRedstoneSaveMode::SavesToMemory;
+        edit.mTrigger = false;
+        edit.handle(id, server);
+        const auto *actor = level.getBlockActors().find<StructureBlockActor>(editor);
+        require(actor != nullptr && actor->mSize == Vector3i(3, 1, 1) && actor->mOffset == Vector3i(-6, 2, 2),
+                "the editor failed to find the interior between matching corners");
+
+        set(Vector3i(9, 200, 4), VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        settleCircuit(server, level, 6);
+        require(server.getScriptEngine().structures().find("corner_test") != nullptr
+                && !level.hasSavedData(std::string(ScriptStructureRegistry::WORLD_PREFIX) + "mystructure:corner_test"),
+                "the rising redstone edge did not save the structure in memory");
     }
 
     std::vector<const StructureProcessors::Rule *> rules(const std::string &name) {
@@ -899,6 +1143,7 @@ int main() {
     try {
         BlockPaletteRegistry::getInstance().initialize();
         BiomeChunkGenDataRegistry::initialize();
+        checkStructureEditor();
         checkProcessors();
         checkStyles();
         checkVillage();

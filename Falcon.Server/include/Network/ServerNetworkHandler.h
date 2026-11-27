@@ -71,6 +71,8 @@ class CommandOutputMessage;
 class Block;
 class CraftingEventPacket;
 class CommandBlockUpdatePacket;
+class StructureBlockUpdatePacket;
+class StructureTemplateDataRequestPacket;
 class Item;
 class NetherNetInstance;
 class PluginManager;
@@ -1193,6 +1195,10 @@ private:
     void handle(const NetworkIdentifier &id, const BlockActorDataPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const CommandBlockUpdatePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const StructureBlockUpdatePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const StructureTemplateDataRequestPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const BlockPickRequestPacket &packet) override;
 
