@@ -20,6 +20,7 @@ struct BehaviorPack {
     std::string mName;
     std::string mUuid;
     std::string mPath;
+    bool mHasDataModule = false;
     std::string mScriptEntry;
     std::string mScriptModuleUuid;
     std::string mScriptModuleVersion;

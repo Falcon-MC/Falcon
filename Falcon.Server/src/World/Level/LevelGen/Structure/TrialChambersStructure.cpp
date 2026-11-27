@@ -316,7 +316,8 @@ void JigsawStructures::_loadTrialChambers() {
     structure.mMaxDistanceVertical = 116;
     structure.mStartY = -40;
     structure.mStartYMax = -20;
-    structure.mPadding = 10;
+    structure.mPaddingTop = 10;
+    structure.mPaddingBottom = 10;
     structure.mAdaptation = TerrainBeard::Adaptation::Encapsulate;
     structure.mAdapts = true;
 

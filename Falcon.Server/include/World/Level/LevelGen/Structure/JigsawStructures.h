@@ -7,10 +7,13 @@
 #include "World/Level/LevelGen/Structure/StructureProcessors.h"
 
 #include <cstdint>
+#include <deque>
 #include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -18,6 +21,8 @@ namespace json {
     struct Value;
 }
 
+struct BehaviorPack;
+class McStructure;
 class ChunkGenerator;
 class Level;
 class LevelChunk;
@@ -74,7 +79,8 @@ public:
         int32_t mStartY = 0;
         // above mStartY: the start height is drawn between the two, both included
         int32_t mStartYMax = 0;
-        int32_t mPadding = 0;
+        int32_t mPaddingTop = 0;
+        int32_t mPaddingBottom = 0;
         JigsawPlacer::Projection mProjection = JigsawPlacer::Projection::None;
         TerrainBeard::Adaptation mAdaptation = TerrainBeard::Adaptation::BeardThin;
         bool mAdapts = false;
@@ -107,6 +113,10 @@ public:
     // the definitions of the game; the document is BedrockData's worldgen.json
     static JigsawStructures &get();
 
+    static JigsawStructures &packStructures();
+
+    void loadPacks(const std::vector<BehaviorPack> &packs);
+
     void load(const json::Value &document);
 
     const JigsawPlacer::Pool *pool(const std::string &name) const;
@@ -135,6 +145,8 @@ private:
     // the trial chambers' pools, processors, structure and set, as the game registers them in code
     void _loadTrialChambers();
 
+    explicit JigsawStructures(bool fromPacks = false) : mFromPacks(fromPacks) {}
+
     void _addSet(std::unique_ptr<Set> set);
 
     // each alias of the structure to the pool it stands for at this start
@@ -147,10 +159,17 @@ private:
     std::vector<std::shared_ptr<const Plan>> _plansNear(const ChunkGenerator &generator, int32_t chunkX,
                                                         int32_t chunkZ) const;
 
+    bool mFromPacks;
+    std::map<std::string, std::shared_ptr<const McStructure>> mPackTemplates;
+    std::map<std::string, std::shared_ptr<const JigsawPlacer::Template>> mPackShapes;
     std::map<std::string, JigsawPlacer::Pool> mPools;
     std::vector<std::unique_ptr<JigsawPlacer::Element>> mElements;
     std::map<std::string, ProcessorList> mProcessors;
     std::map<std::string, Structure> mStructures;
     std::vector<std::unique_ptr<Set>> mSets;
     std::vector<std::unique_ptr<StructureFeature>> mFeatures;
+    using PlanKey = std::tuple<int64_t, const Set *, int32_t, int32_t>;
+    mutable std::mutex mPlanMutex;
+    mutable std::map<PlanKey, std::shared_ptr<const Plan>> mPlans;
+    mutable std::deque<PlanKey> mPlanOrder;
 };

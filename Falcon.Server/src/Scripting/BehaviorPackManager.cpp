@@ -93,7 +93,12 @@ bool BehaviorPackManager::_readManifest(const std::string &manifest, BehaviorPac
     const json::Value *modules = root->get("modules");
     if (modules && modules->isArray()) {
         for (const auto &module: modules->mArray) {
-            if (!module->isObject() || !module->get("type") || module->get("type")->string() != "script")
+            const json::Value *type = module->isObject() ? module->get("type") : nullptr;
+            if (type == nullptr || !type->isString())
+                continue;
+            if (type->mString == "data")
+                out.mHasDataModule = true;
+            if (type->mString != "script")
                 continue;
             if (out.hasScript() || !module->get("uuid") || !module->get("entry"))
                 return false;
@@ -165,7 +170,7 @@ void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory)
     const std::filesystem::path base(pack.mPath);
     const bool hasContent = std::filesystem::exists(base / "items") || std::filesystem::exists(base / "blocks")
                             || std::filesystem::exists(base / "sounds" / "sound_definitions.json");
-    if (!pack.hasScript() && !hasContent)
+    if (!pack.hasScript() && !pack.mHasDataModule && !hasContent)
         return;
 
     mPacks.push_back(std::move(pack));

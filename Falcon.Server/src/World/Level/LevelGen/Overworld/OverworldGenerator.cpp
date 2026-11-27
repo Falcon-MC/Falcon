@@ -129,6 +129,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     // after the mansion, as in createGenerator: a mansion over the sea keeps its foundation only below the monument
     MonumentStructure::place(*this, level, chunk);
     JigsawStructures::get().place(*this, level, chunk, overflow);
+    JigsawStructures::packStructures().place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 
@@ -156,6 +157,7 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap,
     TerrainBeard beard;
     VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     JigsawStructures::get().addBeard(*this, chunk.getX(), chunk.getZ(), beard);
+    JigsawStructures::packStructures().addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     StrongholdStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     AncientCityStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);

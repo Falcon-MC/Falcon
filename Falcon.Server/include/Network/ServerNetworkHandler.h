@@ -1049,6 +1049,10 @@ public:
         return mBiomes;
     }
 
+    const std::vector<BehaviorPack> &getBehaviorPacks() const {
+        return mBehaviorPacks.getPacks();
+    }
+
     std::vector<CreativeItemGroup> &getCreativeGroups() {
         return mCreativeGroups;
     }

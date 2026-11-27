@@ -3,7 +3,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/CameraInstructionPacket.h"
-#include "Protocol/Types/CameraPresets.h"
+#include "Server/CameraPresetRegistry.h"
 
 #include <cstdlib>
 #include <string>
@@ -114,7 +114,7 @@ namespace {
         if (arguments.size() < 3)
             return false;
 
-        const int presetId = cameraPresetRuntimeId(arguments[2]);
+        const int presetId = CameraPresetRegistry::runtimeId(arguments[2]);
         if (presetId < 0)
             return false;
         set.mPresetRuntimeId = presetId;

@@ -12,6 +12,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LightSystem.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <cstring>
@@ -110,17 +111,17 @@ namespace {
         return negate ? !result : result;
     }
 
-    std::string permute(const SpawnCondition &condition, const std::string &identifier, int32_t roll) {
+    std::string permute(const SpawnCondition &condition, const std::string &identifier, int64_t roll) {
         for (const SpawnPermutation &permutation: condition.mPermutations) {
-            roll -= permutation.mWeight;
+            roll -= std::max(0, permutation.mWeight);
             if (roll < 0)
                 return permutation.mIdentifier.empty() ? identifier : permutation.mIdentifier;
         }
         return identifier;
     }
 
-    int32_t permutationWeight(const SpawnCondition &condition) {
-        int32_t total = 0;
+    int64_t permutationWeight(const SpawnCondition &condition) {
+        int64_t total = 0;
         for (const SpawnPermutation &permutation: condition.mPermutations)
             total += std::max(0, permutation.mWeight);
         return total;
@@ -269,12 +270,18 @@ void NaturalSpawner::_collectCandidates(Level &level, const SpawnSite &site, int
                                         std::vector<Candidate> &candidates, int32_t &totalWeight) {
     const auto consider = [&](const SpawnRule &rule) {
         const MobActor *prototype = ActorClassRegistry::getMobPrototype(rule.mIdentifier);
-        if (prototype == nullptr
-            || !prototype->canSpawnNaturally(level, site.mPosition, site.mBiome, site.mLight, mRandom))
-            return;
+        if (prototype != nullptr) {
+            if (!prototype->canSpawnNaturally(level, site.mPosition, site.mBiome, site.mLight, mRandom))
+                return;
+        } else {
+            const auto *definition = CustomContentRegistry::getInstance().getActorDefinition(rule.mIdentifier);
+            if (definition == nullptr || definition->mIsProjectile)
+                return;
+        }
 
         for (const SpawnCondition &condition: rule.mConditions) {
-            if (!_matches(level, site, condition, difficulty))
+            if (!_matches(level, site, condition, difficulty)
+                || condition.mWeight > std::numeric_limits<int32_t>::max() - totalWeight)
                 continue;
 
             candidates.push_back(Candidate{&rule, &condition});
@@ -338,7 +345,8 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
     // squaring the roll biases herds toward their minimum size
     const SpawnHerd &herd = condition.mHerds[(size_t) _nextInt((int32_t) condition.mHerds.size())];
     const float factor = _nextFloat();
-    int32_t size = herd.mMinSize + (int32_t) std::round((float) (herd.mMaxSize - herd.mMinSize) * (factor * factor));
+    const double rolled = herd.mMinSize + (double) std::round((float) (herd.mMaxSize - herd.mMinSize) * (factor * factor));
+    int32_t size = (int32_t) std::min(rolled, (double) MAX_SPAWNED_MOBS);
     if (size <= 0 || !_canSpawnAt(level, site, condition))
         return;
 
@@ -357,15 +365,25 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
     const int32_t pool = poolIndex(rule.mPopulation);
     const Vector3f position((float) site.mPosition.x + HERD_OFFSET, (float) site.mPosition.y,
                             (float) site.mPosition.z + HERD_OFFSET);
+    const int64_t weight = permutationWeight(condition);
     for (; size > 0; --size) {
         if (pool < 0 || POOL_CAPS[row][pool] <= 0 || counts.mPools[row][pool] >= POOL_CAPS[row][pool])
             continue;
 
-        const std::string identifier = permute(condition, rule.mIdentifier, _nextInt(permutationWeight(condition)));
+        const int64_t permutationRoll = weight <= std::numeric_limits<int32_t>::max()
+                                                ? _nextInt((int32_t) weight)
+                                                : std::uniform_int_distribution<int64_t>(0, weight - 1)(mRandom);
+        const std::string identifier = permute(condition, rule.mIdentifier, permutationRoll);
         Vector3f placed = position;
         const MobActor *prototype = ActorClassRegistry::getMobPrototype(identifier);
-        if (prototype != nullptr && !prototype->placeNaturalSpawn(owner, level, placed, mRandom))
-            continue;
+        if (prototype != nullptr) {
+            if (!prototype->placeNaturalSpawn(owner, level, placed, mRandom))
+                continue;
+        } else {
+            const auto *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
+            if (definition == nullptr || definition->mIsProjectile)
+                continue;
+        }
 
         ServerActor *spawned = owner.spawnActor(level, identifier, placed, [&condition](ServerActor &actor) {
             actor.setPersistent(false);

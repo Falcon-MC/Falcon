@@ -31,7 +31,7 @@ namespace {
                         && ruins->mProjection == JigsawPlacer::Projection::WorldSurface,
                 "The trail ruins are not read");
         const JigsawStructures::Structure *camp = structures.structure("minecraft:abandoned_camp_forest");
-        require(camp != nullptr && camp->mMaxDepth == 3 && camp->mPadding == 10
+        require(camp != nullptr && camp->mMaxDepth == 3 && camp->mPaddingTop == 10 && camp->mPaddingBottom == 10
                         && camp->mAdaptation == TerrainBeard::Adaptation::BeardThin && camp->mBiomeFilter.size() == 3,
                 "A camp is not read");
 
@@ -63,7 +63,7 @@ namespace {
 
         const JigsawStructures::Structure *chambers = structures.structure("minecraft:trial_chambers");
         require(chambers != nullptr && chambers->mMaxDepth == 20 && chambers->mStartY == -40
-                        && chambers->mStartYMax == -20 && chambers->mPadding == 10 && chambers->mAliases.size() == 3
+                        && chambers->mStartYMax == -20 && chambers->mPaddingTop == 10 && chambers->mPaddingBottom == 10 && chambers->mAliases.size() == 3
                         && chambers->mAdaptation == TerrainBeard::Adaptation::Encapsulate,
                 "The trial chambers are not registered");
         const JigsawPlacer::Pool *hallway = structures.pool("minecraft:trial_chambers/hallway");

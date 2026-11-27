@@ -95,6 +95,7 @@ public:
         std::string mStartPool;
         std::string mStartJigsaw;
         int32_t mMaxDepth = 0;
+        bool mKeepStartAtZeroDepth = false;
         int32_t mStartX = 0;
         int32_t mStartY = 0;
         int32_t mStartZ = 0;
