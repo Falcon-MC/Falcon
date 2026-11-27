@@ -157,6 +157,9 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "Protocol/Packets/CommandBlockUpdatePacket.h"
+#include "Protocol/Packets/StructureBlockUpdatePacket.h"
+#include "Protocol/Packets/StructureTemplateDataRequestPacket.h"
+#include "World/Level/Block/Systems/StructureBlockSystem.h"
 #include "World/Level/Block/BedBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Item/CraftingRecipeTable.h"
@@ -1096,6 +1099,7 @@ void ServerNetworkHandler::tick(bool paused) {
         RedstoneSystem::tick(*this, *level);
         PistonSystem::tick(*this, *level);
         CommandBlockSystem::tickCommandBlocks(*this, *level);
+        getWorldOf(*level).getStructureBlocks().tick(*this, *level);
     }
     mProfiler.endSection(ProfilerSection::Redstone);
 
@@ -1638,6 +1642,8 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::SetPlayerGameType,
             MinecraftPacketIds::BlockActorData,
             MinecraftPacketIds::CommandBlockUpdate,
+            MinecraftPacketIds::StructureBlockUpdate,
+            MinecraftPacketIds::StructureTemplateDataRequest,
             MinecraftPacketIds::BlockPickRequest,
             MinecraftPacketIds::ActorPickRequest,
             MinecraftPacketIds::Emote,
@@ -2638,6 +2644,16 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandBloc
         return;
 
     CommandBlockSystem::onCommandBlockUpdate(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const StructureBlockUpdatePacket &packet) {
+    if (ServerPlayer *player = _getPlayer(id); player != nullptr)
+        getWorldOf(getLevelFor(*player)).getStructureBlocks().update(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const StructureTemplateDataRequestPacket &packet) {
+    if (ServerPlayer *player = _getPlayer(id); player != nullptr)
+        getWorldOf(getLevelFor(*player)).getStructureBlocks().request(*this, *player, packet);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRequestPacket &packet) {

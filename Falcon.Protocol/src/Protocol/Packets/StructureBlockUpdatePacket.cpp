@@ -6,7 +6,9 @@ namespace {
 
     void writeEditorData(BinaryStream &stream, const StructureEditorData &data) {
         stream.putString(data.mName);
-        stream.putString(data.mFilteredName);
+        stream.putOptionalPresent(!data.mFilteredName.empty());
+        if (!data.mFilteredName.empty())
+            stream.putString(data.mFilteredName);
         stream.putString(data.mDataField);
         stream.putBool(data.mIncludingPlayers);
         stream.putBool(data.mBoundingBoxVisible);
@@ -18,7 +20,8 @@ namespace {
     StructureEditorData readEditorData(ReadOnlyBinaryStream &stream) {
         StructureEditorData data;
         data.mName = stream.getString();
-        data.mFilteredName = stream.getString();
+        if (stream.getOptionalPresent())
+            data.mFilteredName = stream.getString();
         data.mDataField = stream.getString();
         data.mIncludingPlayers = stream.getBool();
         data.mBoundingBoxVisible = stream.getBool();
@@ -35,14 +38,14 @@ StructureBlockUpdatePacket::StructureBlockUpdatePacket() = default;
 void StructureBlockUpdatePacket::write(BinaryStream &stream, const PacketCodecContext &context) const {
     stream.putBlockPosition(mBlockPosition);
     writeEditorData(stream, mEditorData);
-    stream.putBool(mPowered);
+    stream.putBool(mTrigger);
     stream.putBool(mWaterlogged);
 }
 
 void StructureBlockUpdatePacket::read(ReadOnlyBinaryStream &stream, const PacketCodecContext &context) {
     mBlockPosition = stream.getBlockPosition();
     mEditorData = readEditorData(stream);
-    mPowered = stream.getBool();
+    mTrigger = stream.getBool();
     mWaterlogged = stream.getBool();
 }
 

@@ -5,6 +5,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/PositionTrackingDB.h"
 #include "World/Level/TickingAreaManager.h"
+#include "World/Level/Block/Systems/StructureBlockSystem.h"
 
 #include <unordered_map>
 #include <array>
@@ -62,6 +63,10 @@ public:
 
     std::vector<Level *> getLevels();
 
+    StructureBlockSystem &getStructureBlocks() {
+        return mStructureBlocks;
+    }
+
     TickingAreaManager &getTickingAreas() {
         return mTickingAreas;
     }
@@ -101,6 +106,7 @@ private:
     // kept whole: fields the server ignores are written back unchanged
     Tag mTheEndData = Tag::ofCompound();
     TickingAreaManager mTickingAreas;
+    StructureBlockSystem mStructureBlocks;
     PositionTrackingDB mPositionTracking;
     std::unordered_map<int32_t, std::unordered_set<int64_t>> mActorLoadedChunks;
 };

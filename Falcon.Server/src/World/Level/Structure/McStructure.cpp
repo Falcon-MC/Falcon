@@ -262,12 +262,14 @@ McStructure McStructure::capture(ServerNetworkHandler &owner, Level &level, cons
                         continue;
                     }
                     const BlockState state = level.getBlockState(x, y, z);
+                    if (state.mName == BlockNames::STRUCTURE_VOID)
+                        continue;
                     structure.setBlock(local, &state);
                     const BlockState overlay = level.getBlockStateAtLayer(x, y, z, 1);
                     if (overlay.mName != BlockNames::AIR)
                         structure.setBlock(local, &overlay, 1);
                     if (BlockActor *actor = level.getBlockActors().find(Vector3i(x, y, z)))
-                        structure.setBlockEntity(local, actor->saveNbt());
+                        structure.setBlockEntity(local, actor->saveWithPosition());
                 }
             }
         }
@@ -329,59 +331,66 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
     const float integrity = std::min(options.mIntegrity * 100.0f, 100.0f);
 
     if (options.mBlocks) {
-        for (int32_t y = 0; y < mSize.y; ++y) {
-            for (int32_t x = 0; x < mSize.x; ++x) {
-                for (int32_t z = 0; z < mSize.z; ++z) {
-                    const int64_t cell = ((int64_t) y * mSize.x + x) * mSize.z + z;
-                    if (cell < options.mFromCell || cell >= options.mToCell)
-                        continue;
-                    const Vector3i local(x, y, z);
-                    const BlockState *state = getBlock(local);
-                    if (state == nullptr || !_kept(_index(local), integrity, options.mSeed))
-                        continue;
-                    const Vector3i offset = transform(local, options);
-                    const Vector3i target(at.x + offset.x, at.y + offset.y, at.z + offset.z);
-                    if (target.y < level.getMinY() || target.y > level.getMaxY()
-                        || level.peekBlockPtr(target.x, target.y, target.z) == nullptr)
-                        continue;
+        const int64_t layerCells = (int64_t) mSize.x * mSize.z;
+        const int64_t end = std::min(options.mToCell, layerCells * mSize.y);
+        for (int64_t cell = std::max<int64_t>(0, options.mFromCell); cell < end; ++cell) {
+            const int64_t inLayer = cell % layerCells;
+            const Vector3i local((int32_t) (inLayer / mSize.z), (int32_t) (cell / layerCells),
+                                 (int32_t) (inLayer % mSize.z));
+            const BlockState *state = getBlock(local);
+            if (state == nullptr || state->mName == BlockNames::STRUCTURE_VOID
+                || !_kept(_index(local), integrity, options.mSeed))
+                continue;
+            const Vector3i offset = transform(local, options);
+            const Vector3i target(at.x + offset.x, at.y + offset.y, at.z + offset.z);
+            if (target.y < level.getMinY() || target.y > level.getMaxY()
+                || level.peekBlockPtr(target.x, target.y, target.z) == nullptr)
+                continue;
 
-                    // the states turn with the structure
-                    BlockState chosen = StructureBlockRotation::apply(*state, options.mRotation, (int) options.mMirror);
-                    if (options.mFilter && !options.mFilter(target, chosen))
-                        continue;
-                    state = &chosen;
-                    const bool inWater = options.mKeepWorldWater
-                                         && level.getBlockState(target.x, target.y, target.z).mName == BlockNames::WATER
-                                         && LiquidPhysicsSystem::getWaterloggingLevel(*state) > 0;
-                    level.getBlockActors().remove(target);
-                    level.setBlock(target, *state, true);
-                    BlockActionHandler::broadcastBlockUpdate(owner, level, target, *state);
+            // the states turn with the structure
+            BlockState chosen = StructureBlockRotation::apply(*state, options.mRotation, (int) options.mMirror);
+            if (options.mFilter && !options.mFilter(target, chosen))
+                continue;
+            state = &chosen;
+            const bool inWater = options.mKeepWorldWater
+                                 && level.getBlockState(target.x, target.y, target.z).mName == BlockNames::WATER
+                                 && LiquidPhysicsSystem::getWaterloggingLevel(*state) > 0;
+            level.getBlockActors().remove(target);
+            level.setBlock(target, *state, true);
+            if (level.getOwner() == nullptr)
+                BlockActionHandler::broadcastBlockUpdate(owner, level, target, *state);
 
-                    const BlockState *overlay = getBlock(local, 1);
-                    BlockState water("minecraft:water");
-                    water.mStates.putInt("liquid_depth", 0);
-                    const BlockState *layer1 = overlay != nullptr ? overlay : (options.mWaterlogged || inWater ? &water : nullptr);
-                    if (layer1 != nullptr) {
-                        level.setBlockStateAtLayer(target.x, target.y, target.z, 1, *layer1);
-                        BlockActionHandler::broadcastBlockUpdate(owner, level, target, *layer1, 1);
-                    }
-
-                    const Tag *data = getBlockEntity(local);
-                    std::unique_ptr<BlockActor> actor = data != nullptr ? BlockActorStore::create(data->getString("id"))
-                                                                        : nullptr;
-                    if (actor == nullptr)
-                        continue;
-                    Tag moved = *data;
-                    moved.putInt("x", target.x);
-                    moved.putInt("y", target.y);
-                    moved.putInt("z", target.z);
-                    actor->loadNbt(moved, owner.getCodecContext());
-                    actor->setPosition(target);
-                    BlockActor &placed = *actor;
-                    level.getBlockActors().insert(std::move(actor));
-                    BlockActionHandler::broadcastBlockActorData(owner, level, placed);
-                }
+            const BlockState *overlay = getBlock(local, 1);
+            BlockState water("minecraft:water");
+            water.mStates.putInt("liquid_depth", 0);
+            const BlockState air;
+            const BlockState *layer1 = overlay;
+            if (layer1 == nullptr) {
+                const bool fill = inWater || (options.mWaterlogged && LiquidPhysicsSystem::getWaterloggingLevel(*state) > 0);
+                layer1 = fill ? &water : &air;
             }
+            if (level.getBlockStateAtLayer(target.x, target.y, target.z, 1) != *layer1) {
+                level.setBlockStateAtLayer(target.x, target.y, target.z, 1, *layer1);
+                BlockActionHandler::broadcastBlockUpdate(owner, level, target, *layer1, 1);
+            }
+
+            const Tag *data = getBlockEntity(local);
+            std::unique_ptr<BlockActor> actor = data != nullptr ? BlockActorStore::create(data->getString("id"))
+                                                                : nullptr;
+            if (actor == nullptr)
+                continue;
+            Tag moved = *data;
+            moved.putInt("x", target.x);
+            moved.putInt("y", target.y);
+            moved.putInt("z", target.z);
+            actor->loadNbt(moved, owner.getCodecContext());
+            actor->loadLootTable(moved);
+            actor->loadDynamicProperties(moved);
+            actor->loadEntityStorage(moved);
+            actor->setPosition(target);
+            BlockActor &placed = *actor;
+            level.getBlockActors().insert(std::move(actor));
+            BlockActionHandler::broadcastBlockActorData(owner, level, placed);
         }
     }
 
@@ -397,10 +406,34 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
         const float lx = values[0].asFloat() - (float) mWorldOrigin.x;
         const float ly = values[1].asFloat() - (float) mWorldOrigin.y;
         const float lz = values[2].asFloat() - (float) mWorldOrigin.z;
-        const int32_t cellX = (int32_t) std::floor(lx), cellZ = (int32_t) std::floor(lz);
-        const Vector3i cell = transform(Vector3i(cellX, 0, cellZ), options);
-        const Vector3f target((float) at.x + (float) cell.x + 0.5f, (float) at.y + ly,
-                              (float) at.z + (float) cell.z + 0.5f);
+        if (!(lx >= 0 && lx < mSize.x && ly >= 0 && ly < mSize.y && lz >= 0 && lz < mSize.z))
+            continue;
+        const bool mirrorX = options.mMirror == Mirror::Z || options.mMirror == Mirror::XZ;
+        const bool mirrorZ = options.mMirror == Mirror::X || options.mMirror == Mirror::XZ;
+        const float x = mirrorX ? (float) mSize.x - lx : lx;
+        const float z = mirrorZ ? (float) mSize.z - lz : lz;
+        Vector3f target((float) at.x, (float) at.y + ly, (float) at.z);
+        switch (options.mRotation & 3) {
+            case 1:
+                target.x += (float) mSize.z - z;
+                target.z += x;
+                break;
+            case 2:
+                target.x += (float) mSize.x - x;
+                target.z += (float) mSize.z - z;
+                break;
+            case 3:
+                target.x += z;
+                target.z += (float) mSize.x - x;
+                break;
+            default:
+                target.x += x;
+                target.z += z;
+                break;
+        }
+        if (target.y < (float) level.getMinY() || target.y >= (float) level.getMaxY() + 1
+            || !level.isChunkResident((int32_t) std::floor(target.x) >> 4, (int32_t) std::floor(target.z) >> 4))
+            continue;
         Tag data = entity;
         data.remove("UniqueID");
         data.remove("Pos");
@@ -409,6 +442,12 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
             actor.loadNbt(data);
             actor.setUniqueId(uniqueId);
             actor.setPosition(target);
+            const Vector3f oldRotation = actor.getRotation();
+            float yaw = mirrorX ? -oldRotation.y : oldRotation.y;
+            if (mirrorZ)
+                yaw = 180.0f - yaw;
+            yaw = std::remainder(yaw + (float) (options.mRotation & 3) * 90.0f, 360.0f);
+            actor.setRotation(Vector3f(oldRotation.x, yaw, yaw));
         });
     }
 }

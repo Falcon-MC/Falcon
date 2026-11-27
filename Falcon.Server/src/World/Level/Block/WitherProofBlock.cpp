@@ -9,6 +9,6 @@ bool WitherProofBlock::matches(const std::string &identifier) {
     return BlockIdentifier::equalsAny(identifier,
                                       {"minecraft:bedrock", "minecraft:invisible_bedrock", "minecraft:barrier",
                                        "minecraft:border_block", "minecraft:allow", "minecraft:deny",
-                                       "minecraft:chalkboard", "minecraft:camera", "minecraft:structure_block",
+                                       "minecraft:chalkboard", "minecraft:camera",
                                        "minecraft:structure_void", "minecraft:reinforced_deepslate"});
 }
