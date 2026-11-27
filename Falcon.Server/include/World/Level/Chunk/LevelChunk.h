@@ -56,6 +56,8 @@ struct LevelChunkNetworkSnapshot {
 
     // the same bytes as LevelChunk::encodeNetwork at the time of the copy
     std::string encode(const BlockNetworkIdMap *blockIds) const;
+
+    size_t copiedBytes() const;
 };
 
 // main thread once resident; workers only see copies; network encodings cached per sub-chunk
@@ -132,6 +134,9 @@ public:
 
     // main thread only: unpacks a packed chunk
     LevelChunkNetworkSnapshot snapshotNetwork() const;
+
+    // the copiedBytes of the snapshot snapshotNetwork would make, without making it; main thread only
+    size_t snapshotNetworkBytes() const;
 
     const std::string &encodeNetworkAnchor() const;
 

@@ -22,18 +22,30 @@ namespace {
 
 ChunkEncodeAhead::ChunkEncodeAhead(unsigned threadCount) {
     mThreads.reserve(threadCount);
-    for (unsigned i = 0; i < threadCount; ++i)
-        mThreads.emplace_back([this]() { _work(); });
+    try {
+        for (unsigned i = 0; i < threadCount; ++i)
+            mThreads.emplace_back([this]() { _work(); });
+    } catch (...) {
+        // a joinable thread destroyed by the unwinding would end the process: the ones started stop first
+        _stopWorkers();
+        throw;
+    }
 }
 
 ChunkEncodeAhead::~ChunkEncodeAhead() {
+    _stopWorkers();
+}
+
+void ChunkEncodeAhead::_stopWorkers() {
     {
         std::lock_guard<std::mutex> lock(mMutex);
         mStopping = true;
     }
     mWake.notify_all();
-    for (std::thread &thread: mThreads)
-        thread.join();
+    for (std::thread &thread: mThreads) {
+        if (thread.joinable())
+            thread.join();
+    }
 }
 
 size_t ChunkEncodeAhead::StoredKeyHasher::operator()(const StoredKey &key) const {
@@ -51,33 +63,53 @@ const std::string *ChunkEncodeAhead::findStoredBlockActors(const Level &level, i
 
 void ChunkEncodeAhead::start(ServerNetworkHandler &owner) {
     mStoredBlockActors.clear();
-    ChunkPacketCache &cache = owner.getChunkPacketCache();
-    std::vector<Job> jobs;
-    // players near each other ask for the same chunks
-    std::unordered_set<ChunkPacketCache::Key, KeyHasher> queued;
-    std::vector<int64_t> picks;
 
+    struct PlayerPicks {
+        Level *mLevel;
+        const PacketCodecContext *mContext;
+        std::vector<int64_t> mChunks;
+    };
+    std::vector<PlayerPicks> players;
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent || !player.hasChunkPosition())
             continue;
-        picks.clear();
-        ChunkStreamHandler::peekNextSends(owner, player, picks);
-        if (picks.empty())
-            continue;
+        PlayerPicks picks{&owner.getLevelFor(player), &owner.getCodecContext(entry.first), {}};
+        ChunkStreamHandler::peekNextSends(owner, player, picks.mChunks);
+        if (!picks.mChunks.empty())
+            players.push_back(std::move(picks));
+    }
 
-        Level &level = owner.getLevelFor(player);
-        const PacketCodecContext &context = owner.getCodecContext(entry.first);
-        for (const int64_t hash: picks) {
-            const ChunkPacketCache::Key key{&level, hash, &context};
+    ChunkPacketCache &cache = owner.getChunkPacketCache();
+    std::vector<Job> jobs;
+    size_t copiedBytes = 0;
+    // players near each other ask for the same chunks
+    std::unordered_set<ChunkPacketCache::Key, KeyHasher> queued;
+    // one chunk per player per round: a capped batch still reaches every player's nearest chunks; whatever the cap
+    // leaves is encoded at its send as before
+    bool full = false;
+    for (size_t round = 0; !full; ++round) {
+        bool more = false;
+        for (const PlayerPicks &picks: players) {
+            if (round >= picks.mChunks.size())
+                continue;
+            more = true;
+            const int64_t hash = picks.mChunks[round];
+            const ChunkPacketCache::Key key{picks.mLevel, hash, picks.mContext};
             if (queued.count(key) != 0)
                 continue;
 
+            Level &level = *picks.mLevel;
             const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
             const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
             const LevelChunk *chunk = level.peekChunkPtr(chunkX, chunkZ);
             if (chunk == nullptr)
                 continue;
+            const size_t chunkBytes = chunk->snapshotNetworkBytes();
+            if (jobs.size() >= MAX_JOBS_PER_TICK || copiedBytes + chunkBytes > MAX_COPIED_BYTES_PER_TICK) {
+                full = true;
+                break;
+            }
 
             const bool fromStorage = !level.getBlockActors().isChunkLoaded(chunkX, chunkZ);
             ChunkPacketCache::Stamp stamp = ChunkStreamHandler::chunkStamp(owner, level, chunkX, chunkZ);
@@ -88,9 +120,12 @@ void ChunkEncodeAhead::start(ServerNetworkHandler &owner) {
             if (cache.contains(key, stamp))
                 continue;
             queued.insert(key);
-            jobs.push_back(Job{key, std::move(stamp), context, chunk->snapshotNetwork(), chunkX, chunkZ,
+            copiedBytes += chunkBytes + stamp.mBlockActors.size();
+            jobs.push_back(Job{key, std::move(stamp), *picks.mContext, chunk->snapshotNetwork(), chunkX, chunkZ,
                                level.getDimensionId(), std::string()});
         }
+        if (!more)
+            break;
     }
 
     if (jobs.empty())

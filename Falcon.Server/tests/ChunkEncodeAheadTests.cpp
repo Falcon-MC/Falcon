@@ -101,6 +101,23 @@ namespace {
         return map;
     }
 
+    // the batch cap is checked before copying: the size it reads must be the copy's
+    void copySizeKnownBeforeCopy() {
+        uint32_t seed = 500;
+        for (const Shape &shape: shapes()) {
+            LevelChunk chunk(2, 2);
+            fill(chunk, shape, seed++);
+            const size_t before = chunk.snapshotNetworkBytes();
+            require(before == chunk.snapshotNetwork().copiedBytes(),
+                    "the size read before copying differs from the copy with " + std::to_string(shape.mDistinctStates)
+                            + " states");
+            require(before > 0, "a filled chunk reports an empty copy");
+        }
+        LevelChunk empty(0, 0);
+        require(empty.snapshotNetworkBytes() == 0 && empty.snapshotNetwork().copiedBytes() == 0,
+                "an empty chunk reports a copy");
+    }
+
     void emptyChunk() {
         LevelChunk chunk(3, -7);
         require(chunk.snapshotNetwork().encode(nullptr) == encodedOnMain(chunk, nullptr),
@@ -213,6 +230,7 @@ int main() {
     };
 
     check("empty chunk copy encodes like the chunk", emptyChunk);
+    check("copy size is known before the copy", copySizeKnownBeforeCopy);
     check("chunk copy encodes like the chunk, every palette width", sectionsMatch);
     check("worker packet equals the main thread packet", packetsMatch);
     check("copies stay the same while the chunks change", copiesAreImmutable);

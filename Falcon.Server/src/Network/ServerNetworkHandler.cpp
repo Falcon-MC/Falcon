@@ -1024,8 +1024,16 @@ void ServerNetworkHandler::tick(bool paused) {
 
     if (!mChunkEncodeAheadMade) {
         mChunkEncodeAheadMade = true;
-        if (mProperties.getChunkEncodeThreads() > 0)
-            mChunkEncodeAhead = std::make_unique<ChunkEncodeAhead>((unsigned) mProperties.getChunkEncodeThreads());
+        if (mProperties.getChunkEncodeThreads() > 0) {
+            try {
+                mChunkEncodeAhead =
+                        std::make_unique<ChunkEncodeAhead>((unsigned) mProperties.getChunkEncodeThreads());
+            } catch (const std::exception &error) {
+                LOG_WARN(LogAreaID::Server, "chunk-encode-threads: the threads could not start (%s); chunks are "
+                                            "encoded at their sends",
+                         error.what());
+            }
+        }
     }
     // after the world tick: the chunks it finished are among this tick's sends, which stay in the players' tick
     if (mChunkEncodeAhead != nullptr) {

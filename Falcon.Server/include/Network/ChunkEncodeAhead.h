@@ -36,6 +36,11 @@ public:
         std::string mEncoded;
     };
 
+    // the most a tick copies and encodes ahead; the chunks past either cap are encoded at their send as before
+    static constexpr size_t MAX_JOBS_PER_TICK = 256;
+    static constexpr size_t MAX_COPIED_BYTES_PER_TICK = 8 * 1024 * 1024;
+
+    // throws std::system_error when a worker can't start, after stopping the ones that did
     explicit ChunkEncodeAhead(unsigned threadCount);
 
     ~ChunkEncodeAhead();
@@ -83,6 +88,8 @@ private:
     };
 
     void _work();
+
+    void _stopWorkers();
 
     // filled and read on the main thread only, until the next start()
     std::unordered_map<StoredKey, StoredBlockActors, StoredKeyHasher> mStoredBlockActors;
