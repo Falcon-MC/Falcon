@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Nether/NetherGenerator.h"
 
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.h"
@@ -57,7 +59,8 @@ int64_t NetherGenerator::chunkHash(int32_t chunkX, int32_t chunkZ) {
 }
 
 int32_t NetherGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
-    return mBiomeSource->pickBiomeId(x, y, z);
+    return BiomeChunkGenDataRegistry::replaceBiome(DimensionType::Nether, mSeed, x & ~3, z & ~3,
+                                                  mBiomeSource->pickBiomeId(x, y, z));
 }
 
 void NetherGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const {
@@ -72,9 +75,19 @@ void NetherGenerator::decorateBeforePortal(Level &level, LevelChunk &chunk,
     NetherFeatureBuilder::apply(level, chunk, overflow);
 }
 
-void NetherGenerator::_generateBiomeMap(LevelChunk &chunk) const {
+void NetherGenerator::_generateBiomeMap(LevelChunk &chunk, int32_t *originalBiomes) const {
     int32_t biomes[256];
     mBiomeSource->pickChunk(chunk.getX(), chunk.getZ(), biomes);
+    if (originalBiomes != nullptr) {
+        std::copy(std::begin(biomes), std::end(biomes), originalBiomes);
+        for (int32_t x = 0; x < 16; ++x) {
+            for (int32_t z = 0; z < 16; ++z) {
+                auto &biome = biomes[(x << 4) | z];
+                biome = BiomeChunkGenDataRegistry::replaceBiome(DimensionType::Nether, mSeed,
+                        chunk.getX() * 16 + (x & ~3), chunk.getZ() * 16 + (z & ~3), biome);
+            }
+        }
+    }
 
     for (int32_t y = NetherGeneratorConstants::MAX_Y; y >= NetherGeneratorConstants::MIN_Y; y--) {
         for (int32_t x = 0; x < 16; x++) {
@@ -169,11 +182,13 @@ void NetherGenerator::_generateTerrain(LevelChunk &chunk) const {
 }
 
 void NetherGenerator::generate(LevelChunk &chunk) const {
-    _generateBiomeMap(chunk);
+    int32_t originalBiomes[256];
+    int32_t *surfaceBiomes = BiomeChunkGenDataRegistry::hasReplacements(DimensionType::Nether) ? originalBiomes : nullptr;
+    _generateBiomeMap(chunk, surfaceBiomes);
 
     _generateTerrain(chunk);
 
-    mSurfaceBuilder->apply(chunk);
+    mSurfaceBuilder->apply(chunk, surfaceBiomes);
 
     mCarvers->carve(chunk);
 

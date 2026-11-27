@@ -71,6 +71,8 @@ class SpawnRules {
 public:
     static void initialize();
 
+    static void addPack(const std::string &packRoot);
+
     static const std::vector<SpawnRule> &getRules();
 
     static const std::string &getPopulation(const std::string &identifier);

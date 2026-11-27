@@ -2,8 +2,12 @@
 
 #include "Scripting/ScriptModules.h"
 
+#include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
+
+namespace json { struct Value; }
 
 // a manifest setting at its default: the server has no settings screen to change it
 struct PackSetting {
@@ -20,12 +24,15 @@ struct BehaviorPack {
     std::string mName;
     std::string mUuid;
     std::string mPath;
+    bool mHasDataModule = false;
     std::string mScriptEntry;
     std::string mScriptModuleUuid;
     std::string mScriptModuleVersion;
     std::vector<ScriptModuleDependency> mScriptModules;
     std::vector<std::string> mDependencyUuids;
     std::vector<PackSetting> mSettings;
+
+    void visitJson(std::string_view folder, const std::function<void(const json::Value &)> &visit) const;
 
     bool hasScript() const {
         return !mScriptEntry.empty();

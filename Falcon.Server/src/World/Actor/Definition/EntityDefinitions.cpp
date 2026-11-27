@@ -1,6 +1,7 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "Scripting/BehaviorPackManager.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "EntityDefinitionsJson.h"
 
@@ -18,6 +19,8 @@ namespace {
         static ComponentIds ids;
         return ids;
     }
+
+    std::map<std::string, std::unique_ptr<json::Value>, std::less<>> packDefinitions;
 
     void internComponents(const json::Value *components) {
         if (components == nullptr)
@@ -74,7 +77,29 @@ void EntityDefinitions::initialize() {
     EntityFilter::compileDefinitions(_root().get());
 }
 
+void EntityDefinitions::loadPacks(const std::vector<BehaviorPack> &packs) {
+    packDefinitions.clear();
+    for (const auto &pack: packs) {
+        pack.visitJson("entities", [](const json::Value &doc) {
+            const auto *definition = doc.get("minecraft:entity");
+            const auto *description = definition == nullptr ? nullptr : definition->get("description");
+            const auto *identifier = description == nullptr ? nullptr : description->get("identifier");
+            if (identifier == nullptr || !identifier->isString() || identifier->mString.empty())
+                return;
+
+            internComponents(definition->get("components"));
+            if (const auto *groups = definition->get("component_groups")) {
+                for (const auto &group: groups->mKeys)
+                    internComponents(groups->get(group));
+            }
+            packDefinitions[identifier->mString] = definition->clone();
+        });
+    }
+}
+
 const json::Value *EntityDefinitions::find(const std::string &identifier) {
+    if (const auto pack = packDefinitions.find(identifier); pack != packDefinitions.end())
+        return pack->second.get();
     return _root() == nullptr ? nullptr : _root()->get(identifier);
 }
 

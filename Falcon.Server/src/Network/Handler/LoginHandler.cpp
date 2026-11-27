@@ -9,6 +9,7 @@
 #include "World/Level/Block/VoxelShapeRegistry.h"
 #include "Server/Commands/Command.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Json/Json.h"
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
@@ -41,7 +42,7 @@
 #include "Protocol/Packets/DimensionDataPacket.h"
 #include "Protocol/Packets/CreativeContentPacket.h"
 #include "Protocol/Packets/CameraPresetsPacket.h"
-#include "Protocol/Types/CameraPresets.h"
+#include "Server/CameraPresetRegistry.h"
 #include "Protocol/Packets/ItemRegistryPacket.h"
 #include "Protocol/Packets/JigsawStructureDataPacket.h"
 #include "Protocol/Packets/LoginPacket.h"
@@ -71,6 +72,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iterator>
 #include <unordered_map>
@@ -932,7 +935,7 @@ void LoginHandler::sendCameraPresets(ServerNetworkHandler &owner, ServerPlayer &
     sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CameraPresets,
                           [](const PacketCodecContext &context) {
                               CameraPresetsPacket presets;
-                              presets.mPresets = standardCameraPresets();
+                              presets.mPresets = CameraPresetRegistry::getPresets();
                               return encodePacket(presets, context);
                           });
 }
@@ -1350,6 +1353,64 @@ namespace {
     }
 }
 
+namespace {
+    struct CatalogItem {
+        std::string mIdentifier;
+        std::string mCategory;
+        std::string mGroup;
+        std::string mIcon;
+    };
+
+    std::vector<CatalogItem> loadCreativeCatalog(const std::vector<BehaviorPack> &packs) {
+        std::vector<CatalogItem> items;
+        std::unordered_set<std::string> seen;
+        for (const BehaviorPack &pack: packs) {
+            const auto path = std::filesystem::path(pack.mPath) / "item_catalog" / "crafting_item_catalog.json";
+            std::ifstream file(path, std::ios::binary);
+            if (!file)
+                continue;
+            const std::string contents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            const auto document = json::parse(contents);
+            const json::Value *catalog = document != nullptr ? document->get("minecraft:crafting_items_catalog") : nullptr;
+            const json::Value *categories = catalog != nullptr ? catalog->get("categories") : nullptr;
+            if (categories == nullptr || !categories->isArray()) {
+                LOG_WARN(LogAreaID::Server, "Invalid item catalog in %s", path.string().c_str());
+                continue;
+            }
+            for (const auto &category: categories->mArray) {
+                const json::Value *name = category->get("category_name");
+                const json::Value *groups = category->get("groups");
+                if (name == nullptr || !name->isString() || groups == nullptr || !groups->isArray())
+                    continue;
+                const std::string &categoryName = name->mString;
+                if (categoryName != "construction" && categoryName != "nature" && categoryName != "equipment"
+                    && categoryName != "items")
+                    continue;
+                for (const auto &group: groups->mArray) {
+                    const json::Value *groupId = group->get("group_identifier");
+                    const json::Value *groupName = groupId != nullptr ? groupId->get("name") : nullptr;
+                    const json::Value *icon = groupId != nullptr ? groupId->get("icon") : nullptr;
+                    const json::Value *entries = group->get("items");
+                    if (entries == nullptr || !entries->isArray())
+                        continue;
+                    for (const auto &item: entries->mArray) {
+                        if (!item->isString() || item->mString.empty() || !seen.insert(item->mString).second)
+                            continue;
+                        items.push_back({item->mString, categoryName, groupName != nullptr ? groupName->string() : "",
+                                         icon != nullptr ? icon->string() : ""});
+                    }
+                }
+            }
+        }
+        return items;
+    }
+
+    std::string creativeGroupKey(uint8_t category, const std::string &group) {
+        const std::string name = group.starts_with("minecraft:itemGroup.") ? group.substr(10) : group;
+        return std::to_string(category) + "\x1f" + name;
+    }
+}
+
 void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
     if (!owner.getCreativeItemsMutable().empty())
         return;
@@ -1427,10 +1488,15 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
         return 4;
     };
 
+    const std::vector<CatalogItem> catalog = loadCreativeCatalog(owner.getBehaviorPacks());
+    std::unordered_set<std::string> catalogItems;
+    for (const CatalogItem &item: catalog)
+        catalogItems.insert(item.mIdentifier);
+
     auto resolveGroupIndex = [&](const std::string &category, const std::string &group,
                                  const std::shared_ptr<ItemDefinition> &icon,
                                  const std::shared_ptr<BlockDefinition> &iconBlock) -> int32_t {
-        const std::string key = category + "\x1f" + group;
+        const std::string key = creativeGroupKey(categoryId(category), group);
         auto it = customGroupIndices.find(key);
         if (it != customGroupIndices.end())
             return it->second;
@@ -1452,6 +1518,8 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
     };
 
     for (const CustomItemDefinition &item: content.getItems()) {
+        if (catalogItems.contains(item.mIdentifier))
+            continue;
         std::shared_ptr<ItemDefinition> definition = owner.getItemDefinitions().getDefinition(item.mIdentifier);
         if (definition == nullptr)
             continue;
@@ -1466,6 +1534,8 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
     }
 
     for (const CustomBlockDefinition &block: content.getBlocks()) {
+        if (catalogItems.contains(block.mIdentifier))
+            continue;
         std::shared_ptr<ItemDefinition> definition = owner.getItemDefinitions().getDefinition(block.mIdentifier);
         if (definition == nullptr)
             continue;
@@ -1479,6 +1549,34 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
         entry.mItem.mBlockDefinition = blockDefinition;
         entry.mItem.mCount = 1;
         owner.getCreativeItemsMutable().push_back(entry);
+        owner.getCreativeSourceIndicesMutable().push_back(-1);
+    }
+
+    if (!catalog.empty()) {
+        customGroupIndices.clear();
+        for (size_t index = 0; index < owner.getCreativeGroups().size(); ++index) {
+            const CreativeItemGroup &group = owner.getCreativeGroups()[index];
+            customGroupIndices.try_emplace(creativeGroupKey(group.mCategory, group.mName), (int32_t) index);
+        }
+    }
+
+    for (const CatalogItem &item: catalog) {
+        if (content.findItem(item.mIdentifier) == nullptr && content.findBlock(item.mIdentifier) == nullptr)
+            continue;
+        const auto definition = owner.getItemDefinitions().getDefinition(item.mIdentifier);
+        if (definition == nullptr)
+            continue;
+
+        const std::string &iconName = item.mIcon.empty() ? item.mIdentifier : item.mIcon;
+        CreativeItemData entry;
+        entry.mNetId = netId++;
+        entry.mGroupIndex = resolveGroupIndex(item.mCategory, item.mGroup,
+                                             owner.getItemDefinitions().getDefinition(iconName),
+                                             owner.getBlockDefinitions().getDefinition(iconName));
+        entry.mItem.mDefinition = definition;
+        entry.mItem.mBlockDefinition = owner.getBlockDefinitions().getDefinition(item.mIdentifier);
+        entry.mItem.mCount = 1;
+        owner.getCreativeItemsMutable().push_back(std::move(entry));
         owner.getCreativeSourceIndicesMutable().push_back(-1);
     }
 }

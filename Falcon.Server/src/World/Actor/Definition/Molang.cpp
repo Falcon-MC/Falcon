@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <numbers>
 #include <random>
 #include <vector>
 
@@ -38,7 +39,32 @@ namespace {
                 : mSource(source), mActor(actor), mContext(context) {}
 
         MolangValue parse() {
-            return _ternary();
+            if (mContext.mVariables == nullptr)
+                return _ternary();
+
+            MolangValue value;
+            do {
+                _skipWhitespace();
+                if (_accept("return "))
+                    return _ternary();
+
+                const size_t begin = mPosition;
+                std::string name = _readName();
+                _skipWhitespace();
+                const std::string variable = _variableName(name);
+                if ((!variable.empty() || name.starts_with("temp.") || name.starts_with("t."))
+                    && mSource.compare(mPosition, 2, "==") != 0 && _accept("=")) {
+                    value = _ternary();
+                    if (!variable.empty())
+                        (*mContext.mVariables)[variable] = value;
+                    else
+                        mTemporary[_temporaryName(name)] = value;
+                } else {
+                    mPosition = begin;
+                    value = _ternary();
+                }
+            } while (_accept(";") && mPosition < mSource.size());
+            return value;
         }
 
     private:
@@ -62,22 +88,33 @@ namespace {
             return mPosition < mSource.size() && mSource[mPosition] == token;
         }
 
+        MolangValue _branch(bool active, MolangValue (Parser::*parse)()) {
+            const bool saved = mEvaluate;
+            mEvaluate = saved && active;
+            MolangValue value = (this->*parse)();
+            mEvaluate = saved;
+            return value;
+        }
+
         MolangValue _ternary() {
             MolangValue condition = _or();
             if (!_accept("?"))
                 return condition;
 
-            MolangValue whenTrue = _ternary();
-            _accept(":");
-            MolangValue whenFalse = _ternary();
-            return condition.isTrue() ? whenTrue : whenFalse;
+            const bool takeTrue = condition.isTrue();
+            MolangValue whenTrue = _branch(takeTrue, &Parser::_ternary);
+            MolangValue whenFalse;
+            if (_accept(":"))
+                whenFalse = _branch(!takeTrue, &Parser::_ternary);
+            return takeTrue ? whenTrue : whenFalse;
         }
 
         MolangValue _or() {
             MolangValue left = _and();
             while (_accept("||")) {
-                const MolangValue right = _and();
-                left = MolangValue::ofNumber(left.isTrue() || right.isTrue() ? 1.0 : 0.0);
+                const bool value = left.isTrue();
+                const MolangValue right = _branch(!value, &Parser::_and);
+                left = MolangValue::ofNumber(value || right.isTrue());
             }
             return left;
         }
@@ -85,8 +122,9 @@ namespace {
         MolangValue _and() {
             MolangValue left = _equality();
             while (_accept("&&")) {
-                const MolangValue right = _equality();
-                left = MolangValue::ofNumber(left.isTrue() && right.isTrue() ? 1.0 : 0.0);
+                const bool value = left.isTrue();
+                const MolangValue right = _branch(value, &Parser::_equality);
+                left = MolangValue::ofNumber(value && right.isTrue());
             }
             return left;
         }
@@ -202,14 +240,28 @@ namespace {
             return MolangValue::ofNumber(value);
         }
 
-        MolangValue _identifier() {
+        static std::string _variableName(const std::string &name) {
+            if (name.starts_with("variable."))
+                return name.substr(9);
+            return name.starts_with("v.") ? name.substr(2) : std::string();
+        }
+
+        static std::string _temporaryName(const std::string &name) {
+            return name.starts_with("temp.") ? name.substr(5) : name.substr(2);
+        }
+
+        std::string _readName() {
             const size_t start = mPosition;
             while (mPosition < mSource.size()
                    && (std::isalnum((unsigned char) mSource[mPosition]) || mSource[mPosition] == '_'
                        || mSource[mPosition] == '.'))
                 mPosition++;
 
-            const std::string name = lower(mSource.substr(start, mPosition - start));
+            return lower(mSource.substr(start, mPosition - start));
+        }
+
+        MolangValue _identifier() {
+            const std::string name = _readName();
             if (name == "true")
                 return MolangValue::ofNumber(1.0);
             if (name == "false")
@@ -233,6 +285,19 @@ namespace {
         }
 
         MolangValue _call(const std::string &name, const std::vector<MolangValue> &arguments) const {
+            if (!mEvaluate)
+                return {};
+            if (mContext.mVariables != nullptr) {
+                const std::string variable = _variableName(name);
+                if (!variable.empty()) {
+                    const auto found = mContext.mVariables->find(variable);
+                    return found == mContext.mVariables->end() ? MolangValue{} : found->second;
+                }
+                if (name.starts_with("temp.") || name.starts_with("t.")) {
+                    const auto found = mTemporary.find(_temporaryName(name));
+                    return found == mTemporary.end() ? MolangValue{} : found->second;
+                }
+            }
             std::string query;
             if (name.rfind(QUERY_PREFIX, 0) == 0)
                 query = name.substr(std::char_traits<char>::length(QUERY_PREFIX));
@@ -242,6 +307,40 @@ namespace {
             if (!query.empty())
                 return _query(query, arguments);
 
+            if (name.starts_with("math.")) {
+                constexpr double RADIANS = std::numbers::pi / 180.0;
+                const double a = _argument(arguments, 0);
+                const double b = _argument(arguments, 1);
+                const double t = _argument(arguments, 2);
+                const auto minAngle = [](double value) {
+                    const double wrapped = std::fmod(value, 360.0);
+                    return wrapped >= 180.0 ? wrapped - 360.0 : wrapped < -180.0 ? wrapped + 360.0 : wrapped;
+                };
+                if (name == "math.pi")
+                    return MolangValue::ofNumber(std::numbers::pi);
+                if (name == "math.sin")
+                    return MolangValue::ofNumber(std::sin(a * RADIANS));
+                if (name == "math.cos")
+                    return MolangValue::ofNumber(std::cos(a * RADIANS));
+                if (name == "math.atan2")
+                    return MolangValue::ofNumber(std::atan2(a, b) / RADIANS);
+                if (name == "math.min_angle")
+                    return MolangValue::ofNumber(minAngle(a));
+                if (name == "math.sqrt")
+                    return MolangValue::ofNumber(a >= 0.0 ? std::sqrt(a) : 0.0);
+                if (name == "math.pow")
+                    return MolangValue::ofNumber(std::pow(a, b));
+                if (name == "math.exp")
+                    return MolangValue::ofNumber(std::exp(a));
+                if (name == "math.ln")
+                    return MolangValue::ofNumber(a > 0.0 ? std::log(a) : 0.0);
+                if (name == "math.lerp")
+                    return MolangValue::ofNumber(std::lerp(a, b, t));
+                if (name == "math.lerprotate")
+                    return MolangValue::ofNumber(a + minAngle(b - a) * t);
+                if (name == "math.hermite_blend")
+                    return MolangValue::ofNumber(a * a * (3.0 - 2.0 * a));
+            }
             if (name == "math.clamp")
                 return MolangValue::ofNumber(
                         std::min(std::max(_argument(arguments, 0), _argument(arguments, 1)), _argument(arguments, 2)));
@@ -270,7 +369,8 @@ namespace {
                         high <= low ? low : std::uniform_real_distribution<double>(low, high)(molangRandom()));
             }
             if (name == "math.die_roll") {
-                const int64_t rolls = (int64_t) std::round(_argument(arguments, 0));
+                const double count = std::round(_argument(arguments, 0));
+                const int64_t rolls = std::isfinite(count) ? (int64_t) std::clamp(count, 0.0, 4096.0) : 0;
                 const double low = _argument(arguments, 1);
                 const double high = _argument(arguments, 2);
                 double total = 0.0;
@@ -297,6 +397,31 @@ namespace {
             if (mActor == nullptr)
                 return MolangValue::ofNumber(0.0);
 
+            if (query == "anim_time")
+                return MolangValue::ofNumber(mContext.mAnimationTime);
+            if (query == "delta_time")
+                return MolangValue::ofNumber(1.0 / 20.0);
+            if (query == "state_time")
+                return MolangValue::ofNumber(mContext.mStateTime);
+            if (query == "any_animation_finished")
+                return MolangValue::ofNumber(mContext.mAnyAnimationFinished);
+            if (query == "all_animations_finished")
+                return MolangValue::ofNumber(mContext.mAllAnimationsFinished);
+            if (query == "life_time")
+                return MolangValue::ofNumber(mActor->getLifetimeTicks() / 20.0);
+            if (query == "is_on_ground")
+                return MolangValue::ofNumber(mActor->isOnGround());
+            if (query == "is_alive")
+                return MolangValue::ofNumber(mActor->isAlive());
+            if (query == "health")
+                return MolangValue::ofNumber(mActor->getHealth());
+            if (query == "max_health")
+                return MolangValue::ofNumber(mActor->getMaxHealth());
+            if (query == "ground_speed" || query == "is_moving") {
+                const auto &motion = mActor->getMotion();
+                const double speed = std::hypot(motion.x, motion.z) * 20.0;
+                return MolangValue::ofNumber(query == "ground_speed" ? speed : speed > 0.0);
+            }
             if (query == "property")
                 return _property(argument);
 
@@ -366,6 +491,8 @@ namespace {
         const std::string &mSource;
         const ServerActor *mActor;
         const MolangContext &mContext;
+        bool mEvaluate = true;
+        std::unordered_map<std::string, MolangValue> mTemporary;
         size_t mPosition = 0;
     };
 }

@@ -36,10 +36,10 @@ const BlockState &BlockManager::_getBlockAt(int32_t x, int32_t y, int32_t z, int
     if (cached != mCaches.end())
         return *cached->second;
 
-    if (mPending != nullptr) {
-        const BlockState *pending = mPending->getCachedBlock(x, y, z, layer);
-        if (pending != nullptr)
-            return *pending;
+    for (const BlockManager *pending = mPending; pending != nullptr; pending = pending->mPending) {
+        const auto found = pending->mCaches.find(key);
+        if (found != pending->mCaches.end())
+            return *found->second;
     }
 
     if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
@@ -79,6 +79,10 @@ void BlockManager::populateBeeNest(int32_t x, int32_t y, int32_t z, int32_t beeC
         saveData.putString("identifier", BeeActor::IDENTIFIER);
         hive.addOccupant(BeeActor::IDENTIFIER, std::move(saveData), GENERATED_STAY_TICKS);
     }
+}
+
+void BlockManager::storeGeneratedBlockActor(Tag data) {
+    mLevel->getBlockActors().keepGenerated(data);
 }
 
 void BlockManager::setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state) {

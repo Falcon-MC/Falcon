@@ -4,13 +4,17 @@
 #include <unordered_map>
 #include <vector>
 
+struct BehaviorPack;
+
 class Localization {
 public:
     static constexpr const char *DEFAULT_LOCALE = "en_US";
 
     static constexpr const char *LANGUAGE_NAME_KEY = "language.name";
 
-    static const Localization &getInstance();
+    static Localization &getInstance();
+
+    void loadPackTexts(const std::vector<BehaviorPack> &packs);
 
     static void setServerLocale(const std::string &locale);
 
@@ -45,6 +49,7 @@ private:
     std::string _inlineKey(const std::string &locale, const std::string &text, size_t start, size_t &end) const;
 
     std::unordered_map<std::string, Entries> mLanguages;
+    std::unordered_map<std::string, Entries> mPackLanguages;
 
     static std::string sServerLocale;
 };

@@ -1,7 +1,13 @@
-#include "World/Level/Block/Actor/TrialSpawnerBlockActor.h"
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
 
+#include "World/Level/Block/Actor/TrialSpawnerBlockActor.h"
+
+
 #include "Core/Json/Json.h"
+#include "Scripting/BehaviorPackManager.h"
+#include "Scripting/ScriptStructureRegistry.h"
+#include "World/Level/Structure/McStructure.h"
+#include "World/Level/Structure/StructureBlockRotation.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
@@ -13,6 +19,7 @@
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 #include "World/Level/LevelGen/Random/LegacyRandom.h"
@@ -26,8 +33,12 @@
 
 #include <algorithm>
 #include <array>
-#include <deque>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <mutex>
+#include <optional>
 #include <tuple>
 
 namespace {
@@ -58,7 +69,30 @@ namespace {
     }
 
     int32_t number(const json::Value *value, int32_t fallback) {
-        return value != nullptr && value->mType == json::Value::Type::Number ? (int32_t) value->mNumber : fallback;
+        if (value == nullptr || value->mType != json::Value::Type::Number)
+            return fallback;
+        const double n = value->mNumber;
+        if (!std::isfinite(n) || n < INT32_MIN || n > INT32_MAX || n != std::trunc(n))
+            return fallback;
+        return (int32_t) n;
+    }
+
+    std::optional<int32_t> overworldAnchor(const json::Value *anchor) {
+        const auto read = [anchor](const char *name) { return number(member(anchor, name), INT32_MIN); };
+        constexpr int32_t LIMIT = INT32_MAX / 4;
+        const int32_t absolute = read("absolute");
+        if (absolute >= -LIMIT && absolute <= LIMIT)
+            return absolute;
+        const int32_t aboveBottom = read("above_bottom");
+        if (aboveBottom >= 0 && aboveBottom <= LIMIT)
+            return LevelChunk::MIN_Y + aboveBottom;
+        const int32_t belowTop = read("below_top");
+        if (belowTop >= 0 && belowTop <= LIMIT)
+            return LevelChunk::MAX_Y - belowTop;
+        const int32_t fromSea = read("from_sea");
+        if (fromSea >= -LIMIT && fromSea <= LIMIT)
+            return OverworldGeneratorConstants::SEA_LEVEL + fromSea;
+        return std::nullopt;
     }
 
     // a constant int provider, or the low end of a uniform one
@@ -66,10 +100,10 @@ namespace {
         if (value == nullptr)
             return fallback;
         if (value->mType == json::Value::Type::Number)
-            return (int32_t) value->mNumber;
+            return number(value, fallback);
         const json::Value *inner = member(value, "value");
         if (inner != nullptr && inner->mType == json::Value::Type::Number)
-            return (int32_t) inner->mNumber;
+            return number(inner, fallback);
         return number(member(value, "min_inclusive"), fallback);
     }
 
@@ -295,31 +329,85 @@ namespace {
                 if (!_position(entry, position) || !StructureBlockTable::translate(palette, mPiece.mQuarterTurns, block))
                     continue;
 
-                block = StructureProcessors::apply(mRules, block, _world(position), mRandom);
-                mShare.mBlocks[position] = block;
-                for (size_t index = 0; index < candidates.size(); ++index) {
-                    if (mList->mCapped[index].mReplacements.count(block.mName) != 0)
-                        candidates[index].push_back(position);
-                }
+                _placeBlock(position, block, candidates);
                 _loot(entry, position, block);
             }
 
+            _replaceCapped(candidates);
+        }
+
+        void place(const McStructure &shape, LevelChunk &chunk) {
+            const Vector3i size = shape.getSize();
+            std::vector<std::vector<Position>> candidates(mList == nullptr ? 0 : mList->mCapped.size());
+            for (int32_t x = 0; x < size.x; ++x) {
+                for (int32_t z = 0; z < size.z; ++z) {
+                    for (int32_t y = 0; y < size.y; ++y) {
+                        const Vector3i local(x, y, z);
+                        const BlockState *state = shape.getBlock(local);
+                        if (state == nullptr || state->mName == STRUCTURE_BLOCK || state->mName == STRUCTURE_VOID)
+                            continue;
+                        Position position;
+                        if (!_position(x, y, z, position))
+                            continue;
+                        const auto &[worldX, worldY, worldZ] = position;
+                        const Tag *data = shape.getBlockEntity(local);
+                        const bool jigsaw = state->mName == JIGSAW;
+                        BlockState block;
+                        if (jigsaw) {
+                            if (data == nullptr || !StructureBlockTable::translateFinalState(
+                                    data->getString("final_state", "minecraft:air"), mPiece.mQuarterTurns, block))
+                                continue;
+                        } else {
+                            block = StructureBlockRotation::apply(*state, mPiece.mQuarterTurns, 0);
+                        }
+                        const std::string originalName = data != nullptr && !jigsaw ? block.mName : std::string();
+                        _placeBlock(position, block, candidates);
+                        if (data != nullptr && !jigsaw && originalName == block.mName) {
+                            Tag placed = *data;
+                            placed.putInt("x", worldX);
+                            placed.putInt("y", worldY);
+                            placed.putInt("z", worldZ);
+                            mShare.mGenerated.emplace_back(std::move(placed), block.mName);
+                        }
+                        if (const BlockState *overlay = shape.getBlock(local, 1)) {
+                            chunk.setBlock(worldX & 15, worldY, worldZ & 15, 1,
+                                           StructureBlockRotation::apply(*overlay, mPiece.mQuarterTurns, 0));
+                        }
+                    }
+                }
+            }
+            _replaceCapped(candidates);
+        }
+
+    private:
+        void _placeBlock(const Position &position, BlockState &block, std::vector<std::vector<Position>> &candidates) {
+            if (!mRules.empty())
+                block = StructureProcessors::apply(mRules, block, _world(position), mRandom);
+            mShare.mBlocks[position] = block;
+            for (size_t index = 0; index < candidates.size(); ++index) {
+                if (mList->mCapped[index].mReplacements.count(block.mName) != 0)
+                    candidates[index].push_back(position);
+            }
+        }
+
+        void _replaceCapped(std::vector<std::vector<Position>> &candidates) {
             for (size_t index = 0; index < candidates.size(); ++index)
                 _replace(mList->mCapped[index], candidates[index]);
         }
 
-    private:
         bool _position(const StructureTemplate::BlockEntry &entry, Position &out) {
-            int32_t x = entry.x;
-            int32_t z = entry.z;
+            return _position(entry.x, entry.y, entry.z, out);
+        }
+
+        bool _position(int32_t x, int32_t localY, int32_t z, Position &out) {
             StructureTemplate::rotate(mPiece.mQuarterTurns, x, z);
             x += mPiece.x;
             z += mPiece.z;
             if (!insideChunk(x, z, mChunkX, mChunkZ))
                 return false;
 
-            const int32_t y = mPiece.mElement->mTerrainMatching ? mTerrain.getTopHeight(x, z) - 1 + entry.y
-                                                                : mPiece.y + entry.y;
+            const int32_t y = mPiece.mElement->mTerrainMatching ? mTerrain.getTopHeight(x, z) - 1 + localY
+                                                                : mPiece.y + localY;
             if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
                 return false;
 
@@ -406,9 +494,9 @@ namespace {
 
     class SetFeature final : public StructureFeature {
     public:
-        SetFeature(const JigsawStructures &registry, const JigsawStructures::Set &set)
+        SetFeature(const JigsawStructures &registry, const JigsawStructures::Set &set, bool registerFeature)
                 : StructureFeature(withoutNamespace(set.mIdentifier), set.mSpacing, set.mSeparation, set.mSalt,
-                                   set.mSpread, Generator::Congruential),
+                                   set.mSpread, Generator::Congruential, registerFeature),
                   mRegistry(registry), mSet(set) {}
 
     protected:
@@ -434,6 +522,94 @@ JigsawStructures &JigsawStructures::get() {
     return *structures;
 }
 
+JigsawStructures &JigsawStructures::packStructures() {
+    static JigsawStructures registry(true);
+    return registry;
+}
+
+void JigsawStructures::loadPacks(const std::vector<BehaviorPack> &packs) {
+    namespace fs = std::filesystem;
+    auto document = json::Value::ofObject();
+    ScriptStructureRegistry templates;
+    for (const BehaviorPack &pack: packs) {
+        templates.addPack(pack.mPath);
+        for (const std::string folder: {"processors", "template_pools", "jigsaw_structures", "structure_sets"}) {
+            const fs::path root = fs::path(pack.mPath) / "worldgen" / folder;
+            std::error_code error;
+            std::vector<fs::path> paths;
+            for (fs::recursive_directory_iterator it(root, error), end; !error && it != end; it.increment(error)) {
+                if (it->is_regular_file(error) && it->path().extension() == ".json")
+                    paths.push_back(it->path());
+            }
+            std::sort(paths.begin(), paths.end());
+            for (const fs::path &path: paths) {
+                std::ifstream file(path, std::ios::binary);
+                const std::string bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                auto data = json::parse(bytes);
+                if (!data || !data->isObject())
+                    continue;
+                const std::string type = folder == "jigsaw_structures" ? "structures" : folder;
+                document->set(type + "/" + path.generic_string(), std::move(data));
+            }
+        }
+    }
+
+    mPlans.clear();
+    mPlanOrder.clear();
+    mFeatures.clear();
+    mSets.clear();
+    mStructures.clear();
+    mProcessors.clear();
+    mPools.clear();
+    mElements.clear();
+    mPackShapes.clear();
+    mPackTemplates.clear();
+    load(*document);
+    for (const auto &element: mElements) {
+        if (element->mLocation.empty() || mPackTemplates.contains(element->mLocation))
+            continue;
+        auto structure = templates.find(element->mLocation);
+        if (structure == nullptr)
+            continue;
+
+        auto shape = std::make_shared<JigsawPlacer::Template>();
+        const Vector3i size = structure->getSize();
+        shape->mSizeX = size.x;
+        shape->mSizeY = size.y;
+        shape->mSizeZ = size.z;
+        for (int32_t x = 0; x < size.x; ++x) {
+            for (int32_t y = 0; y < size.y; ++y) {
+                for (int32_t z = 0; z < size.z; ++z) {
+                    const Vector3i local(x, y, z);
+                    const BlockState *state = structure->getBlock(local);
+                    const Tag *tag = structure->getBlockEntity(local);
+                    if (!state || state->mName != JIGSAW || !tag)
+                        continue;
+                    const int32_t facing = state->mStates.getInt("facing_direction", -1);
+                    if (facing < 0 || facing > 5)
+                        continue;
+                    JigsawPlacer::Jigsaw marker;
+                    marker.x = x;
+                    marker.y = y;
+                    marker.z = z;
+                    marker.mFront = (JigsawPlacer::Facing) facing;
+                    marker.mTop = JigsawPlacer::Facing(1);
+                    marker.mName = tag->getString("name");
+                    marker.mTarget = tag->getString("target", marker.mName);
+                    marker.mPool = tag->getString("target_pool");
+                    marker.mFinalState = tag->getString("final_state");
+                    marker.mAligned = tag->getString("joint") == "aligned";
+                    marker.mPlacementPriority = tag->getInt("placement_priority");
+                    marker.mSelectionPriority = tag->getInt("selection_priority");
+                    shape->mJigsaws.push_back(std::move(marker));
+                }
+            }
+        }
+        mPackShapes.emplace(element->mLocation, std::move(shape));
+        mPackTemplates.emplace(element->mLocation, std::move(structure));
+    }
+}
+
 void JigsawStructures::load(const json::Value &document) {
     for (const std::string &key: document.mKeys) {
         const json::Value &entry = *document.mObject.at(key);
@@ -446,6 +622,7 @@ void JigsawStructures::load(const json::Value &document) {
                 continue;
 
             ProcessorList &out = mProcessors[name];
+            out = ProcessorList();
             for (const std::unique_ptr<json::Value> &processor: processors->mArray) {
                 const std::string type = text(member(processor.get(), "processor_type"));
                 const json::Value *rules = member(processor.get(), "rules");
@@ -467,10 +644,14 @@ void JigsawStructures::load(const json::Value &document) {
                 continue;
 
             JigsawPlacer::Pool &out = mPools[name];
+            out.mSlots.clear();
             out.mFallback = text(member(pool, "fallback"), "minecraft:empty");
             for (const std::unique_ptr<json::Value> &weighted: elements->mArray) {
                 const json::Value *element = member(weighted.get(), "element");
                 const std::string type = text(member(element, "element_type"));
+                const int32_t weight = number(member(weighted.get(), "weight"), 1);
+                if (weight < 1 || weight > 200)
+                    continue;
                 auto converted = std::make_unique<JigsawPlacer::Element>();
                 if (type == "minecraft:single_pool_element") {
                     converted->mLocation = text(member(element, "location"));
@@ -488,7 +669,6 @@ void JigsawStructures::load(const json::Value &document) {
                     kept = mElements.back().get();
                 }
                 // one slot per weight unit
-                const int32_t weight = std::max(number(member(weighted.get(), "weight"), 1), 0);
                 for (int32_t copy = 0; copy < weight; ++copy)
                     out.mSlots.push_back(kept);
             }
@@ -515,16 +695,46 @@ void JigsawStructures::load(const json::Value &document) {
             structure.mStartPool = text(member(jigsaw, "start_pool"));
             structure.mStartJigsaw = text(member(jigsaw, "start_jigsaw_name"));
             structure.mMaxDepth = number(member(jigsaw, "max_depth"), 0);
+            if (structure.mMaxDepth < 0 || structure.mMaxDepth > 20)
+                continue;
             const json::Value *distance = member(jigsaw, "max_distance_from_center");
             if (distance != nullptr && distance->mType == json::Value::Type::Number) {
-                structure.mMaxDistanceHorizontal = (int32_t) distance->mNumber;
-                structure.mMaxDistanceVertical = (int32_t) distance->mNumber;
+                structure.mMaxDistanceHorizontal = number(distance, 80);
+                structure.mMaxDistanceVertical = number(distance, 80);
             } else {
                 structure.mMaxDistanceHorizontal = number(member(distance, "horizontal"), 80);
-                structure.mMaxDistanceVertical = number(member(distance, "vertical"), 80);
+                structure.mMaxDistanceVertical =
+                        number(member(distance, "vertical"), mFromPacks ? INT32_MAX : 80);
             }
-            structure.mStartY = number(member(member(member(jigsaw, "start_height"), "value"), "absolute"), 0);
-            structure.mPadding = number(member(jigsaw, "dimension_padding"), 0);
+            if (structure.mMaxDistanceHorizontal < 1 || structure.mMaxDistanceHorizontal > 128
+                || structure.mMaxDistanceVertical < 1)
+                continue;
+            const auto *height = member(jigsaw, "start_height");
+            if (mFromPacks) {
+                const std::string type = text(member(height, "type"), "constant");
+                if (type == "constant") {
+                    const auto start = overworldAnchor(member(height, "value"));
+                    if (!start)
+                        continue;
+                    structure.mStartY = structure.mStartYMax = *start;
+                } else if (type == "uniform") {
+                    const auto min = overworldAnchor(member(height, "min"));
+                    const auto max = overworldAnchor(member(height, "max"));
+                    if (!min || !max || *min > *max)
+                        continue;
+                    structure.mStartY = *min;
+                    structure.mStartYMax = *max;
+                } else {
+                    continue;
+                }
+            } else {
+                structure.mStartY = number(member(member(height, "value"), "absolute"), 0);
+            }
+
+            const auto *padding = member(jigsaw, "dimension_padding");
+            const int32_t symmetricPadding = std::max(0, number(padding, 0));
+            structure.mPaddingTop = std::max(0, number(member(padding, "top"), symmetricPadding));
+            structure.mPaddingBottom = std::max(0, number(member(padding, "bottom"), symmetricPadding));
             const std::string projection = text(member(jigsaw, "heightmap_projection"));
             structure.mProjection = projection == "world_surface" ? JigsawPlacer::Projection::WorldSurface
                                     : projection == "ocean_floor" ? JigsawPlacer::Projection::OceanFloor
@@ -546,8 +756,10 @@ void JigsawStructures::load(const json::Value &document) {
         auto out = std::make_unique<Set>();
         out->mIdentifier = text(member(member(set, "description"), "identifier"));
         out->mSalt = number(member(placement, "salt"), 0);
-        out->mSpacing = std::max(number(member(placement, "spacing"), 1), 1);
+        out->mSpacing = number(member(placement, "spacing"), 1);
         out->mSeparation = number(member(placement, "separation"), 0);
+        if (out->mIdentifier.empty() || out->mSeparation < 0 || out->mSeparation >= out->mSpacing)
+            continue;
         out->mSpread = text(member(placement, "spread_type")) == "triangular" ? StructureFeature::Spread::Triangular
                                                                               : StructureFeature::Spread::Linear;
         const json::Value *frequency = member(placement, "frequency");
@@ -556,10 +768,14 @@ void JigsawStructures::load(const json::Value &document) {
         const json::Value *structures = member(set, "structures");
         if (structures == nullptr || !structures->isArray())
             continue;
+        int32_t totalWeight = 0;
         for (const std::unique_ptr<json::Value> &weighted: structures->mArray) {
             const Structure *structure = this->structure(text(member(weighted.get(), "structure")));
-            if (structure != nullptr)
-                out->mStructures.push_back({structure, std::max(number(member(weighted.get(), "weight"), 1), 1)});
+            const int32_t weight = number(member(weighted.get(), "weight"), 1);
+            if (structure == nullptr || weight <= 0 || weight > INT32_MAX - totalWeight)
+                continue;
+            out->mStructures.push_back({structure, weight});
+            totalWeight += weight;
         }
         if (out->mStructures.empty())
             continue;
@@ -570,7 +786,7 @@ void JigsawStructures::load(const json::Value &document) {
 
 void JigsawStructures::_addSet(std::unique_ptr<Set> set) {
     mSets.push_back(std::move(set));
-    mFeatures.push_back(std::make_unique<SetFeature>(*this, *mSets.back()));
+    mFeatures.push_back(std::make_unique<SetFeature>(*this, *mSets.back(), !mFromPacks));
 }
 
 const JigsawPlacer::Pool *JigsawStructures::pool(const std::string &name) const {
@@ -664,14 +880,15 @@ std::shared_ptr<const JigsawStructures::Plan> JigsawStructures::_generate(const 
     settings.mStartPool = structure.mStartPool;
     settings.mStartJigsaw = structure.mStartJigsaw;
     settings.mMaxDepth = structure.mMaxDepth;
+    settings.mKeepStartAtZeroDepth = true;
     settings.mStartX = chunkX * 16;
     settings.mStartY = startY;
     settings.mStartZ = chunkZ * 16;
     settings.mProjection = structure.mProjection;
     settings.mMaxDistanceHorizontal = structure.mMaxDistanceHorizontal;
     settings.mMaxDistanceVertical = structure.mMaxDistanceVertical;
-    settings.mPaddingTop = structure.mPadding;
-    settings.mPaddingBottom = structure.mPadding;
+    settings.mPaddingTop = structure.mPaddingTop;
+    settings.mPaddingBottom = structure.mPaddingBottom;
     settings.mDimensionMinY = LevelChunk::MIN_Y;
     settings.mDimensionHeight = LevelChunk::MAX_Y + 1;
     // any biome of the column under the start's centre will do
@@ -685,7 +902,15 @@ std::shared_ptr<const JigsawStructures::Plan> JigsawStructures::_generate(const 
         };
     }
 
-    JigsawPlacer placer(nextInt, pools, &templateOf, height);
+    const auto shapes = [this](const JigsawPlacer::Element &element) -> std::shared_ptr<const JigsawPlacer::Template> {
+        const auto found = mPackShapes.find(element.mLocation);
+        if (found != mPackShapes.end())
+            return found->second;
+        if (mFromPacks && element.mLocation.find(':') != std::string::npos && !element.mLocation.starts_with(NAMESPACE))
+            return nullptr;
+        return templateOf(element);
+    };
+    JigsawPlacer placer(nextInt, pools, shapes, height);
     JigsawPlacer::Result result;
     if (!placer.place(settings, result) || result.mPieces.empty())
         return nullptr;
@@ -704,22 +929,17 @@ std::shared_ptr<const JigsawStructures::Plan> JigsawStructures::_generate(const 
 
 std::shared_ptr<const JigsawStructures::Plan> JigsawStructures::plan(const ChunkGenerator &generator, const Set &set,
                                                                      int32_t chunkX, int32_t chunkZ) const {
-    using Key = std::tuple<int64_t, const Set *, int32_t, int32_t>;
-    static std::mutex mutex;
-    static std::map<Key, std::shared_ptr<const Plan>> plans;
-    static std::deque<Key> order;
-
-    const Key key = {generator.getSeed(), &set, chunkX, chunkZ};
+    const PlanKey key = {generator.getSeed(), &set, chunkX, chunkZ};
     {
-        const std::lock_guard<std::mutex> lock(mutex);
-        const auto found = plans.find(key);
-        if (found != plans.end())
+        const std::lock_guard<std::mutex> lock(mPlanMutex);
+        const auto found = mPlans.find(key);
+        if (found != mPlans.end())
             return found->second;
     }
 
     std::shared_ptr<const Plan> planned;
     const auto floorDiv = [](int32_t value, int32_t by) {
-        return value >= 0 ? value / by : -((-value + by - 1) / by);
+        return value / by - (value % by < 0 ? 1 : 0);
     };
     bool isCandidate = false;
     for (size_t index = 0; index < mSets.size(); ++index) {
@@ -759,14 +979,14 @@ std::shared_ptr<const JigsawStructures::Plan> JigsawStructures::plan(const Chunk
         }
     }
 
-    const std::lock_guard<std::mutex> lock(mutex);
-    const auto inserted = plans.emplace(key, planned);
+    const std::lock_guard<std::mutex> lock(mPlanMutex);
+    const auto inserted = mPlans.emplace(key, planned);
     if (!inserted.second)
         return inserted.first->second;
-    order.push_back(key);
-    if (order.size() > CACHED_PLANS) {
-        plans.erase(order.front());
-        order.pop_front();
+    mPlanOrder.push_back(key);
+    if (mPlanOrder.size() > CACHED_PLANS) {
+        mPlans.erase(mPlanOrder.front());
+        mPlanOrder.pop_front();
     }
     return planned;
 }
@@ -835,6 +1055,13 @@ void JigsawStructures::place(const ChunkGenerator &generator, Level &level, Leve
             }
             if (!touchesChunk(piece.mBox, chunk.getX(), chunk.getZ()))
                 continue;
+
+            const auto packed = mPackTemplates.find(piece.mElement->mLocation);
+            if (packed != mPackTemplates.end()) {
+                PiecePlacer(*this, piece, chunk.getX(), chunk.getZ(), seed, chunkRandom, terrain, share)
+                        .place(*packed->second, chunk);
+                continue;
+            }
 
             const std::shared_ptr<const StructureTemplate> shape =
                     StructureTemplate::load(templatePath(piece.mElement->mLocation));

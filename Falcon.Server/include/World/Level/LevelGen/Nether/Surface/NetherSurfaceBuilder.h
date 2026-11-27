@@ -86,7 +86,7 @@ public:
                          const std::vector<SurfaceSimplexNoise> &adjustmentNoise);
 
     // the bedrock floor, the bedrock ceiling, then every column, all from one random seeded by the chunk
-    void apply(LevelChunk &chunk) const;
+    void apply(LevelChunk &chunk, const int32_t *originalBiomes = nullptr) const;
 
 private:
     void _fillDepthNoise(int32_t chunkX, int32_t chunkZ, float *noise) const;

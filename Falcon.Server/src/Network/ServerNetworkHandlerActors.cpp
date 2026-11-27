@@ -1,4 +1,7 @@
 #include <cstring>
+#include "World/Actor/Definition/ServerAnimations.h"
+#include "World/Actor/Definition/EntityEvents.h"
+
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Projectile/ProjectileReflection.h"
@@ -160,7 +163,8 @@ namespace {
 }
 
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
-                                              const std::function<void(ServerActor &)> &configure) {
+                                              const std::function<void(ServerActor &)> &configure,
+                                              const std::string &spawnEvent) {
     // taken first: configure may spawn another actor
     const bool spawned = mSpawnCause == nullptr;
     const char *cause = spawned ? "Spawned" : mSpawnCause;
@@ -179,8 +183,11 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     actor->resetFallDistance();
 
     MobActor *mob = dynamic_cast<MobActor *>(actor.get());
-    if (mob != nullptr)
+    if (mob != nullptr) {
         mob->finalizeSpawn();
+        if (!spawnEvent.empty())
+            mob->setSpawnEvent(spawnEvent);
+    }
 
     // before configure: a projectile's callback reads its pack definition to aim it
     const CustomActorDefinition *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
@@ -193,7 +200,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
         configure(*actor);
 
     // an identifier carrying its own spawn event makes the cause Event
-    if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
+    if (spawned && (!spawnEvent.empty() || (mob != nullptr && !mob->getSpawnEvent().empty())))
         cause = "Event";
 
     if (mob != nullptr)
@@ -215,8 +222,13 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
-    if (mob != nullptr)
+    if (mob != nullptr) {
         mob->upgradeDefinition(*this, false);
+        if (definition != nullptr && !spawnEvent.empty() && ActorClassRegistry::getPrototype(identifier) == nullptr)
+            mob->startDefinition(*this);
+    } else if (!spawnEvent.empty()) {
+        EntityEvents::fire(*this, *result, spawnEvent);
+    }
     mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
@@ -361,6 +373,7 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
     if (mJoinedTracked)
         mActorChanges.push_back(ActorChange{it->second.get(), it->second->getPosition(), false});
     mVehiclesWithPendingPassengers.erase(uniqueId);
+    ServerAnimations::forget(it->second->getRuntimeId());
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
     // a walk may be running over the index: the slot goes null, erasing it would shift the walk's vector
     ServerActor *removed = it->second.get();
@@ -1390,8 +1403,9 @@ void ServerNetworkHandler::syncActorProperties(ServerActor &actor) {
     }
 }
 
-void ServerNetworkHandler::queueActorCommand(ServerActor &actor, const std::string &command) {
+void ServerNetworkHandler::queueActorCommand(ServerActor &actor, const std::string &command, bool useActorAsExecutor) {
     QueuedActorCommand queued;
+    queued.mExecutor = useActorAsExecutor ? actor.getRuntimeId() : 0;
     queued.mLevel = &getLevelFor(actor);
     queued.mPosition = actor.getPosition();
     queued.mRotation = actor.getRotation();
@@ -1409,7 +1423,10 @@ void ServerNetworkHandler::runQueuedActorCommands() {
     // pack content: game director level, never the console's
     ServerCommandOrigin base(this, CommandPermission::GameDirectors);
     for (const QueuedActorCommand &entry: queued) {
-        ExecuteCommandOrigin origin(base, nullptr, entry.mPosition, entry.mRotation, entry.mLevel);
+        ServerActor *executor = entry.mExecutor == 0 ? nullptr : getActorByRuntimeId(entry.mExecutor);
+        if (executor == nullptr && entry.mExecutor != 0)
+            continue;
+        ExecuteCommandOrigin origin(base, executor, entry.mPosition, entry.mRotation, entry.mLevel);
         mCommands.dispatch(origin, entry.mCommand);
     }
 }
@@ -2108,6 +2125,9 @@ void ServerNetworkHandler::tickActors() {
 
         ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles, actor.isProjectile());
 
+        if (actor.isProjectile() && !actor.isExpired())
+            ServerAnimations::tick(*this, actor);
+
         if (dynamic_cast<FireworksRocketActor *>(&actor) != nullptr) {
             ProjectileData &firework = actor.getProjectileData();
 
@@ -2485,6 +2505,8 @@ void ServerNetworkHandler::tickActors() {
         }
 
         actor.tick(*this);
+        if (actor.isAlive() && !actor.isExpired())
+            ServerAnimations::tick(*this, actor);
 
         if (actor.isExpired())
             expired.push_back(actorId);

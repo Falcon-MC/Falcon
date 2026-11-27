@@ -78,6 +78,7 @@ class PlayerMovementRegistry;
 struct KnockbackPreset;
 
 struct QueuedActorCommand {
+    uint64_t mExecutor = 0;
     Level *mLevel = nullptr;
     Vector3f mPosition;
     Vector3f mRotation;
@@ -381,7 +382,8 @@ public:
                             bool fromTnt);
 
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
-                            const std::function<void(ServerActor &)> &configure = nullptr);
+                            const std::function<void(ServerActor &)> &configure = nullptr,
+                            const std::string &spawnEvent = {});
 
     ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position, float scale);
 
@@ -519,7 +521,7 @@ public:
 
     void syncActorProperties(ServerActor &actor);
 
-    void queueActorCommand(ServerActor &actor, const std::string &command);
+    void queueActorCommand(ServerActor &actor, const std::string &command, bool useActorAsExecutor = false);
 
     void runQueuedActorCommands();
 
@@ -1047,6 +1049,10 @@ public:
 
     BiomeRegistry &getBiomes() {
         return mBiomes;
+    }
+
+    const std::vector<BehaviorPack> &getBehaviorPacks() const {
+        return mBehaviorPacks.getPacks();
     }
 
     std::vector<CreativeItemGroup> &getCreativeGroups() {

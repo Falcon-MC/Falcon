@@ -24,6 +24,7 @@
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
+#include "World/Level/Storage/FalconDataVersion.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
@@ -3070,7 +3071,9 @@ void MobActor::loadNbt(const Tag &data) {
         mComponentGroups.clear();
         for (const Tag &group: legacyGroups->getList())
             mComponentGroups.push_back(group.asString());
-    } else {
+    } else if (!data.contains(FalconDataVersion::TAG, Tag::Type::Long)
+               || !data.contains("UniqueID", Tag::Type::Long)) {
+        // chunk generation also loads actor tags here, before their first spawn
         return;
     }
 

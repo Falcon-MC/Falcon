@@ -49,7 +49,7 @@ public:
     static int64_t chunkHash(int32_t chunkX, int32_t chunkZ);
 
 private:
-    void _generateBiomeMap(LevelChunk &chunk) const;
+    void _generateBiomeMap(LevelChunk &chunk, int32_t *originalBiomes) const;
 
     void _generateTerrain(LevelChunk &chunk) const;
 

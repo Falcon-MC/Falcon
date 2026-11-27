@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
 
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+
 #include "World/Level/Block/LiquidBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -103,6 +105,7 @@ OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactor
                                                  const OverworldClimate &climate, int64_t levelSeed)
         : mClimate(climate), mIcebergFactory(icebergFactory(levelSeed)),
           mSulfurCaves(NoiseGradientSurfaceBuilder::sulfurCaves(levelSeed)), mMesa(levelSeed) {
+    BiomeChunkGenDataRegistry::buildPackGradients(levelSeed, mPackSurface, mPackSubsurface);
     XoroshiroRandom random = noiseFactory.hashOf("minecraft:surface");
     mSurfaceNoise.reserve(SURFACE_NOISE_OCTAVES);
     for (int32_t i = 0; i < SURFACE_NOISE_OCTAVES; i++)
@@ -160,7 +163,7 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
             const int32_t height = std::max(0, top + 1);
             const int32_t biome = (int32_t) chunk.getBiomeAt(x, std::min(height, LevelChunk::MAX_Y), z);
             // the volume is 320 blocks tall and the builder leaves its top layer
-            const NoiseGradientSurfaceBuilder *gradient = _noiseGradientFor(biome);
+            const NoiseGradientSurfaceBuilder *gradient = _noiseGradientFor(biome, false);
             if (gradient != nullptr) {
                 gradient->build(chunk, x, z, _lowestSurfaceY((chunk.getX() << 4) + x, (chunk.getZ() << 4) + z),
                                 LevelChunk::MIN_Y + 319);
@@ -188,7 +191,10 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
     _buildSubsurface(chunk);
 }
 
-const NoiseGradientSurfaceBuilder *OverworldSurfaceBuilder::_noiseGradientFor(int32_t biome) const {
+const NoiseGradientSurfaceBuilder *OverworldSurfaceBuilder::_noiseGradientFor(int32_t biome, bool subsurface) const {
+    const auto &builders = subsurface ? mPackSubsurface : mPackSurface;
+    if (const auto found = builders.find(biome); found != builders.end())
+        return &found->second;
     return biome == BiomeIds::SULFUR_CAVES ? &mSulfurCaves : nullptr;
 }
 
@@ -208,7 +214,7 @@ void OverworldSurfaceBuilder::_buildSubsurface(LevelChunk &chunk) const {
                         continue;
                 }
 
-                const NoiseGradientSurfaceBuilder *gradient = _noiseGradientFor(runBiome);
+                const NoiseGradientSurfaceBuilder *gradient = _noiseGradientFor(runBiome, true);
                 if (gradient != nullptr)
                     gradient->build(chunk, x, z, runStart, runEnd);
 

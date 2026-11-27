@@ -3,9 +3,13 @@
 #include "CommandTranslationsJson.h"
 #include "Core/Json/Json.h"
 #include "LanguageFiles.h"
+#include "Scripting/BehaviorPackManager.h"
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 
 namespace {
@@ -29,9 +33,30 @@ namespace {
 
 std::string Localization::sServerLocale = Localization::DEFAULT_LOCALE;
 
-const Localization &Localization::getInstance() {
-    static const Localization instance;
+Localization &Localization::getInstance() {
+    static Localization instance;
     return instance;
+}
+
+void Localization::loadPackTexts(const std::vector<BehaviorPack> &packs) {
+    namespace fs = std::filesystem;
+    mPackLanguages.clear();
+    for (const BehaviorPack &pack: packs) {
+        std::error_code error;
+        const fs::path root = fs::path(pack.mPath) / "texts";
+        for (fs::directory_iterator entry(root, error), end; !error && entry != end; entry.increment(error)) {
+            if (!entry->is_regular_file(error) || entry->path().extension() != ".lang")
+                continue;
+
+            std::ifstream file(entry->path(), std::ios::binary);
+            if (!file)
+                continue;
+            const std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            auto &locale = mPackLanguages[entry->path().stem().string()];
+            for (auto &[key, value]: _parse(content))
+                locale.insert_or_assign(key, std::move(value));
+        }
+    }
 }
 
 void Localization::setServerLocale(const std::string &locale) {
@@ -132,6 +157,13 @@ const Localization::Entries *Localization::_findEntries(const std::string &local
 }
 
 const std::string *Localization::_findText(const std::string &locale, const std::string &key) const {
+    const auto packLocale = mPackLanguages.find(locale);
+    if (packLocale != mPackLanguages.end()) {
+        const auto text = packLocale->second.find(key);
+        if (text != packLocale->second.end())
+            return &text->second;
+    }
+
     const Entries *entries = _findEntries(locale);
     if (entries == nullptr)
         return nullptr;
@@ -142,7 +174,7 @@ const std::string *Localization::_findText(const std::string &locale, const std:
 
 Localization::Entries Localization::_parse(const std::string &content) {
     Entries entries;
-    size_t position = 0;
+    size_t position = content.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0;
 
     while (position < content.size()) {
         size_t end = content.find('\n', position);

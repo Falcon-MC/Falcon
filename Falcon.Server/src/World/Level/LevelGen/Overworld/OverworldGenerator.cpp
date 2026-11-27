@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Overworld/Biome/BiomeZoom.h"
 #include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
@@ -77,7 +79,8 @@ int32_t OverworldGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
     const OverworldBiomeParameters::Target target = OverworldBiomeParameters::target(
             column.mTemperature, column.mVegetation, column.mContinentalness, column.mErosion,
             biomeDepth(y, column.mOffset), column.mRidges);
-    return mBiomeParameters->search(target, nullptr)->mBiome;
+    return BiomeChunkGenDataRegistry::replaceBiome(DimensionType::Overworld, mSeed, x & ~3, z & ~3,
+                                                  mBiomeParameters->search(target, nullptr)->mBiome);
 }
 
 int32_t OverworldGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
@@ -129,6 +132,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     // after the mansion, as in createGenerator: a mansion over the sea keeps its foundation only below the monument
     MonumentStructure::place(*this, level, chunk);
     JigsawStructures::get().place(*this, level, chunk, overflow);
+    JigsawStructures::packStructures().place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 
@@ -156,6 +160,7 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap,
     TerrainBeard beard;
     VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     JigsawStructures::get().addBeard(*this, chunk.getX(), chunk.getZ(), beard);
+    JigsawStructures::packStructures().addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     StrongholdStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     AncientCityStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
@@ -176,6 +181,7 @@ void OverworldGenerator::_generateBiomeMap(LevelChunk &chunk) const {
     const int32_t originZ = (chunk.getZ() << 4) - 8;
 
     std::vector<int32_t> samples((size_t) (BIOME_SAMPLE_COUNT_XZ * BIOME_SAMPLE_COUNT_XZ * BIOME_SAMPLE_COUNT_Y));
+    const bool hasReplacements = BiomeChunkGenDataRegistry::hasReplacements(DimensionType::Overworld);
     size_t index = 0;
     for (int32_t indexX = 0; indexX < BIOME_SAMPLE_COUNT_XZ; indexX++) {
         const int32_t x = originX + 8 * indexX;
@@ -183,13 +189,24 @@ void OverworldGenerator::_generateBiomeMap(LevelChunk &chunk) const {
             const int32_t z = originZ + 8 * indexZ;
             const OverworldClimate::Column column = mClimate->sampleColumn(x >> 2, z >> 2);
             const OverworldBiomeParameters::Node *last = nullptr;
+            int32_t original = -1;
+            int32_t replacement = -1;
             for (int32_t indexY = 0; indexY < BIOME_SAMPLE_COUNT_Y; indexY++) {
                 const int32_t y = originY + 8 * indexY;
                 const OverworldBiomeParameters::Target target = OverworldBiomeParameters::target(
                         column.mTemperature, column.mVegetation, column.mContinentalness, column.mErosion,
                         biomeDepth(y, column.mOffset), column.mRidges);
                 last = mBiomeParameters->search(target, last);
-                samples[index++] = last->mBiome;
+                if (hasReplacements) {
+                    if (original != last->mBiome) {
+                        original = last->mBiome;
+                        replacement = BiomeChunkGenDataRegistry::replaceBiome(DimensionType::Overworld, mSeed, x, z,
+                                                                             original);
+                    }
+                    samples[index++] = replacement;
+                } else {
+                    samples[index++] = last->mBiome;
+                }
             }
         }
     }
