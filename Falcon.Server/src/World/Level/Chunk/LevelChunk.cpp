@@ -383,6 +383,29 @@ std::string LevelChunk::encodeNetwork(const BlockNetworkIdMap *blockIds) const {
     return stream.getBuffer();
 }
 
+LevelChunkNetworkSnapshot LevelChunk::snapshotNetwork() const {
+    LevelChunkNetworkSnapshot snapshot;
+    const int sectionCount = getNetworkSubChunkCount();
+    snapshot.mSections.reserve((size_t) sectionCount);
+    for (int i = 0; i < sectionCount; i++) {
+        const SubChunk &section = mSubChunks[(size_t) (mFirstNetworkSubChunk + i)];
+        section.cacheStateHashes();
+        snapshot.mSections.push_back(section);
+    }
+    return snapshot;
+}
+
+// the layout of LevelChunk::encodeNetwork, without its per-section caches
+std::string LevelChunkNetworkSnapshot::encode(const BlockNetworkIdMap *blockIds) const {
+    BinaryStream stream;
+    for (const SubChunk &section: mSections)
+        section.writeNetwork(stream, blockIds);
+    for (const SubChunk &section: mSections)
+        section.writeBiomes(stream, false);
+    stream.putByte(0);
+    return stream.getBuffer();
+}
+
 const std::string &LevelChunk::encodeNetworkAnchor() const {
     _ensureUnpacked();
     if (mNetworkAnchorValid)

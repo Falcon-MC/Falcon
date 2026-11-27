@@ -2,15 +2,18 @@
 
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "Network/ChunkPacketCache.h"
 #include "World/Level/ClientSideGeneration.h"
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
 class Level;
+class PacketCodecContext;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -67,6 +70,17 @@ public:
 
     // chunks one player is sent per tick, between MAX_SENDS_PER_TICK and more when few players are online
     static unsigned getSendsPerTick(ServerNetworkHandler &owner);
+
+    // the chunks this player's next send would pick, in its order; changes nothing
+    static void peekNextSends(ServerNetworkHandler &owner, ServerPlayer &player, std::vector<int64_t> &out);
+
+    // what a cached chunk packet stays valid for; main thread
+    static ChunkPacketCache::Stamp chunkStamp(ServerNetworkHandler &owner, Level &level, int32_t chunkX,
+                                              int32_t chunkZ);
+
+    // a LevelChunk packet as sent, header included; reads only its arguments: any thread
+    static std::string writeChunkPacket(int32_t chunkX, int32_t chunkZ, int32_t dimension, uint32_t subChunks,
+                                        std::string data, const PacketCodecContext &context);
 
     static void handleTeleport(ServerNetworkHandler &owner, ServerPlayer &player);
 

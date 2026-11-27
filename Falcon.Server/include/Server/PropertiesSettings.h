@@ -160,6 +160,10 @@ public:
         return getInt("max-threads");
     }
 
+    int getChunkEncodeThreads() const {
+        return getInt("chunk-encode-threads");
+    }
+
     int getAutoSaveInterval() const {
         return getInt("autosave-interval");
     }

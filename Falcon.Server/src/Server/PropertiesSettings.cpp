@@ -72,6 +72,9 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"tick-distance", "4", PropertyKind::Int, 4, 12, nullptr},
             {"player-idle-timeout", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-threads", "8", PropertyKind::Int, 0, 256, nullptr},
+            // Falcon only: threads encoding the tick's chunk packets beside the main thread before the players' tick;
+            // 0 encodes each at its send
+            {"chunk-encode-threads", "0", PropertyKind::Int, 0, 64, nullptr},
             {"autosave-interval", "6000", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"level-name", "Bedrock level", PropertyKind::String, 0, 0, nullptr},
             {"level-seed", "", PropertyKind::String, 0, 0, nullptr},

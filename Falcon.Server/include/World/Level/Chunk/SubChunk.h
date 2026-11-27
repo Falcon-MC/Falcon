@@ -70,6 +70,9 @@ public:
 
     void writeNetwork(BinaryStream &stream, const BlockNetworkIdMap *blockIds = nullptr) const;
 
+    // a copy written by another thread then only reads hashes already stored in its states
+    void cacheStateHashes() const;
+
     void writePersistent(BinaryStream &stream) const;
 
     // LevelChunk::pack() form; unpackRaw() restores it exactly
