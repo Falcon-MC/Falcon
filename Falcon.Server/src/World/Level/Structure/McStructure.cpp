@@ -6,6 +6,7 @@
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -331,6 +332,8 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
     const float integrity = std::min(options.mIntegrity * 100.0f, 100.0f);
 
     if (options.mBlocks) {
+        std::vector<Vector3i> immediateUpdates;
+        auto &updates = options.mPendingBlockUpdates == nullptr ? immediateUpdates : *options.mPendingBlockUpdates;
         const int64_t layerCells = (int64_t) mSize.x * mSize.z;
         const int64_t end = std::min(options.mToCell, layerCells * mSize.y);
         for (int64_t cell = std::max<int64_t>(0, options.mFromCell); cell < end; ++cell) {
@@ -356,8 +359,10 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
                                  && level.getBlockState(target.x, target.y, target.z).mName == BlockNames::WATER
                                  && LiquidPhysicsSystem::getWaterloggingLevel(*state) > 0;
             level.getBlockActors().remove(target);
-            level.setBlock(target, *state, true);
-            if (level.getOwner() == nullptr)
+            level.setBlock(target, *state, false);
+            if (level.getOwner() != nullptr)
+                updates.push_back(target);
+            else
                 BlockActionHandler::broadcastBlockUpdate(owner, level, target, *state);
 
             const BlockState *overlay = getBlock(local, 1);
@@ -392,10 +397,20 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
             level.getBlockActors().insert(std::move(actor));
             BlockActionHandler::broadcastBlockActorData(owner, level, placed);
         }
+        if (options.mFinishBlockUpdates) {
+            // a block may depend on support placed later, including in a different animation slice
+            for (const auto &position: updates) {
+                level.updateAt(position, BlockUpdateType::Normal);
+                level.updateAround(position);
+            }
+            updates.clear();
+        }
     }
 
     if (!options.mEntities)
         return;
+    std::unordered_map<int64_t, int64_t> copies;
+    std::vector<std::pair<int64_t, int64_t>> rides;
     for (const Tag &entity: mEntities) {
         const std::string identifier = entity.getString("identifier");
         const Tag *pos = entity.get("Pos");
@@ -437,7 +452,8 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
         Tag data = entity;
         data.remove("UniqueID");
         data.remove("Pos");
-        owner.spawnActor(level, identifier, target, [&](ServerActor &actor) {
+        data.remove("LinksTag");
+        auto *copy = owner.spawnActor(level, identifier, target, [&](ServerActor &actor) {
             const int64_t uniqueId = actor.getUniqueId();
             actor.loadNbt(data);
             actor.setUniqueId(uniqueId);
@@ -449,5 +465,27 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
             yaw = std::remainder(yaw + (float) (options.mRotation & 3) * 90.0f, 360.0f);
             actor.setRotation(Vector3f(oldRotation.x, yaw, yaw));
         });
+        if (copy == nullptr)
+            continue;
+
+        const int64_t copiedId = copy->getUniqueId();
+        if (entity.contains("UniqueID", Tag::Type::Long))
+            copies.emplace(entity.getLong("UniqueID"), copiedId);
+        if (const Tag *links = entity.get("LinksTag"); links != nullptr && links->isList()) {
+            for (const Tag &link: links->getList()) {
+                if (link.contains("entityID", Tag::Type::Long))
+                    rides.emplace_back(copiedId, link.getLong("entityID"));
+            }
+        }
+    }
+
+    for (const auto &[vehicleId, originalRiderId]: rides) {
+        const auto found = copies.find(originalRiderId);
+        if (found == copies.end())
+            continue;
+        auto *vehicle = owner.getActor(vehicleId);
+        auto *rider = owner.getActor(found->second);
+        if (vehicle != nullptr && rider != nullptr)
+            RideSystem::mount(owner, *rider, *vehicle, false);
     }
 }

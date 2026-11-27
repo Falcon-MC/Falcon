@@ -257,7 +257,7 @@ void StructureBlockSystem::activate(ServerNetworkHandler &owner, Level &level, c
     const int64_t layerCells = (int64_t) size.x * size.z;
     const int64_t cellsPerUnit = actor.mAnimationMode == (uint8_t) StructureAnimationMode::Layer ? layerCells : 1;
     mPending.push_back({&level, std::move(structure), std::move(options), from, ticks, 0,
-                         layerCells * size.y / cellsPerUnit, cellsPerUnit});
+                         layerCells * size.y / cellsPerUnit, cellsPerUnit, {}});
 }
 
 void StructureBlockSystem::tick(ServerNetworkHandler &owner, Level &level) {
@@ -280,8 +280,10 @@ void StructureBlockSystem::tick(ServerNetworkHandler &owner, Level &level) {
         options.mFromCell = (job.mUnits * job.mTick / job.mTicks) * job.mCellsPerUnit;
         ++job.mTick;
         options.mToCell = (job.mUnits * job.mTick / job.mTicks) * job.mCellsPerUnit;
-        options.mEntities = options.mEntities && job.mTick == job.mTicks;
-        if (options.mFromCell != options.mToCell || options.mEntities)
+        options.mPendingBlockUpdates = &job.mPendingBlockUpdates;
+        options.mFinishBlockUpdates = job.mTick == job.mTicks;
+        options.mEntities = options.mEntities && options.mFinishBlockUpdates;
+        if (options.mFromCell != options.mToCell || options.mFinishBlockUpdates)
             job.mStructure->place(owner, level, from, options);
         if (job.mTick < job.mTicks)
             mPending.push_back(std::move(job));

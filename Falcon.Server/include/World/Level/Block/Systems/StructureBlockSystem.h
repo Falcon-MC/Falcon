@@ -37,6 +37,7 @@ private:
         int64_t mTick;
         int64_t mUnits;
         int64_t mCellsPerUnit;
+        std::vector<Vector3i> mPendingBlockUpdates;
     };
 
     ScriptStructureRegistry &_registry(ServerNetworkHandler &owner, Level &level);

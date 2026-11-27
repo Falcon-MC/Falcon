@@ -6,6 +6,7 @@
 #include "Protocol/Packets/StructureTemplateDataRequestPacket.h"
 #include "Protocol/Packets/StructureTemplateDataResponsePacket.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/RideSystem.h"
 #include "World/Level/Block/Actor/StructureBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -206,6 +207,71 @@ namespace {
                     return &entity != original && entity.getTypeId() == "minecraft:pig" && pos.x == 10.25f
                            && pos.y == 204.25f && pos.z == 6.25f && entity.getRotation().y == 90.0f;
                 }), "placing a structure rounded or failed to rotate its entity position");
+
+        McStructure torchTemplate(Vector3i(2, 1, 1));
+        BlockState torch = VanillaBlocks::TORCH().toBlockState();
+        torch.mStates.putString("torch_facing_direction", "east");
+        torchTemplate.setBlock(Vector3i(0, 0, 0), &torch);
+        torchTemplate.setBlock(Vector3i(1, 0, 0), &stone);
+        const Vector3i instantTorch(8, 208, 7), animatedTorch(8, 210, 7);
+        const Vector3i instantSupport(9, 208, 7), animatedSupport(9, 210, 7);
+        for (const auto &position: {instantTorch, animatedTorch, instantSupport, animatedSupport})
+            set(position, BlockState(BlockNames::AIR));
+        McStructure::PlaceOptions blocksOnly;
+        blocksOnly.mEntities = false;
+        torchTemplate.place(server, level, instantTorch, blocksOnly);
+        require(stateAt(instantTorch).mName == torch.mName && stateAt(instantSupport).mName == stone.mName,
+                "loading a wall torch before its support destroyed it");
+        McStructure airTemplate(Vector3i(1, 1, 1));
+        const BlockState air;
+        airTemplate.setBlock(Vector3i(), &air);
+        airTemplate.place(server, level, instantSupport, blocksOnly);
+        require(stateAt(instantTorch).mName == BlockNames::AIR,
+                "structure placement stopped notifying blocks outside the template");
+
+        require(server.getScriptEngine().structures().store("torch_animation",
+                    std::make_shared<McStructure>(std::move(torchTemplate)), false), "could not store the torch template");
+        edit.mEditorData.mName = "torch_animation";
+        edit.mEditorData.mSettings.mOffset = Vector3i(0, 10, 3);
+        edit.mEditorData.mSettings.mAnimationSeconds = 0.1f;
+        edit.handle(id, server);
+        world.getStructureBlocks().tick(server, level);
+        require(stateAt(animatedTorch).mName == torch.mName && stateAt(animatedSupport).mName == BlockNames::AIR,
+                "the first animation slice did not leave the torch in place");
+        world.getStructureBlocks().tick(server, level);
+        require(stateAt(animatedTorch).mName == torch.mName && stateAt(animatedSupport).mName == stone.mName,
+                "the animated torch did not survive until its support was placed");
+
+        auto *vehicle = server.spawnActor(level, "minecraft:minecart", Vector3f(4.5f, 201.25f, 6.5f));
+        require(vehicle != nullptr && RideSystem::mount(server, *original, *vehicle, false),
+                "could not mount the original passenger");
+        McStructure riderTemplate = McStructure::capture(server, level, Vector3i(2, 201, 6), Vector3i(4, 203, 6),
+                                                          false, true);
+        McStructure::PlaceOptions entitiesOnly;
+        entitiesOnly.mBlocks = false;
+        riderTemplate.place(server, level, Vector3i(8, 213, 6), entitiesOnly);
+        server.spawnStoredActors(level, {});
+        require(original->getVehicleId() == vehicle->getUniqueId(), "structure loading moved the original passenger");
+        require(std::any_of(server.getActors().begin(), server.getActors().end(), [&](const auto &entry) {
+                    const auto &cart = *entry.second;
+                    if (&cart == vehicle || cart.getTypeId() != "minecraft:minecart" || cart.getPassengers().size() != 1)
+                        return false;
+                    const auto *passenger = server.getActor(cart.getPassengers().front());
+                    return passenger != nullptr && passenger != original && passenger->getTypeId() == "minecraft:pig"
+                           && passenger->getVehicleId() == cart.getUniqueId();
+                }), "the cloned passenger was not mounted on the cloned minecart");
+
+        McStructure cartOnly = McStructure::capture(server, level, Vector3i(4, 201, 6), Vector3i(4, 203, 6),
+                                                     false, false);
+        cartOnly.addEntity(vehicle->saveNbt());
+        cartOnly.place(server, level, Vector3i(8, 217, 6), entitiesOnly);
+        server.spawnStoredActors(level, {});
+        require(original->getVehicleId() == vehicle->getUniqueId(), "a template linked to an uncaptured passenger");
+        require(std::any_of(server.getActors().begin(), server.getActors().end(), [&](const auto &entry) {
+                    const auto &cart = *entry.second;
+                    return cart.getTypeId() == "minecraft:minecart" && cart.getPosition().y > 217.0f
+                           && cart.getPassengers().empty();
+                }), "the copied cart retained a link to a passenger outside the template");
 
         const Vector3i nearCorner(1, 201, 5), farCorner(5, 203, 7);
         for (const auto &position: {nearCorner, farCorner}) {
