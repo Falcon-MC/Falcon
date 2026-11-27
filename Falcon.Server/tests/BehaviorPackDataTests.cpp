@@ -11,6 +11,7 @@
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
+#include "World/Level/Storage/FalconDataVersion.h"
 #include "World/Level/Structure/McStructure.h"
 
 #include <algorithm>
@@ -560,15 +561,31 @@ namespace {
                 "removing the component group did not restore the base collision box");
 
         const int64_t uniqueId = natural->getUniqueId();
-        const Tag savedActor = natural->saveNbt();
+        const Tag legacyActor = natural->ServerActor::saveNbt();
+        for (const Tag &savedActor: {natural->saveNbt(), legacyActor}) {
+            handler.removeActor(uniqueId);
+            handler.spawnStoredActors(level, {savedActor});
+            const auto restored = handler.getActors().find(uniqueId);
+            require(restored != handler.getActors().end(), "the naturally spawned entity did not reload");
+            handler.tickActors();
+            require(restored->second->getIntProperty("example:stage") == 2
+                    && restored->second->getSize().mHeight == ServerActor::DEFAULT_HEIGHT,
+                    "loading the entity replayed its default spawn event");
+        }
+
+        // generated actors have no saved identity and still need their initial event
+        Tag generatedActor = legacyActor;
+        generatedActor.remove("UniqueID");
+        generatedActor.remove(FalconDataVersion::TAG);
         handler.removeActor(uniqueId);
-        handler.spawnStoredActors(level, {savedActor});
-        const auto restored = handler.getActors().find(uniqueId);
-        require(restored != handler.getActors().end(), "the naturally spawned entity did not reload");
+        handler.spawnStoredActors(level, {generatedActor});
         handler.tickActors();
-        require(restored->second->getIntProperty("example:stage") == 2
-                && restored->second->getSize().mHeight == ServerActor::DEFAULT_HEIGHT,
-                "loading the entity replayed its default spawn event");
+        const auto &actors = handler.getActors();
+        require(std::any_of(actors.begin(), actors.end(), [](const auto &entry) {
+                    const ServerActor &actor = *entry.second;
+                    return actor.getTypeId() == "example:natural" && actor.getIntProperty("example:stage") == 1
+                           && actor.getSize().mHeight == 2.5f;
+                }), "the generated entity missed its first spawn event");
     }
 
     void checkServerLoadsPackData(const std::filesystem::path &directory) {
