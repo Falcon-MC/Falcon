@@ -347,7 +347,7 @@ void NetherSurfaceBuilder::_fillDepthNoise(int32_t chunkX, int32_t chunkZ, float
     }
 }
 
-void NetherSurfaceBuilder::apply(LevelChunk &chunk) const {
+void NetherSurfaceBuilder::apply(LevelChunk &chunk, const int32_t *originalBiomes) const {
     const uint32_t chunkSeed = (uint32_t) -245998635 * (uint32_t) chunk.getZ()
                                - (uint32_t) 1724254968 * (uint32_t) chunk.getX();
     std::mt19937 random(chunkSeed);
@@ -373,7 +373,9 @@ void NetherSurfaceBuilder::apply(LevelChunk &chunk) const {
 
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
-            const auto surface = mSurfaces.find((int32_t) chunk.getBiomeAt(x, 0, z));
+            const int32_t biome = originalBiomes == nullptr ? (int32_t) chunk.getBiomeAt(x, 0, z)
+                                                            : originalBiomes[(x << 4) | z];
+            const auto surface = mSurfaces.find(biome);
             if (surface == mSurfaces.end())
                 continue;
 

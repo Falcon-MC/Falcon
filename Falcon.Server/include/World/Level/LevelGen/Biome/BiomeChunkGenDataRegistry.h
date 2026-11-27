@@ -8,6 +8,11 @@
 #include <unordered_set>
 #include <vector>
 
+struct BehaviorPack;
+enum class DimensionType : int32_t;
+class ClimateAttributes;
+class SurfaceBuilderComponent;
+
 class BiomeFeatureEntry {
 public:
     // one axis of the rule's scatter; bounds are the game's expression strings
@@ -32,6 +37,16 @@ public:
 class BiomeChunkGenDataRegistry {
 public:
     static void initialize();
+
+    static void loadPacks(const std::vector<BehaviorPack> &packs);
+
+    static bool hasReplacements(DimensionType dimension);
+
+    static int32_t replaceBiome(DimensionType dimension, int64_t seed, int32_t x, int32_t z, int32_t original);
+
+    static const ClimateAttributes *getPackClimate(int32_t biomeId);
+
+    static const SurfaceBuilderComponent *getPackSurface(int32_t biomeId);
 
     static const std::vector<BiomeFeatureEntry> *getConsolidatedFeatures(int32_t biomeId);
 

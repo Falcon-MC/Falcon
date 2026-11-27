@@ -1,4 +1,6 @@
 #include <cstring>
+#include "World/Actor/Definition/ServerAnimations.h"
+
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Projectile/ProjectileReflection.h"
@@ -361,6 +363,7 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
     if (mJoinedTracked)
         mActorChanges.push_back(ActorChange{it->second.get(), it->second->getPosition(), false});
     mVehiclesWithPendingPassengers.erase(uniqueId);
+    ServerAnimations::forget(it->second->getRuntimeId());
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
     // a walk may be running over the index: the slot goes null, erasing it would shift the walk's vector
     ServerActor *removed = it->second.get();
@@ -1390,8 +1393,9 @@ void ServerNetworkHandler::syncActorProperties(ServerActor &actor) {
     }
 }
 
-void ServerNetworkHandler::queueActorCommand(ServerActor &actor, const std::string &command) {
+void ServerNetworkHandler::queueActorCommand(ServerActor &actor, const std::string &command, bool useActorAsExecutor) {
     QueuedActorCommand queued;
+    queued.mExecutor = useActorAsExecutor ? actor.getRuntimeId() : 0;
     queued.mLevel = &getLevelFor(actor);
     queued.mPosition = actor.getPosition();
     queued.mRotation = actor.getRotation();
@@ -1409,7 +1413,10 @@ void ServerNetworkHandler::runQueuedActorCommands() {
     // pack content: game director level, never the console's
     ServerCommandOrigin base(this, CommandPermission::GameDirectors);
     for (const QueuedActorCommand &entry: queued) {
-        ExecuteCommandOrigin origin(base, nullptr, entry.mPosition, entry.mRotation, entry.mLevel);
+        ServerActor *executor = entry.mExecutor == 0 ? nullptr : getActorByRuntimeId(entry.mExecutor);
+        if (executor == nullptr && entry.mExecutor != 0)
+            continue;
+        ExecuteCommandOrigin origin(base, executor, entry.mPosition, entry.mRotation, entry.mLevel);
         mCommands.dispatch(origin, entry.mCommand);
     }
 }
@@ -2485,6 +2492,8 @@ void ServerNetworkHandler::tickActors() {
         }
 
         actor.tick(*this);
+        if (actor.isAlive() && !actor.isExpired())
+            ServerAnimations::tick(*this, actor);
 
         if (actor.isExpired())
             expired.push_back(actorId);

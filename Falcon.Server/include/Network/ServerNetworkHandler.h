@@ -78,6 +78,7 @@ class PlayerMovementRegistry;
 struct KnockbackPreset;
 
 struct QueuedActorCommand {
+    uint64_t mExecutor = 0;
     Level *mLevel = nullptr;
     Vector3f mPosition;
     Vector3f mRotation;
@@ -519,7 +520,7 @@ public:
 
     void syncActorProperties(ServerActor &actor);
 
-    void queueActorCommand(ServerActor &actor, const std::string &command);
+    void queueActorCommand(ServerActor &actor, const std::string &command, bool useActorAsExecutor = false);
 
     void runQueuedActorCommands();
 

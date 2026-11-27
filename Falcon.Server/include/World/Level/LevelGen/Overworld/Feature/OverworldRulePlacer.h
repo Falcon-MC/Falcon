@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+struct BehaviorPack;
 class BiomeFeatureEntry;
 class BlockManager;
 class LevelChunk;
@@ -15,6 +16,21 @@ class OverworldClimate;
 // the feature rules whose feature is ported, scattered and shaped like the game's feature rules
 class OverworldRulePlacer {
 public:
+    struct SnapOptions {
+        int32_t mVerticalSearchRange = 0;
+        int32_t mSurface = 1;
+        bool mAllowAirPlacement = true;
+        bool mAllowNonAirPlacement = false;
+        bool mAllowUnderwaterPlacement = false;
+        bool mEmbedInSurface = false;
+        std::vector<std::string> mAllowedSurfaceBlocks;
+    };
+
+    static bool snapPosition(BlockManager &blocks, const SnapOptions &snap, int32_t x, int32_t y, int32_t z,
+                             std::mt19937 &random, int32_t (&position)[3]);
+
+    static void loadPacks(const std::vector<BehaviorPack> &packs);
+
     // true when apply places this rule: the feature builder skips it
     static bool handles(const BiomeFeatureEntry &entry);
 
@@ -43,7 +59,6 @@ public:
                              std::mt19937 &random);
 
 private:
-    struct OreDefinition;
     struct DiskDefinition;
     struct GeodeDefinition;
     struct SeagrassDefinition;
@@ -106,28 +121,7 @@ private:
         }
     };
 
-    struct Feature {
-        const OreDefinition *mOre = nullptr;
-        const DiskDefinition *mDisk = nullptr;
-        const GeodeDefinition *mGeode = nullptr;
-        const LegacyTreeDefinition *mLegacyTree = nullptr;
-        Placed mPlaced;
-        bool mKelp = false;
-        // legacy:forest_foliage_feature
-        bool mForestFoliage = false;
-        // legacy:forest_rock_feature
-        bool mForestRock = false;
-        // legacy:springs_feature
-        bool mSprings = false;
-        // legacy:ice_feature
-        bool mLegacyIce = false;
-        const FossilDefinition *mFossil = nullptr;
-
-        bool isPorted() const {
-            return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr || mPlaced.isSet()
-                   || mKelp || mForestFoliage || mForestRock || mSprings || mLegacyIce || mFossil != nullptr;
-        }
-    };
+    struct Feature;
 
     static Feature _find(const BiomeFeatureEntry &entry);
 
@@ -139,9 +133,6 @@ private:
 
     static void _placeRule(BlockManager &blocks, const LevelChunk &chunk, const BiomeFeatureEntry &entry,
                            const Feature &feature, uint32_t decorationSeed, int32_t biomeFilter);
-
-    static bool _placeOre(BlockManager &blocks, const OreDefinition &ore, int32_t x, int32_t y, int32_t z,
-                          std::mt19937 &random);
 
     static bool _placeDisk(BlockManager &blocks, const DiskDefinition &disk, int32_t x, int32_t y, int32_t z,
                            std::mt19937 &random);
@@ -215,7 +206,7 @@ private:
     static bool _placeSnap(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
                            std::mt19937 &random);
 
-    static bool _snapAlong(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
+    static bool _snapAlong(BlockManager &blocks, const SnapOptions &snap, int32_t x, int32_t y, int32_t z,
                            int32_t face, int32_t snapped[3]);
 
     static bool _placeBlob(BlockManager &blocks, const BlobDefinition &blob, int32_t x, int32_t y, int32_t z,

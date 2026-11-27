@@ -2,6 +2,10 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Server/CameraPresetRegistry.h"
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Definition/ServerAnimations.h"
 #include "Server/Localization.h"
 #include "Core/Threading/CpuCount.h"
 #include "World/Level/Block/SignEditing.h"
@@ -686,6 +690,11 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mBehaviorPacks.discover(ServerPaths::file("behavior_packs"));
     _validatePackDependencies();
     JigsawStructures::packStructures().loadPacks(mBehaviorPacks.getPacks());
+    BiomeChunkGenDataRegistry::loadPacks(mBehaviorPacks.getPacks());
+    mBiomes = BiomeRegistry();
+    OverworldRulePlacer::loadPacks(mBehaviorPacks.getPacks());
+    EntityDefinitions::loadPacks(mBehaviorPacks.getPacks());
+    ServerAnimations::loadPacks(mBehaviorPacks.getPacks());
     _openWorld(properties.getLevelName(), levelSeed, true);
     loadScoreboard();
 

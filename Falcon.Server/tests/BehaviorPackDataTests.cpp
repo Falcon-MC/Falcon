@@ -6,6 +6,7 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/Spawn/SpawnRules.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
 #include "World/Level/Structure/McStructure.h"
@@ -184,8 +185,151 @@ namespace {
         std::ofstream(structures / "piece.mcstructure", std::ios::binary) << piece.serialize();
     }
 
+    void writeWorldgenPack(const std::filesystem::path &pack) {
+        for (const char *folder: {"biomes", "features", "feature_rules"})
+            std::filesystem::create_directories(pack / folder);
+        const std::string targets = [&] {
+            std::string result;
+            for (const std::string &name: BiomeChunkGenDataRegistry::getBiomeNames()) {
+                if (!result.empty())
+                    result += ',';
+                result += json::stringify(*json::Value::ofString(name));
+            }
+            return result;
+        }();
+        std::ofstream(pack / "biomes" / "gem_fields.json") << R"({
+            "format_version": "1.26.30",
+            "minecraft:biome": {
+                "description": {"identifier":"example:gem_fields"},
+                "components": {
+                    "minecraft:climate": {"temperature":0.6,"downfall":0},
+                    "minecraft:tags": {"tags":["example_gem_fields"]},
+                    "minecraft:surface_builder":{"builder":{
+                        "type":"minecraft:overworld", "top_material":"minecraft:calcite",
+                        "sea_floor_material":"minecraft:calcite", "mid_material":"minecraft:stone"
+                    }},
+                    "minecraft:replace_biomes": {"replacements":[{
+                        "dimension":"minecraft:overworld","amount":1,"noise_frequency_scale":1,"targets":[)"
+            << targets << R"(]}]}
+                }
+            }
+        })";
+        std::ofstream(pack / "features" / "gem_block.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:single_block_feature": {
+                "description":{"identifier":"example:gem_block"},
+                "places_block":"minecraft:emerald_block",
+                "may_replace":["minecraft:air","minecraft:water"]
+            }
+        })";
+        std::ofstream(pack / "features" / "gem_scatter.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:scatter_feature": {
+                "description":{"identifier":"example:gem_scatter"},
+                "places_feature":"example:gem_block",
+                "distribution":{"iterations":1,"x":1,"y":2,"z":1}
+            }
+        })";
+        std::ofstream(pack / "feature_rules" / "gems.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:feature_rules":{
+                "description":{"identifier":"example:gems","places_feature":"example:gem_scatter"},
+                "conditions":{"placement_pass":"final_pass","minecraft:biome_filter":{"all_of":[
+                    {"test":"has_biome_tag","value":"example_gem_fields"},
+                    {"none_of":[{"test":"has_biome_tag","value":"does_not_exist"}]}
+                ]}},
+                "distribution":{"iterations":"1 + 1","x":3,"y":270,"z":5}
+            }
+        })";
+        std::ofstream(pack / "features" / "ore_group.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:ore_feature": {
+                "description":{"identifier":"example:ore_group"}, "count":16,
+                "replace_rules":[{"places_block":"minecraft:lapis_block","may_replace":["minecraft:air"]}]
+            }
+        })";
+        std::ofstream(pack / "feature_rules" / "ores.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:feature_rules":{
+                "description":{"identifier":"example:ores","places_feature":"example:ore_group"},
+                "conditions":{"placement_pass":"after_surface_pass",
+                              "minecraft:biome_filter":{"test":"has_biome_tag","value":"example_gem_fields"}},
+                "distribution":{"iterations":1,"x":0,"y":200,"z":0}
+            }
+        })";
+        std::ofstream(pack / "features" / "snap.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:snap_to_surface_feature": {
+                "description":{"identifier":"example:snap"}, "feature_to_snap":"example:gem_block",
+                "vertical_search_range":110, "surface":"floor", "allow_underwater_placement":true,
+                "allowed_surface_blocks":["minecraft:calcite"]
+            }
+        })";
+        std::ofstream(pack / "feature_rules" / "snapped.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:feature_rules":{
+                "description":{"identifier":"example:snapped","places_feature":"example:snap"},
+                "conditions":{"placement_pass":"after_surface_pass",
+                              "minecraft:biome_filter":{"test":"has_biome_tag","value":"example_gem_fields"}},
+                "distribution":{"iterations":1,"x":2,"y":120,"z":2}
+            }
+        })";
+    }
+
+    void writeAnimationPack(const std::filesystem::path &pack) {
+        for (const char *folder: {"entities", "animations", "animation_controllers"})
+            std::filesystem::create_directories(pack / folder);
+        std::ofstream(pack / "entities" / "animated.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:entity": {
+                "description":{
+                    "identifier":"example:animated",
+                    "is_summonable":true,
+                    "properties":{"example:stage":{"type":"int","range":[0,4],"default":0}},
+                    "animations":{"controller":"controller.animation.example","timeline":"animation.example"},
+                    "scripts":{"initialize":["v.enter = 0;"],"animate":["controller"]}
+                },
+                "events":{
+                    "example:entry":{"set_property":{"example:stage":1}},
+                    "example:frame":{"set_property":{"example:stage":2}},
+                    "example:exit":{"set_property":{"example:stage":3}},
+                    "example:next":{"set_property":{"example:stage":4}}
+                }
+            }
+        })";
+        std::ofstream(pack / "animations" / "example.json") << R"({
+            "format_version":"1.8.0",
+            "animations":{
+                "animation.example":{
+                    "animation_length":0.15,
+                    "timeline":{"0.1":["@s example:frame","v.finished = 1;"]}
+                }
+            }
+        })";
+        std::ofstream(pack / "animation_controllers" / "example.json") << R"({
+            "format_version":"1.10.0",
+            "animation_controllers":{
+                "controller.animation.example":{
+                    "initial_state":"waiting",
+                    "states":{
+                        "waiting":{
+                            "on_entry":["v.enter = 1;", "@s example:entry"],
+                            "animations":[{"timeline":"v.enter == 1"}],
+                            "transitions":[{"finished":"v.finished && q.all_animations_finished"}],
+                            "on_exit":["@s example:exit"]
+                        },
+                        "finished":{"on_entry":["@s example:next"]}
+                    }
+                }
+            }
+        })";
+    }
+
     void checkServerLoadsPackData(const std::filesystem::path &directory) {
-        writeJigsawPack(directory / "behavior_packs" / "spawn-override");
+        const auto pack = directory / "behavior_packs" / "spawn-override";
+        writeJigsawPack(pack);
+        writeWorldgenPack(pack);
+        writeAnimationPack(pack);
         ServerPaths::setRoot(directory);
         ServerHostOptions options;
         options.bindAddress = "127.0.0.1";
@@ -237,7 +381,48 @@ namespace {
         const auto &piece = plan->mPieces.front();
         require(chunk.getBlock(piece.x & 15, piece.y, piece.z & 15).mName == "minecraft:diamond_block",
                 "a newly generated chunk omitted the pack structure or its block processor");
+        const int32_t customBiome = BiomeChunkGenDataRegistry::getBiomeId("example:gem_fields");
+        require(customBiome >= 0 && (int32_t) chunk.getBiomeAt(3, 270, 5) == customBiome,
+                "the generator did not apply the custom biome replacement");
+        require(chunk.getBlock(4, 272, 6).mName == "minecraft:emerald_block",
+                "the biome-filtered feature or nested scatter was not applied to the new chunk");
+        bool hasCalciteSurface = false;
+        for (int32_t y = 40; y < 110; ++y)
+            hasCalciteSurface |= chunk.getBlock(2, y, 2).mName == "minecraft:calcite";
+        require(hasCalciteSurface, "the custom biome did not apply its surface materials");
+        bool snappedToCalcite = false;
+        for (int32_t y = 40; y < 110; ++y) {
+            if (chunk.getBlock(2, y, 2).mName == "minecraft:calcite"
+                && chunk.getBlock(2, y + 1, 2).mName == "minecraft:emerald_block")
+                snappedToCalcite = true;
+        }
+        require(snappedToCalcite, "the feature did not snap to the biome surface");
+        bool hasOreGroup = false;
+        for (int32_t x = 3; x < 13; ++x) {
+            for (int32_t z = 3; z < 13; ++z) {
+                for (int32_t y = 196; y < 202; ++y)
+                    hasOreGroup |= chunk.getBlock(x, y, z).mName == "minecraft:lapis_block";
+            }
+        }
+        require(hasOreGroup, "the pack-defined ore vein was not placed");
+        const auto &biomes = handler.getBiomes().getBiomes();
+        require(std::any_of(biomes.begin(), biomes.end(), [customBiome](const auto &definition) {
+                    return definition.mId == customBiome && definition.mName == "example:gem_fields"
+                           && !definition.mRain && definition.mTemperature > 0.59f;
+                }), "the custom biome was missing from the client registry");
+
+        ServerActor *actor = handler.spawnActor(handler.getLevel(), "example:animated", Vector3f(0, 90, 0));
+        require(actor != nullptr, "could not spawn actor for the animation test");
+        handler.tickActors();
+        require(actor->getIntProperty("example:stage", 0) == 1, "the controller did not enter its initial state");
+        handler.tickActors();
+        require(actor->getIntProperty("example:stage", 0) == 2, "the animation timeline did not trigger its frame event");
+        handler.tickActors();
+        require(actor->getIntProperty("example:stage", 0) == 4, "the controller did not transition after the animation");
         host.stop();
+        require(BiomeChunkGenDataRegistry::getBiomeId("example:gem_fields") < 0
+                && std::filesystem::is_regular_file(directory / "custom-biome-ids.json"),
+                "the custom biome registry was not cleared or its ID was not persisted");
         require(jigsaws.sets().empty(), "pack structures remained loaded after the server stopped");
     }
 }
@@ -250,6 +435,7 @@ int main() {
     int result = 0;
     try {
         SpawnRules::initialize();
+        BiomeChunkGenDataRegistry::initialize();
         checkPackSpawnRules(directory);
         checkServerLoadsPackData(directory);
     } catch (const std::exception &error) {

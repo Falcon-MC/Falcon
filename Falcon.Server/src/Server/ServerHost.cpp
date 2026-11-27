@@ -3,9 +3,11 @@
 #include "BuildInfo.h"
 #include "World/Actor/AI/Goal/FollowCaravanGoal.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Definition/ServerAnimations.h"
 #include "World/Actor/Spawn/SpawnRules.h"
 #include "Server/CameraPresetRegistry.h"
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Debug/BedrockLog.h"
@@ -296,6 +298,10 @@ namespace {
         Localization::getInstance().loadPackTexts({});
         CameraPresetRegistry::load({});
         JigsawStructures::packStructures().loadPacks({});
+        OverworldRulePlacer::loadPacks({});
+        BiomeChunkGenDataRegistry::loadPacks({});
+        EntityDefinitions::loadPacks({});
+        ServerAnimations::loadPacks({});
         CustomContentRegistry::getInstance().reset();
         StringToItemParser::getInstance().reset();
         FollowCaravanGoal::clearCaravans();

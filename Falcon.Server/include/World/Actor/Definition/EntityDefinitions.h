@@ -10,9 +10,13 @@
 #include <string_view>
 #include <vector>
 
+struct BehaviorPack;
+
 class EntityDefinitions {
 public:
     static void initialize();
+
+    static void loadPacks(const std::vector<BehaviorPack> &packs);
 
     static const json::Value *find(const std::string &identifier);
 

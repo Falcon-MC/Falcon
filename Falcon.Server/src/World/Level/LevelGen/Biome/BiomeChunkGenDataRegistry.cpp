@@ -1,5 +1,21 @@
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 
+#include "Core/Json/Json.h"
+#include "World/Level/Dimension/Dimension.h"
+#include "Scripting/BehaviorPackManager.h"
+#include "Server/ServerPaths.h"
+#include "Scripting/Content/PackBlockState.h"
+#include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
+#include "World/Level/LevelGen/Overworld/Surface/SurfaceMaterialAttributes.h"
+#include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
+
+#include <array>
+#include <cmath>
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <random>
+
 #include "BiomeDefinitionsNbt.h"
 #include "Core/Archive/Gzip.h"
 #include "Core/Debug/BedrockLog.h"
@@ -227,6 +243,74 @@ namespace {
         return (uint16_t) (strings.size() - 1);
     }
 
+    struct PackBiome {
+        std::optional<ClimateAttributes> mClimate;
+        std::optional<SurfaceBuilderComponent> mSurface;
+        std::array<std::optional<BlockState>, 5> mMaterials;
+    };
+
+    struct Replacement {
+        int32_t mBiome;
+        float mAmount;
+        float mFrequency;
+    };
+
+    std::map<int32_t, PackBiome> packBiomes;
+    std::map<std::string, int32_t> packBiomeIds;
+    std::map<int32_t, std::vector<Replacement>> overworldReplacements;
+    std::map<int32_t, std::vector<Replacement>> netherReplacements;
+
+    const json::Value &member(const json::Value &parent, const char *key) {
+        static const json::Value EMPTY;
+        const auto *value = parent.get(key);
+        return value == nullptr ? EMPTY : *value;
+    }
+
+    void readSurface(PackBiome &biome, const json::Value &components, const SurfaceBuilderComponent *original) {
+        const auto &surfaceBuilder = member(components, "minecraft:surface_builder");
+        const auto *builder = surfaceBuilder.get("builder");
+        const auto *material = builder != nullptr ? builder : components.get("minecraft:surface_parameters");
+        if (material == nullptr && original == nullptr)
+            return;
+        if (original != nullptr)
+            biome.mSurface = *original;
+        if (material == nullptr)
+            return;
+
+        if (!biome.mSurface)
+            biome.mSurface.emplace();
+        if (builder != nullptr) {
+            const std::string type = member(*builder, "type").string("minecraft:overworld");
+            if (type == "minecraft:overworld")
+                biome.mSurface->mType = SurfaceBuilderType::Overworld;
+            else if (type == "minecraft:mesa") {
+                biome.mSurface->mType = SurfaceBuilderType::Mesa;
+                biome.mSurface->mBrycePillars = member(*builder, "bryce_pillars").boolean();
+                biome.mSurface->mHasForest = member(*builder, "has_forest").boolean();
+            } else if (type == "minecraft:swamp") {
+                biome.mSurface->mType = SurfaceBuilderType::Swamp;
+                const double puddle = member(*builder, "max_puddle_depth_below_sea_level").number();
+                if (puddle >= 0 && puddle <= 127)
+                    biome.mSurface->mMaxPuddleDepth = (int32_t) puddle;
+            } else if (type == "minecraft:frozen_ocean") {
+                biome.mSurface->mType = SurfaceBuilderType::FrozenOcean;
+            }
+        }
+        auto &surface = biome.mSurface->mSurfaceMaterial;
+        const std::array<const char *, 5> keys{"top_material", "mid_material", "sea_floor_material",
+                                              "foundation_material", "sea_material"};
+        const std::array<const BlockState **, 5> slots{&surface.mTopBlock, &surface.mMidBlock, &surface.mSeaFloorBlock,
+                                                      &surface.mFoundationBlock, &surface.mSeaBlock};
+        for (size_t i = 0; i < keys.size(); ++i) {
+            biome.mMaterials[i] = PackBlockState::read(member(*material, keys[i]));
+            if (biome.mMaterials[i])
+                *slots[i] = &*biome.mMaterials[i];
+        }
+        const double depth = member(*material, "sea_floor_depth").number(surface.mSeaFloorDepth);
+        if (depth >= 0 && depth <= 127)
+            surface.mSeaFloorDepth = (int32_t) depth;
+    }
+
     // chunk generation data is left out: the game only sends it with client-side generation, never on here
     BiomeDefinitionData readDefinition(const Tag &data) {
         BiomeDefinitionData definition;
@@ -280,6 +364,215 @@ const std::vector<std::string> &BiomeChunkGenDataRegistry::getDefinitionStrings(
     return _definitionStrings();
 }
 
+void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs) {
+    if (!loaded)
+        return;
+    static const auto vanillaDefinitions = _definitions();
+    static const auto vanillaStrings = _definitionStrings();
+    static const auto vanillaTags = _tagsByBiome();
+    _definitions() = vanillaDefinitions;
+    _definitionStrings() = vanillaStrings;
+    _tagsByBiome() = vanillaTags;
+    packBiomes.clear();
+    packBiomeIds.clear();
+    overworldReplacements.clear();
+    netherReplacements.clear();
+
+    std::map<std::string, std::unique_ptr<json::Value>> documents;
+    for (const BehaviorPack &pack: packs) {
+        pack.visitJson("biomes", [&](const json::Value &doc) {
+            const auto &biome = member(doc, "minecraft:biome");
+            std::string name = member(member(biome, "description"), "identifier").string();
+            if (name.starts_with("minecraft:"))
+                name = stripNamespace(name);
+            if (!name.empty())
+                documents[name] = member(biome, "components").clone();
+        });
+    }
+    if (documents.empty())
+        return;
+
+    // chunks store the numeric ID; reserve IDs even when a pack is disabled
+    const auto path = ServerPaths::resolve("custom-biome-ids.json");
+    auto ids = json::Value::ofObject();
+    std::unordered_set<int32_t> usedIds;
+    for (const auto &[name, id]: biomeNameToId())
+        usedIds.insert(id);
+    for (const auto &biome: vanillaDefinitions)
+        usedIds.insert(biome.mId);
+
+    std::error_code error;
+    const bool exists = std::filesystem::exists(path, error);
+    if (error)
+        return;
+    if (exists) {
+        std::ifstream file(path, std::ios::binary);
+        const std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        auto saved = json::parse(data);
+        if (saved == nullptr || !saved->isObject()) {
+            LOG_ERROR(LogAreaID::Server, "Invalid custom biome ID map: %s", path.string().c_str());
+            return;
+        }
+        for (const auto &key: saved->mKeys) {
+            const double id = saved->mObject.at(key)->number(-1);
+            if (!(id >= 0 && id < UINT16_MAX && id == std::trunc(id))
+                || !usedIds.insert((int32_t) id).second) {
+                LOG_ERROR(LogAreaID::Server, "Conflicting custom biome ID in %s", path.string().c_str());
+                return;
+            }
+        }
+        ids = std::move(saved);
+    }
+
+    bool changed = false;
+    int32_t nextId = 0;
+    for (const auto &[name, components]: documents) {
+        if (getBiomeId(name) >= 0 || ids->get(name) != nullptr || name.find(':') == std::string::npos
+            || name.starts_with("minecraft:"))
+            continue;
+        while (nextId < UINT16_MAX && usedIds.contains(nextId))
+            ++nextId;
+        if (nextId == UINT16_MAX)
+            break;
+        ids->set(name, json::Value::ofNumber(nextId));
+        usedIds.insert(nextId);
+        changed = true;
+    }
+    if (changed) {
+        const std::filesystem::path temporary(path.string() + ".tmp");
+        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+        file << json::stringify(*ids);
+        file.close();
+        if (file)
+            std::filesystem::rename(temporary, path, error);
+        if (!file || error) {
+            LOG_ERROR(LogAreaID::Server, "Could not persist custom biome IDs to %s", path.string().c_str());
+            std::filesystem::remove(temporary, error);
+            return;
+        }
+    }
+
+    for (const auto &[name, definition]: documents) {
+        const int32_t vanillaId = getBiomeId(name);
+        const auto *savedId = ids->get(name);
+        const int32_t id = vanillaId >= 0 ? vanillaId : savedId != nullptr ? savedId->integer(-1) : -1;
+        if (id < 0)
+            continue;
+        auto existing = std::find_if(_definitions().begin(), _definitions().end(), [id](const BiomeDefinitionData &biome) {
+            return biome.mId == id;
+        });
+        const bool custom = vanillaId < 0;
+        if ((!custom && existing == _definitions().end())
+            || (custom && (_definitions().size() >= UINT16_MAX || _definitionStrings().size() >= UINT16_MAX)))
+            continue;
+
+        const auto &components = *definition;
+        auto &replacementBiome = packBiomes[id];
+        BiomeDefinitionData data = custom ? BiomeDefinitionData() : *existing;
+        data.mId = (uint16_t) id;
+        if (custom)
+            data.mName = name;
+        if (const auto *climate = components.get("minecraft:climate")) {
+            ClimateAttributes &attributes = replacementBiome.mClimate.emplace();
+            attributes.mTemperature = data.mTemperature =
+                    (float) std::clamp(member(*climate, "temperature").number(data.mTemperature), -100.0, 100.0);
+            attributes.mDownfall = data.mDownfall =
+                    (float) std::clamp(member(*climate, "downfall").number(data.mDownfall), 0.0, 1.0);
+            attributes.mRain = data.mRain = data.mDownfall > 0.0f;
+        }
+        const auto &tags = member(member(components, "minecraft:tags"), "tags");
+        if (tags.isArray() && _definitionStrings().size() + tags.mArray.size() + 1 <= UINT16_MAX) {
+            auto &activeTags = _tagsByBiome()[id];
+            activeTags.clear();
+            auto &tagIndexes = data.mTagIndexes.emplace();
+            for (const auto &tag: tags.mArray) {
+                if (tag->isString() && activeTags.insert(tag->mString).second)
+                    tagIndexes.push_back(stringIndex(_definitionStrings(), tag->mString));
+            }
+        }
+
+        const auto &replacements = member(member(components, "minecraft:replace_biomes"), "replacements");
+        int32_t fallback = vanillaId;
+        for (const auto &replacement: replacements.mArray) {
+            const auto &rule = *replacement;
+            const std::string dimension = member(rule, "dimension").string();
+            const double amount = member(rule, "amount").number();
+            const double frequency = member(rule, "noise_frequency_scale").number();
+            if ((dimension != "minecraft:overworld" && dimension != "minecraft:nether")
+                || !(amount > 0 && amount <= 1 && frequency > 0 && frequency <= 100))
+                continue;
+            auto &rules = dimension == "minecraft:overworld" ? overworldReplacements : netherReplacements;
+            for (const auto &target: member(rule, "targets").mArray) {
+                if (!target->isString() || target->mString.find(':') != std::string::npos)
+                    continue;
+                const int32_t original = getBiomeId(target->mString);
+                if (original < 0 || original == id)
+                    continue;
+                rules[original].push_back({id, (float) amount, (float) frequency});
+                if (fallback < 0 && dimension == "minecraft:overworld")
+                    fallback = original;
+            }
+        }
+        // the lookup is still on the vanilla table for a vanilla override
+        const SurfaceBuilderComponent *base = SurfaceBuilderComponent::getForBiome(fallback);
+        readSurface(replacementBiome, components, base);
+        if (custom) {
+            if (_definitionStrings().size() >= UINT16_MAX)
+                continue;
+            data.mNameIndex = stringIndex(_definitionStrings(), name);
+            packBiomeIds[name] = id;
+            _definitions().push_back(std::move(data));
+        } else {
+            *existing = std::move(data);
+        }
+    }
+}
+
+bool BiomeChunkGenDataRegistry::hasReplacements(DimensionType dimension) {
+    return dimension == DimensionType::Nether ? !netherReplacements.empty()
+                                               : dimension == DimensionType::Overworld && !overworldReplacements.empty();
+}
+
+int32_t BiomeChunkGenDataRegistry::replaceBiome(DimensionType dimension, int64_t seed, int32_t x, int32_t z,
+                                                int32_t original) {
+    const auto &rules = dimension == DimensionType::Nether ? netherReplacements : overworldReplacements;
+    if (rules.empty())
+        return original;
+    const auto found = rules.find(original);
+    if (found == rules.end())
+        return original;
+    struct ReplacementNoise {
+        int64_t mSeed;
+        std::mt19937 mRandom;
+        SurfaceSimplexNoise mNoise;
+        explicit ReplacementNoise(int64_t seed)
+                : mSeed(seed), mRandom((uint32_t) seed ^ (uint32_t) ((uint64_t) seed >> 32)), mNoise(mRandom) {}
+    };
+    thread_local std::optional<ReplacementNoise> noise;
+    for (const Replacement &rule: found->second) {
+        if (rule.mAmount >= 1.0f)
+            return rule.mBiome;
+        if (!noise || noise->mSeed != seed)
+            noise.emplace(seed);
+        const float scale = rule.mFrequency / 64.0f;
+        const float offset = (float) rule.mBiome * 0.25f;
+        const float value = noise->mNoise.getValue((float) x * scale + offset, (float) z * scale + offset);
+        if ((value + 1.0f) * 0.5f < rule.mAmount)
+            return rule.mBiome;
+    }
+    return original;
+}
+
+const ClimateAttributes *BiomeChunkGenDataRegistry::getPackClimate(int32_t biomeId) {
+    const auto found = packBiomes.find(biomeId);
+    return found != packBiomes.end() && found->second.mClimate ? &*found->second.mClimate : nullptr;
+}
+
+const SurfaceBuilderComponent *BiomeChunkGenDataRegistry::getPackSurface(int32_t biomeId) {
+    const auto found = packBiomes.find(biomeId);
+    return found != packBiomes.end() && found->second.mSurface ? &*found->second.mSurface : nullptr;
+}
+
 bool BiomeChunkGenDataRegistry::hasTag(int32_t biomeId, const std::string &tag) {
     const auto found = _tagsByBiome().find(biomeId);
     return found != _tagsByBiome().end() && found->second.count(tag) != 0;
@@ -296,6 +589,10 @@ int32_t BiomeChunkGenDataRegistry::getVillageType(int32_t biomeId) {
 }
 
 int32_t BiomeChunkGenDataRegistry::getBiomeId(const std::string &biomeName) {
+    if (const auto pack = packBiomeIds.find(biomeName); pack != packBiomeIds.end())
+        return pack->second;
+    if (biomeName.find(':') != std::string::npos && !biomeName.starts_with("minecraft:"))
+        return -1;
     const std::unordered_map<std::string, int32_t> &map = biomeNameToId();
     const std::unordered_map<std::string, int32_t>::const_iterator found = map.find(stripNamespace(biomeName));
     if (found == map.end())
@@ -309,6 +606,8 @@ std::vector<std::string> BiomeChunkGenDataRegistry::getBiomeNames() {
     for (const std::pair<const std::string, int32_t> &entry: biomeNameToId())
         names.push_back(entry.first);
 
+    for (const auto &[name, id]: packBiomeIds)
+        names.push_back(name);
     std::sort(names.begin(), names.end());
     return names;
 }

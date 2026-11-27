@@ -154,6 +154,23 @@ bool BehaviorPackManager::_readManifest(const std::string &manifest, BehaviorPac
     return true;
 }
 
+void BehaviorPack::visitJson(std::string_view folder, const std::function<void(const json::Value &)> &visit) const {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(mPath) / folder;
+    std::error_code error;
+    std::vector<fs::path> files;
+    for (fs::recursive_directory_iterator it(root, error), end; !error && it != end; it.increment(error)) {
+        if (it->is_regular_file(error) && it->path().extension() == ".json")
+            files.push_back(it->path());
+    }
+    std::sort(files.begin(), files.end());
+    for (const fs::path &file: files) {
+        const auto document = json::parse(stripComments(readFile(file)));
+        if (document != nullptr && document->isObject())
+            visit(*document);
+    }
+}
+
 void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory) {
     const std::string manifest = readFile(std::filesystem::path(packDirectory) / "manifest.json");
     if (manifest.empty())
