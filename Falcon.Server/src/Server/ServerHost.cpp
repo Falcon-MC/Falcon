@@ -299,7 +299,7 @@ namespace {
         CameraPresetRegistry::load({});
         JigsawStructures::packStructures().loadPacks({});
         OverworldRulePlacer::loadPacks({});
-        BiomeChunkGenDataRegistry::loadPacks({});
+        BiomeChunkGenDataRegistry::resetPacks();
         EntityDefinitions::loadPacks({});
         ServerAnimations::loadPacks({});
         CustomContentRegistry::getInstance().reset();

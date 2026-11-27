@@ -385,12 +385,9 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
                 continue;
         }
 
-        ServerActor *spawned = owner.spawnActor(level, identifier, placed, [&condition](ServerActor &actor) {
+        ServerActor *spawned = owner.spawnActor(level, identifier, placed, [](ServerActor &actor) {
             actor.setPersistent(false);
-            MobActor *mob = dynamic_cast<MobActor *>(&actor);
-            if (mob != nullptr && !condition.mSpawnEvent.empty())
-                mob->setSpawnEvent(condition.mSpawnEvent);
-        });
+        }, condition.mSpawnEvent);
         if (spawned == nullptr)
             continue;
 

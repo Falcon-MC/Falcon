@@ -227,6 +227,13 @@ namespace {
                 "components":{"minecraft:tags":{"tags":["example_ocean_override"]}}
             }
         })";
+        std::ofstream(pack / "biomes" / "the_end.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:biome":{
+                "description":{"identifier":"minecraft:the_end"},
+                "components":{"minecraft:tags":{"tags":["example_end"]}}
+            }
+        })";
         std::ofstream(pack / "features" / "gem_block.json") << R"({
             "format_version":"1.21.20",
             "minecraft:single_block_feature": {
@@ -252,6 +259,15 @@ namespace {
                     {"none_of":[{"test":"has_biome_tag","value":"does_not_exist"}]}
                 ]}},
                 "distribution":{"iterations":"1 + 1","x":3,"y":270,"z":5}
+            }
+        })";
+        std::ofstream(pack / "feature_rules" / "end_gem.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:feature_rules":{
+                "description":{"identifier":"example:end_gem","places_feature":"example:gem_block"},
+                "conditions":{"placement_pass":"final_pass",
+                    "minecraft:biome_filter":{"test":"has_biome_tag","value":"example_end"}},
+                "distribution":{"iterations":1,"x":4,"y":240,"z":4}
             }
         })";
         std::ofstream(pack / "features" / "ore_group.json") << R"({
@@ -364,6 +380,18 @@ namespace {
                 "constraints":{"leveled":{}}
             }
         })";
+        McStructure wide(Vector3i(34, 1, 1));
+        wide.setBlock(Vector3i(0, 0, 0), &emerald);
+        wide.setBlock(Vector3i(33, 0, 0), &emerald);
+        std::ofstream(pack / "structures" / "example" / "wide.mcstructure", std::ios::binary)
+                << wide.serialize();
+        std::ofstream(pack / "features" / "wide.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:wide"},
+                "structure_name":"example:wide","facing_direction":"south"
+            }
+        })";
         const auto rule = [&](const char *name, const char *feature, const char *pass, int32_t x, int32_t y = 280,
                               int32_t z = 8) {
             std::ofstream file(pack / "feature_rules" / (std::string(name) + ".json"));
@@ -392,6 +420,7 @@ namespace {
         rule("sparse_reject", "level_sparse", "final_pass", 11, 275, 12);
         rule("raised_pad", "template", "surface_pass", 14, 286, 10);
         rule("raised_level", "level_raised", "final_pass", 14, 287, 10);
+        rule("wide", "wide", "final_pass", 15, 290, 5);
     }
 
     void writeAnimationPack(const std::filesystem::path &pack) {
@@ -557,6 +586,14 @@ namespace {
                 && chunk.getBlock(14, 287, 10).mName == "minecraft:emerald_block"
                 && chunk.getBlock(14, 288, 10).mName == "minecraft:air",
                 "the leveled check or placement ignored ground_level");
+        require(chunk.getBlock(15, 290, 5).mName == "minecraft:air",
+                "a template extending outside the staged chunks was partially placed");
+        const auto endGenerator = DimensionFactory::createGenerator(DimensionType::TheEnd, 1);
+        TerrainCache endTerrain(*endGenerator);
+        GeneratorChunkSource endSource(1, DimensionType::TheEnd, endTerrain);
+        const LevelChunk endChunk = endSource.generate(0, 0, blockActors, entities);
+        require(endChunk.getBlock(4, 240, 4).mName == "minecraft:emerald_block",
+                "the End did not place its biome-filtered pack feature");
         const auto &biomes = handler.getBiomes().getBiomes();
         require(std::any_of(biomes.begin(), biomes.end(), [customBiome](const auto &definition) {
                     return definition.mId == customBiome && definition.mName == "example:gem_fields"
@@ -564,18 +601,48 @@ namespace {
                 }), "the custom biome was missing from the client registry");
 
         ServerActor *actor = handler.spawnActor(handler.getLevel(), "example:animated", Vector3f(0, 90, 0));
-        require(actor != nullptr, "could not spawn actor for the animation test");
+        ServerActor *projectile = handler.spawnActor(handler.getLevel(), "example:animated", Vector3f(6, 180, 6),
+                                                      [](ServerActor &value) { value.setProjectile(true); });
+        ServerActor *spawned = handler.spawnActor(handler.getLevel(), "example:animated", Vector3f(2, 90, 2),
+                                                   {}, "example:next");
+        require(actor != nullptr && projectile != nullptr && spawned != nullptr,
+                "could not spawn actors for the pack event tests");
+        require(spawned->getIntProperty("example:stage", 0) == 4,
+                "the generic actor missed its spawn event");
+        const uint64_t projectileId = projectile->getRuntimeId();
+        const auto projectileStage = [&] {
+            const auto *active = handler.getActorByRuntimeId(projectileId);
+            require(active != nullptr, "the test projectile expired");
+            return active->getIntProperty("example:stage", 0);
+        };
         handler.tickActors();
         require(actor->getIntProperty("example:stage", 0) == 1, "the controller did not enter its initial state");
+        require(projectileStage() == 1, "the projectile controller did not enter its initial state");
         handler.tickActors();
         require(actor->getIntProperty("example:stage", 0) == 2, "the animation timeline did not trigger its frame event");
+        require(projectileStage() == 2, "the projectile animation timeline did not trigger its frame event");
         handler.tickActors();
         require(actor->getIntProperty("example:stage", 0) == 4, "the controller did not transition after the animation");
+        require(projectileStage() == 4, "the projectile controller did not transition after the animation");
         host.stop();
         require(BiomeChunkGenDataRegistry::getBiomeId("example:gem_fields") < 0
                 && std::filesystem::is_regular_file(directory / "custom-biome-ids.json"),
                 "the custom biome registry was not cleared or its ID was not persisted");
         require(jigsaws.sets().empty(), "pack structures remained loaded after the server stopped");
+
+        std::filesystem::rename(pack, directory / "disabled-pack");
+        require(host.start(options), "could not restart the server with the pack disabled");
+        const auto &registry = host.getHandler().getBiomes();
+        const auto &retiredBiomes = registry.getBiomes();
+        const auto &strings = registry.getStrings();
+        require(std::any_of(retiredBiomes.begin(), retiredBiomes.end(), [&](const auto &definition) {
+                    return definition.mId == customBiome && definition.mName == "example:gem_fields"
+                           && definition.mNameIndex < strings.size()
+                           && strings[definition.mNameIndex] == definition.mName;
+                }), "the disabled pack biome was missing from the client registry");
+        require(BiomeChunkGenDataRegistry::getBiomeId("example:gem_fields") < 0,
+                "the disabled pack biome was still available to the generator");
+        host.stop();
     }
 }
 

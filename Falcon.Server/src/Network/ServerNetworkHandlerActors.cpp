@@ -1,5 +1,6 @@
 #include <cstring>
 #include "World/Actor/Definition/ServerAnimations.h"
+#include "World/Actor/Definition/EntityEvents.h"
 
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
@@ -162,7 +163,8 @@ namespace {
 }
 
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
-                                              const std::function<void(ServerActor &)> &configure) {
+                                              const std::function<void(ServerActor &)> &configure,
+                                              const std::string &spawnEvent) {
     // taken first: configure may spawn another actor
     const bool spawned = mSpawnCause == nullptr;
     const char *cause = spawned ? "Spawned" : mSpawnCause;
@@ -181,8 +183,11 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     actor->resetFallDistance();
 
     MobActor *mob = dynamic_cast<MobActor *>(actor.get());
-    if (mob != nullptr)
+    if (mob != nullptr) {
         mob->finalizeSpawn();
+        if (!spawnEvent.empty())
+            mob->setSpawnEvent(spawnEvent);
+    }
 
     // before configure: a projectile's callback reads its pack definition to aim it
     const CustomActorDefinition *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
@@ -195,7 +200,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
         configure(*actor);
 
     // an identifier carrying its own spawn event makes the cause Event
-    if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
+    if (spawned && (!spawnEvent.empty() || (mob != nullptr && !mob->getSpawnEvent().empty())))
         cause = "Event";
 
     if (mob != nullptr)
@@ -219,6 +224,8 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     broadcastActorSpawn(*result);
     if (mob != nullptr)
         mob->upgradeDefinition(*this, false);
+    else if (!spawnEvent.empty())
+        EntityEvents::fire(*this, *result, spawnEvent);
     mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
@@ -2114,6 +2121,9 @@ void ServerNetworkHandler::tickActors() {
         }
 
         ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles, actor.isProjectile());
+
+        if (actor.isProjectile() && !actor.isExpired())
+            ServerAnimations::tick(*this, actor);
 
         if (dynamic_cast<FireworksRocketActor *>(&actor) != nullptr) {
             ProjectileData &firework = actor.getProjectileData();

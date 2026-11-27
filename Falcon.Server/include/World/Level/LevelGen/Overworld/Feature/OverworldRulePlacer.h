@@ -48,6 +48,9 @@ public:
     static void applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed, int32_t biome,
                            std::mt19937 &decoration);
 
+    static void applyPackBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome,
+                                    uint32_t decorationSeed);
+
     // draws without placing: each rule reseeds `shared`, then draws its chance, iterations and coordinates;
     // the generator's decoration continues from the last rule's state
     static void drawBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome, uint32_t decorationSeed,

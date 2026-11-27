@@ -437,7 +437,7 @@ const std::vector<std::string> &BiomeChunkGenDataRegistry::getDefinitionStrings(
     return _definitionStrings();
 }
 
-void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs) {
+void BiomeChunkGenDataRegistry::resetPacks() {
     if (!loaded)
         return;
     static const auto vanillaDefinitions = _definitions();
@@ -450,6 +450,12 @@ void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs
     packBiomeIds.clear();
     overworldReplacements.clear();
     netherReplacements.clear();
+}
+
+void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs) {
+    if (!loaded)
+        return;
+    resetPacks();
 
     std::map<std::string, std::unique_ptr<json::Value>> documents;
     for (const BehaviorPack &pack: packs) {
@@ -462,16 +468,13 @@ void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs
                 documents[name] = member(biome, "components").clone();
         });
     }
-    if (documents.empty())
-        return;
-
     // chunks store the numeric ID; reserve IDs even when a pack is disabled
     const auto path = ServerPaths::resolve("custom-biome-ids.json");
     auto ids = json::Value::ofObject();
     std::unordered_set<int32_t> usedIds;
     for (const auto &[name, id]: biomeNameToId())
         usedIds.insert(id);
-    for (const auto &biome: vanillaDefinitions)
+    for (const auto &biome: _definitions())
         usedIds.insert(biome.mId);
 
     std::error_code error;
@@ -603,6 +606,19 @@ void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs
         } else {
             *existing = std::move(data);
         }
+    }
+
+    // a saved palette still refers to this ID after the pack goes away
+    for (const auto &name: ids->mKeys) {
+        if (packBiomeIds.contains(name))
+            continue;
+        if (_definitions().size() >= UINT16_MAX || _definitionStrings().size() >= UINT16_MAX)
+            break;
+        BiomeDefinitionData fallback;
+        fallback.mName = name;
+        fallback.mId = (uint16_t) ids->mObject.at(name)->integer();
+        fallback.mNameIndex = stringIndex(_definitionStrings(), name);
+        _definitions().push_back(std::move(fallback));
     }
 }
 

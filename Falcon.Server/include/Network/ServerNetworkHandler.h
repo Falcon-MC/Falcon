@@ -382,7 +382,8 @@ public:
                             bool fromTnt);
 
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
-                            const std::function<void(ServerActor &)> &configure = nullptr);
+                            const std::function<void(ServerActor &)> &configure = nullptr,
+                            const std::string &spawnEvent = {});
 
     ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position, float scale);
 

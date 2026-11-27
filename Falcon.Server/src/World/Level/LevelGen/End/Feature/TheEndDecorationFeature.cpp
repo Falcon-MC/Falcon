@@ -242,6 +242,7 @@ void TheEndDecorationFeature::apply(ChunkGenerateContext &context) {
 
     // the game runs the biome's rules on this random before the end features, and they leave it reseeded
     OverworldRulePlacer::drawBiomeRules(*mRoot, chunk, TheEndGeneratorConstants::BIOME_ID, decorationSeed, random);
+    OverworldRulePlacer::applyPackBiomeRules(*mRoot, chunk, TheEndGeneratorConstants::BIOME_ID, decorationSeed);
 
     // a spike belongs to the chunk of its lowest corner
     for (const EndSpike &spike: mSpikes) {

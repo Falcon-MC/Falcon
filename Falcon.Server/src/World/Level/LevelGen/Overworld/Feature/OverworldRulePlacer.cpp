@@ -3295,6 +3295,13 @@ namespace {
             if (x0 < -WORLD_LIMIT || x0 + rotatedSize.x - 1 > WORLD_LIMIT
                 || z0 < -WORLD_LIMIT || z0 + rotatedSize.z - 1 > WORLD_LIMIT)
                 return false;
+            // the decoration worker commits writes only to the chunks it stages
+            for (int32_t chunkX = x0 >> 4; chunkX <= ((x0 + rotatedSize.x - 1) >> 4); ++chunkX) {
+                for (int32_t chunkZ = z0 >> 4; chunkZ <= ((z0 + rotatedSize.z - 1) >> 4); ++chunkZ) {
+                    if (blocks.getLevel().peekChunkPtr(chunkX, chunkZ) == nullptr)
+                        return false;
+                }
+            }
             if (piece.mGrounded) {
                 for (const auto &cell: piece.mGroundChecks) {
                     const auto at = world(cell);
@@ -3694,6 +3701,28 @@ void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, 
         }
     }
     placementContext = PlacementContext();
+}
+
+void OverworldRulePlacer::applyPackBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome,
+                                              uint32_t decorationSeed) {
+    if (packRulesByBiome.empty())
+        return;
+    const auto found = packRulesByBiome.find(biome);
+    if (found == packRulesByBiome.end())
+        return;
+
+    std::mt19937 decoration(decorationSeed);
+    const PlacementContext previous = placementContext;
+    placementContext = PlacementContext();
+    placementContext.mDecoration = &decoration;
+    placementContext.mSharesOrigin = true;
+    for (const auto &rules: found->second) {
+        placementContext.mOrigin[0] = (float) (chunk.getX() * 16);
+        placementContext.mOrigin[1] = 0.0f;
+        placementContext.mOrigin[2] = (float) (chunk.getZ() * 16);
+        applyPackRules(blocks, chunk, decorationSeed, biome, rules);
+    }
+    placementContext = previous;
 }
 
 void OverworldRulePlacer::drawBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome,

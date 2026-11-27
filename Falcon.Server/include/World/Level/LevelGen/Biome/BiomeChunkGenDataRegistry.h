@@ -42,6 +42,8 @@ public:
 
     static void loadPacks(const std::vector<BehaviorPack> &packs);
 
+    static void resetPacks();
+
     static void buildPackGradients(int64_t seed, std::map<int32_t, NoiseGradientSurfaceBuilder> &surface,
                                    std::map<int32_t, NoiseGradientSurfaceBuilder> &subsurface);
 
