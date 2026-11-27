@@ -302,17 +302,96 @@ namespace {
                 "search_axis":"+x","search_volume":{"min":[0,0,0],"max":[1,0,0]},"required_successes":2
             }
         })";
-        const auto rule = [&](const char *name, const char *feature, const char *pass, int32_t x) {
+        McStructure asymmetric(Vector3i(2, 1, 1));
+        const BlockState emerald("minecraft:emerald_block");
+        asymmetric.setBlock(Vector3i(1, 0, 0), &emerald);
+        std::ofstream(pack / "structures" / "example" / "asymmetric.mcstructure", std::ios::binary)
+                << asymmetric.serialize();
+        std::ofstream(pack / "features" / "rotated.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:rotated"},
+                "structure_name":"example:asymmetric","facing_direction":"north"
+            }
+        })";
+        McStructure sparse(Vector3i(2, 1, 2));
+        sparse.setBlock(Vector3i(0, 0, 0), &emerald);
+        sparse.setBlock(Vector3i(1, 0, 1), &emerald);
+        std::ofstream(pack / "structures" / "example" / "sparse.mcstructure", std::ios::binary)
+                << sparse.serialize();
+        std::ofstream(pack / "features" / "level_sparse.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:level_sparse"},
+                "structure_name":"example:sparse","facing_direction":"south",
+                "constraints":{"leveled":{"max_steepness":0}}
+            }
+        })";
+        McStructure raised(Vector3i(1, 2, 1));
+        raised.setBlock(Vector3i(0, 0, 0), &emerald);
+        raised.setBlock(Vector3i(0, 1, 0), &emerald);
+        std::ofstream(pack / "structures" / "example" / "raised.mcstructure", std::ios::binary)
+                << raised.serialize();
+        std::ofstream(pack / "features" / "level_raised.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:level_raised"},
+                "structure_name":"example:raised","facing_direction":"south","ground_level":1,
+                "constraints":{"leveled":{"max_steepness":0}}
+            }
+        })";
+        std::ofstream(pack / "features" / "adjusted.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:adjusted"},
+                "structure_name":"example:piece","facing_direction":"north","adjustment_radius":1,
+                "constraints":{"block_intersection":{"block_allowlist":["minecraft:air"]}}
+            }
+        })";
+        std::ofstream(pack / "features" / "level.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:level"},
+                "structure_name":"example:piece","facing_direction":"north",
+                "constraints":{"leveled":{"max_steepness":0}}
+            }
+        })";
+        std::ofstream(pack / "features" / "level_default.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:level_default"},
+                "structure_name":"example:piece","facing_direction":"north",
+                "constraints":{"leveled":{}}
+            }
+        })";
+        const auto rule = [&](const char *name, const char *feature, const char *pass, int32_t x, int32_t y = 280,
+                              int32_t z = 8) {
             std::ofstream file(pack / "feature_rules" / (std::string(name) + ".json"));
             file << R"({"format_version":"1.21.20","minecraft:feature_rules":{
                 "description":{"identifier":"example:)" << name << R"(","places_feature":"example:)" << feature << R"("},
                 "conditions":{"placement_pass":")" << pass << R"(",
                     "minecraft:biome_filter":{"test":"has_biome_tag","value":"example_gem_fields"}},
-                "distribution":{"iterations":1,"x":)" << x << R"(,"y":280,"z":8}}})";
+                "distribution":{"iterations":1,"x":)" << x << R"(,"y":)" << y
+                     << R"(,"z":)" << z << "}}}";
         };
         rule("template", "template", "surface_pass", 12);
         rule("search_ok", "search", "final_pass", 2);
         rule("search_fail", "search", "final_pass", 11);
+        rule("adjusted", "adjusted", "final_pass", 12);
+        rule("rotated", "rotated", "final_pass", 9, 285);
+        rule("pad", "template", "surface_pass", 14, 269, 9);
+        rule("pad_lower", "template", "surface_pass", 14, 268, 10);
+        rule("pad_too_low", "template", "surface_pass", 14, 268, 11);
+        rule("leveled", "level", "final_pass", 14, 270, 9);
+        rule("leveled_tolerance", "level_default", "final_pass", 14, 270, 10);
+        rule("leveled_reject", "level", "final_pass", 14, 270, 11);
+        rule("sparse_pad_1", "template", "surface_pass", 8, 274, 12);
+        rule("sparse_pad_2", "template", "surface_pass", 9, 274, 13);
+        rule("sparse_pad_3", "template", "surface_pass", 11, 274, 12);
+        rule("sparse_ok", "level_sparse", "final_pass", 8, 275, 12);
+        rule("sparse_reject", "level_sparse", "final_pass", 11, 275, 12);
+        rule("raised_pad", "template", "surface_pass", 14, 286, 10);
+        rule("raised_level", "level_raised", "final_pass", 14, 287, 10);
     }
 
     void writeAnimationPack(const std::filesystem::path &pack) {
@@ -460,6 +539,24 @@ namespace {
                 "the search feature did not place both successful results");
         require(chunk.getBlock(11, 280, 8).mName == "minecraft:air",
                 "a search feature below its success threshold left a block behind");
+        require(chunk.getBlock(8, 285, 8).mName == "minecraft:emerald_block"
+                && chunk.getBlock(10, 285, 8).mName == "minecraft:air",
+                "a noncentered structure did not rotate around its origin");
+        require(chunk.getBlock(13, 280, 8).mName == "minecraft:gold_block"
+                && chunk.getBlock(12, 281, 8).mName == "minecraft:air",
+                "the adjustment did not move east at the original height");
+        require(chunk.getBlock(14, 270, 9).mName == "minecraft:gold_block"
+                && chunk.getBlock(14, 270, 10).mName == "minecraft:gold_block"
+                && chunk.getBlock(14, 270, 11).mName == "minecraft:air",
+                "leveled did not respect zero and default steepness");
+        require(chunk.getBlock(8, 275, 12).mName == "minecraft:emerald_block"
+                && chunk.getBlock(9, 275, 13).mName == "minecraft:emerald_block"
+                && chunk.getBlock(11, 275, 12).mName == "minecraft:air",
+                "leveled did not check each occupied column of the ground layer");
+        require(chunk.getBlock(14, 286, 10).mName == "minecraft:emerald_block"
+                && chunk.getBlock(14, 287, 10).mName == "minecraft:emerald_block"
+                && chunk.getBlock(14, 288, 10).mName == "minecraft:air",
+                "the leveled check or placement ignored ground_level");
         const auto &biomes = handler.getBiomes().getBiomes();
         require(std::any_of(biomes.begin(), biomes.end(), [customBiome](const auto &definition) {
                     return definition.mId == customBiome && definition.mName == "example:gem_fields"

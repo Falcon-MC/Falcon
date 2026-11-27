@@ -2933,6 +2933,10 @@ namespace {
         std::shared_ptr<const McStructure> mShape;
         int32_t mRotation = -1;
         int32_t mGroundLevel = 0;
+        int32_t mAdjustmentRadius = 0;
+        std::optional<int32_t> mMaxSteepness;
+        std::vector<Vector3i> mGroundChecks;
+        std::vector<Vector3i> mIntersectionChecks;
         bool mGrounded = false;
         bool mUnburied = false;
         bool mCentered = false;
@@ -3047,14 +3051,16 @@ namespace {
         }
         if (type == "minecraft:structure_template_feature") {
             const auto &constraints = packMember(value, "constraints");
-            if (packMember(value, "adjustment_radius").number() != 0 || constraints.get("leveled") != nullptr)
+            const auto *adjustment = value.get("adjustment_radius");
+            const double radius = adjustment == nullptr ? 0 : adjustment->number(-1);
+            if (!(radius >= 0 && radius <= 16 && radius == std::trunc(radius)))
                 return false;
             out.mType = Type::Structure;
             out.mTemplate = std::make_unique<PackTemplate>();
             auto &piece = *out.mTemplate;
             piece.mName = packMember(value, "structure_name").string();
             const std::string facing = packMember(value, "facing_direction").string("random");
-            static const std::array<std::string_view, 4> DIRECTIONS{"north", "east", "south", "west"};
+            static const std::array<std::string_view, 4> DIRECTIONS{"south", "west", "north", "east"};
             const auto direction = std::find(DIRECTIONS.begin(), DIRECTIONS.end(), facing);
             const double ground = packMember(value, "ground_level").number();
             if (piece.mName.empty() || (direction == DIRECTIONS.end() && facing != "random")
@@ -3063,6 +3069,15 @@ namespace {
             if (direction != DIRECTIONS.end())
                 piece.mRotation = (int32_t) (direction - DIRECTIONS.begin());
             piece.mGroundLevel = (int32_t) ground;
+            piece.mAdjustmentRadius = (int32_t) radius;
+            if (const auto *leveled = constraints.get("leveled")) {
+                const auto *limit = leveled->get("max_steepness");
+                const double steepness = limit == nullptr ? 2 : limit->number(-1);
+                if (!leveled->isObject() || !(steepness >= 0 && steepness <= INT32_MAX
+                                              && steepness == std::trunc(steepness)))
+                    return false;
+                piece.mMaxSteepness = (int32_t) steepness;
+            }
             piece.mCentered = packMember(value, "rotate_around_center").boolean();
             piece.mGrounded = constraints.get("grounded") != nullptr;
             piece.mUnburied = constraints.get("unburied") != nullptr;
@@ -3204,73 +3219,170 @@ namespace {
         return entries.back().first;
     }
 
-    bool placePackTemplate(BlockManager &blocks, const PackTemplate &piece, const Vector3i &position,
+    bool fitsBuildHeight(int32_t height) {
+        return height > 0 && height <= LevelChunk::MAX_Y - LevelChunk::MIN_Y + 1;
+    }
+
+    void prepareTemplateChecks(PackTemplate &piece) {
+        const auto &shape = *piece.mShape;
+        const Vector3i size = shape.getSize();
+        if (!fitsBuildHeight(size.y))
+            return;
+        piece.mGroundLevel = std::min(piece.mGroundLevel, size.y - 1);
+        const int32_t y = piece.mGroundLevel;
+        if (piece.mGrounded || piece.mMaxSteepness) {
+            for (int32_t x = 0; x < size.x; ++x) {
+                for (int32_t z = 0; z < size.z; ++z) {
+                    const Vector3i cell(x, y, z);
+                    const auto *block = shape.getBlock(cell);
+                    if (block != nullptr && !DecorationSupport::isAir(*block))
+                        piece.mGroundChecks.push_back(cell);
+                }
+            }
+        }
+
+        if (!piece.mCheckIntersection)
+            return;
+        for (int32_t x = 0; x < size.x; ++x) {
+            for (int32_t z = 0; z < size.z; ++z) {
+                for (int32_t y = 0; y < size.y; ++y) {
+                    const Vector3i cell(x, y, z);
+                    const auto *block = shape.getBlock(cell);
+                    if (block != nullptr && (!piece.mOnlySolidIntersection || BlockSupport::isSolid(*block)))
+                        piece.mIntersectionChecks.push_back(cell);
+                }
+            }
+        }
+    }
+
+    bool placePackTemplate(BlockManager &blocks, const PackTemplate &piece, Vector3i &position,
                            std::mt19937 &random) {
         if (!piece.mShape)
             return false;
         const auto &shape = *piece.mShape;
         const Vector3i size = shape.getSize();
-        McStructure::PlaceOptions options;
-        options.mRotation = piece.mRotation < 0 ? nextInt(random, 4) : piece.mRotation;
-        const int32_t ground = std::min(piece.mGroundLevel, size.y - 1);
-        const int32_t baseY = position.y - ground;
-        if (size.y <= 0 || baseY < LevelChunk::MIN_Y || baseY + size.y - 1 > LevelChunk::MAX_Y)
+        if (size.x <= 0 || size.z <= 0 || !fitsBuildHeight(size.y))
             return false;
-        Vector3i origin = position;
-        if (piece.mCentered) {
-            const auto rotatedSize = shape.rotatedSize(options.mRotation);
-            origin.x -= rotatedSize.x / 2;
-            origin.z -= rotatedSize.z / 2;
-        }
+        const int32_t rotation = piece.mRotation < 0 ? nextInt(random, 4) : piece.mRotation;
+        const int32_t baseY = position.y - piece.mGroundLevel;
+        if (baseY < LevelChunk::MIN_Y || baseY + size.y - 1 > LevelChunk::MAX_Y)
+            return false;
 
-        const auto visit = [&](const auto &function) {
-            for (int32_t x = 0; x < size.x; ++x) {
-                for (int32_t z = 0; z < size.z; ++z) {
-                    for (int32_t y = 0; y < size.y; ++y) {
-                        const Vector3i cell(x, y, z);
-                        auto at = shape.transform(cell, options);
-                        at.x += origin.x;
-                        at.y += baseY;
-                        at.z += origin.z;
-                        if (!function(cell, at))
+        const auto rotatedSize = shape.rotatedSize(rotation);
+        const Vector3i pivot(piece.mCentered ? size.x / 2 : 0, 0, piece.mCentered ? size.z / 2 : 0);
+        const auto relative = [&](Vector3i at) {
+            at.x -= pivot.x;
+            at.z -= pivot.z;
+            StructureTemplate::rotate(rotation, at.x, at.z);
+            return at;
+        };
+        const auto first = relative(Vector3i(0, 0, 0));
+        const auto last = relative(Vector3i(size.x - 1, 0, size.z - 1));
+        const int32_t minX = std::min(first.x, last.x);
+        const int32_t minZ = std::min(first.z, last.z);
+        Vector3i origin(position.x, baseY, position.z);
+        const auto world = [&](const Vector3i &cell) {
+            const auto at = relative(cell);
+            return Vector3i(at.x + origin.x, at.y + origin.y, at.z + origin.z);
+        };
+        const auto solid = [&](int32_t x, int32_t y, int32_t z) {
+            return BlockSupport::isSolid(blocks.getBlockAt(x, y, z));
+        };
+        const auto fits = [&] {
+            constexpr int32_t WORLD_LIMIT = 30000000;
+            const int32_t x0 = origin.x + minX;
+            const int32_t z0 = origin.z + minZ;
+            if (x0 < -WORLD_LIMIT || x0 + rotatedSize.x - 1 > WORLD_LIMIT
+                || z0 < -WORLD_LIMIT || z0 + rotatedSize.z - 1 > WORLD_LIMIT)
+                return false;
+            if (piece.mGrounded) {
+                for (const auto &cell: piece.mGroundChecks) {
+                    const auto at = world(cell);
+                    if (!solid(at.x, at.y - 1, at.z))
+                        return false;
+                }
+            }
+            if (piece.mMaxSteepness) {
+                if (piece.mGroundChecks.empty())
+                    return false;
+                const int32_t range = std::min(*piece.mMaxSteepness, LevelChunk::MAX_Y - LevelChunk::MIN_Y);
+                for (const auto &sample: piece.mGroundChecks) {
+                    const auto at = world(sample);
+                    const int32_t lowest = std::max(LevelChunk::MIN_Y, at.y - 1 - range);
+                    const int32_t highest = std::min(LevelChunk::MAX_Y, at.y - 1 + range);
+                    bool aboveSolid = solid(at.x, highest + 1, at.z);
+                    bool foundSurface = false;
+                    for (int32_t y = highest; y >= lowest; --y) {
+                        const bool hereSolid = solid(at.x, y, at.z);
+                        if (hereSolid && !aboveSolid) {
+                            foundSurface = true;
+                            break;
+                        }
+                        aboveSolid = hereSolid;
+                    }
+                    if (!foundSurface)
+                        return false;
+                }
+            }
+            if (piece.mUnburied && baseY + size.y <= LevelChunk::MAX_Y) {
+                for (int32_t x = 0; x < rotatedSize.x; ++x) {
+                    for (int32_t z = 0; z < rotatedSize.z; ++z) {
+                        if (!DecorationSupport::isAir(blocks.getBlockAt(x0 + x, baseY + size.y, z0 + z)))
                             return false;
                     }
                 }
             }
+            for (const auto &cell: piece.mIntersectionChecks) {
+                const auto at = world(cell);
+                if (!contains(piece.mAllowed, blocks.getBlockAt(at.x, at.y, at.z)))
+                    return false;
+            }
             return true;
         };
 
-        if ((piece.mGrounded || piece.mCheckIntersection || piece.mUnburied)
-            && !visit([&](const Vector3i &cell, const Vector3i &at) {
-                const auto *block = shape.getBlock(cell);
-                if (piece.mUnburied && cell.y == size.y - 1 && at.y < LevelChunk::MAX_Y
-                    && !DecorationSupport::isAir(blocks.getBlockAt(at.x, at.y + 1, at.z)))
-                    return false;
-                if (block == nullptr)
-                    return true;
-                if (piece.mGrounded && cell.y == ground && !DecorationSupport::isAir(*block)
-                    && !BlockSupport::isSolid(blocks.getBlockAt(at.x, at.y - 1, at.z)))
-                    return false;
-                return !piece.mCheckIntersection || (piece.mOnlySolidIntersection && !BlockSupport::isSolid(*block))
-                       || contains(piece.mAllowed, blocks.getBlockAt(at.x, at.y, at.z));
-            }))
-            return false;
+        // the game visits a square spiral at the original y, starting east and turning south
+        static const std::array<Vector3i, 4> STEPS{Vector3i(1, 0, 0), Vector3i(0, 0, 1),
+                                                   Vector3i(-1, 0, 0), Vector3i(0, 0, -1)};
+        const int32_t width = 2 * piece.mAdjustmentRadius + 1;
+        int32_t attempts = width * width;
+        int32_t leg = 0;
+        int32_t left = 1;
+        Vector3i offset;
+        while (!fits()) {
+            if (--attempts == 0)
+                return false;
+            const Vector3i &step = STEPS[(size_t) (leg & 3)];
+            origin.x += step.x;
+            origin.z += step.z;
+            offset.x += step.x;
+            offset.z += step.z;
+            if (--left == 0)
+                left = ++leg / 2 + 1;
+        }
 
-        return visit([&](const Vector3i &cell, const Vector3i &at) {
-            if (const auto *block = shape.getBlock(cell)) {
-                blocks.setBlockStateAt(at.x, at.y, at.z, StructureBlockRotation::apply(*block, options.mRotation, 0));
-                if (const auto *data = shape.getBlockEntity(cell)) {
-                    Tag actor = *data;
-                    actor.putInt("x", at.x);
-                    actor.putInt("y", at.y);
-                    actor.putInt("z", at.z);
-                    blocks.storeGeneratedBlockActor(std::move(actor));
+        for (int32_t x = 0; x < size.x; ++x) {
+            for (int32_t z = 0; z < size.z; ++z) {
+                for (int32_t y = 0; y < size.y; ++y) {
+                    const Vector3i cell(x, y, z);
+                    const auto at = world(cell);
+                    if (const auto *block = shape.getBlock(cell)) {
+                        blocks.setBlockStateAt(at.x, at.y, at.z, StructureBlockRotation::apply(*block, rotation, 0));
+                        if (const auto *data = shape.getBlockEntity(cell)) {
+                            Tag actor = *data;
+                            actor.putInt("x", at.x);
+                            actor.putInt("y", at.y);
+                            actor.putInt("z", at.z);
+                            blocks.storeGeneratedBlockActor(std::move(actor));
+                        }
+                    }
+                    if (const auto *overlay = shape.getBlock(cell, 1))
+                        blocks.setExtraBlockAt(at.x, at.y, at.z, StructureBlockRotation::apply(*overlay, rotation, 0));
                 }
             }
-            if (const auto *overlay = shape.getBlock(cell, 1))
-                blocks.setExtraBlockAt(at.x, at.y, at.z, StructureBlockRotation::apply(*overlay, options.mRotation, 0));
-            return true;
-        });
+        }
+        position.x += offset.x;
+        position.z += offset.z;
+        return true;
     }
 
     class SearchBlocks : public BlockManager {
@@ -3469,8 +3581,11 @@ void OverworldRulePlacer::loadPacks(const std::vector<BehaviorPack> &packs) {
         for (const BehaviorPack &pack: packs)
             templates.addPack(pack.mPath);
         for (auto &[name, feature]: packFeatures) {
-            if (feature.mTemplate)
+            if (feature.mTemplate) {
                 feature.mTemplate->mShape = templates.find(feature.mTemplate->mName);
+                if (feature.mTemplate->mShape)
+                    prepareTemplateChecks(*feature.mTemplate);
+            }
         }
     }
 
