@@ -4,6 +4,8 @@
 #include "Server/Localization.h"
 #include "Server/ServerHost.h"
 #include "Server/ServerPaths.h"
+#include "World/Actor/Definition/EntityEvents.h"
+#include "World/Actor/Spawn/NaturalSpawner.h"
 #include "World/Actor/Spawn/SpawnRules.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
@@ -426,16 +428,18 @@ namespace {
     void writeAnimationPack(const std::filesystem::path &pack) {
         for (const char *folder: {"entities", "animations", "animation_controllers"})
             std::filesystem::create_directories(pack / folder);
-        std::ofstream(pack / "entities" / "animated.json") << R"({
+        const auto writeEntity = [&](const char *name, const char *components) {
+            std::ofstream(pack / "entities" / (std::string(name) + ".json")) << R"({
             "format_version":"1.21.20",
             "minecraft:entity": {
                 "description":{
-                    "identifier":"example:animated",
+                    "identifier":"example:)" << name << R"(",
                     "is_summonable":true,
                     "properties":{"example:stage":{"type":"int","range":[0,4],"default":0}},
                     "animations":{"controller":"controller.animation.example","timeline":"animation.example"},
                     "scripts":{"initialize":["v.enter = 0;"],"animate":["controller"]}
                 },
+                "components":)" << components << R"(,
                 "events":{
                     "example:entry":{"set_property":{"example:stage":1}},
                     "example:frame":{"set_property":{"example:stage":2}},
@@ -444,6 +448,9 @@ namespace {
                 }
             }
         })";
+        };
+        writeEntity("animated", "{}");
+        writeEntity("animated_projectile", R"({"minecraft:projectile":{}})");
         std::ofstream(pack / "animations" / "example.json") << R"({
             "format_version":"1.8.0",
             "animations":{
@@ -472,11 +479,104 @@ namespace {
         })json";
     }
 
+    void writeNaturalSpawnPack(const std::filesystem::path &pack) {
+        std::ofstream(pack / "entities" / "natural.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:entity":{
+                "description":{
+                    "identifier":"example:natural",
+                    "properties":{"example:stage":{"type":"int","range":[0,2],"default":0}}
+                },
+                "component_groups":{
+                    "example:large":{"minecraft:collision_box":{"width":1.5,"height":2.5}}
+                },
+                "events":{
+                    "minecraft:entity_spawned":{
+                        "add":{"component_groups":["example:large"]},
+                        "set_property":{"example:stage":1}
+                    },
+                    "example:reset":{
+                        "remove":{"component_groups":["example:large"]},
+                        "set_property":{"example:stage":2}
+                    }
+                }
+            }
+        })";
+        std::ofstream(pack / "spawn_rules" / "natural.json") << R"({
+            "format_version":"1.8.0",
+            "minecraft:spawn_rules":{
+                "description":{"identifier":"example:natural","population_control":"animal"},
+                "conditions":[{
+                    "minecraft:spawns_on_surface":{},
+                    "minecraft:height_filter":{"min":251,"max":251},
+                    "minecraft:weight":{"default":1000000000}
+                }]
+            }
+        })";
+    }
+
+    void checkNaturalSpawn(ServerNetworkHandler &handler) {
+        Level &level = handler.getLevel();
+        const int32_t chunkCoordinate = 13;
+        const BlockState floor("minecraft:stone");
+        for (int32_t x = chunkCoordinate - 1; x <= chunkCoordinate + 1; ++x) {
+            for (int32_t z = chunkCoordinate - 1; z <= chunkCoordinate + 1; ++z) {
+                auto &chunk = level.insertChunk(LevelChunk(x, z));
+                chunk.setPopulated(true);
+                for (int32_t localX = 0; localX < 16; ++localX) {
+                    for (int32_t localZ = 0; localZ < 16; ++localZ)
+                        chunk.setBlock(localX, 250, localZ, floor);
+                }
+            }
+        }
+        level.setActiveColumns({BlockTickingQueue::column(chunkCoordinate, chunkCoordinate)});
+        const uint64_t runtimeId = handler.allocateRuntimeId();
+        const NetworkIdentifier id("pack-test-player", runtimeId);
+        ServerPlayer &player = handler.getPlayers().try_emplace(id, id, runtimeId).first->second;
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        player.moveToLevel(level);
+        player.setPosition(Vector3f(chunkCoordinate * 16 - 32, 251, chunkCoordinate * 16));
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+
+        NaturalSpawner spawner;
+        ServerActor *natural = nullptr;
+        for (int32_t tick = 0; tick < 8192 && natural == nullptr; ++tick) {
+            spawner.tick(handler, level);
+            for (const auto &[uniqueId, actor]: handler.getActors()) {
+                if (actor->getTypeId() == "example:natural") {
+                    natural = actor.get();
+                    break;
+                }
+            }
+        }
+        handler.getPlayers().erase(id);
+        level.setActiveColumns({});
+        require(natural != nullptr, "the pack rule did not spawn its entity");
+        handler.tickActors();
+        require(natural->getIntProperty("example:stage") == 1 && natural->getSize().mHeight == 2.5f,
+                "the default spawn event did not initialize the naturally spawned entity");
+        EntityEvents::fire(handler, *natural, "example:reset");
+        require(natural->getIntProperty("example:stage") == 2 && natural->getSize().mHeight == ServerActor::DEFAULT_HEIGHT,
+                "removing the component group did not restore the base collision box");
+
+        const int64_t uniqueId = natural->getUniqueId();
+        const Tag savedActor = natural->saveNbt();
+        handler.removeActor(uniqueId);
+        handler.spawnStoredActors(level, {savedActor});
+        const auto restored = handler.getActors().find(uniqueId);
+        require(restored != handler.getActors().end(), "the naturally spawned entity did not reload");
+        handler.tickActors();
+        require(restored->second->getIntProperty("example:stage") == 2
+                && restored->second->getSize().mHeight == ServerActor::DEFAULT_HEIGHT,
+                "loading the entity replayed its default spawn event");
+    }
+
     void checkServerLoadsPackData(const std::filesystem::path &directory) {
         const auto pack = directory / "behavior_packs" / "spawn-override";
         writeJigsawPack(pack);
         writeWorldgenPack(pack);
         writeAnimationPack(pack);
+        writeNaturalSpawnPack(pack);
         ServerPaths::setRoot(directory);
         ServerHostOptions options;
         options.bindAddress = "127.0.0.1";
@@ -601,14 +701,14 @@ namespace {
                 }), "the custom biome was missing from the client registry");
 
         ServerActor *actor = handler.spawnActor(handler.getLevel(), "example:animated", Vector3f(0, 90, 0));
-        ServerActor *projectile = handler.spawnActor(handler.getLevel(), "example:animated", Vector3f(6, 180, 6),
-                                                      [](ServerActor &value) { value.setProjectile(true); });
+        ServerActor *projectile = handler.spawnActor(handler.getLevel(), "example:animated_projectile",
+                                                      Vector3f(6, 180, 6));
         ServerActor *spawned = handler.spawnActor(handler.getLevel(), "example:animated", Vector3f(2, 90, 2),
                                                    {}, "example:next");
-        require(actor != nullptr && projectile != nullptr && spawned != nullptr,
+        require(actor != nullptr && projectile != nullptr && projectile->isProjectile() && spawned != nullptr,
                 "could not spawn actors for the pack event tests");
         require(spawned->getIntProperty("example:stage", 0) == 4,
-                "the generic actor missed its spawn event");
+                "the pack actor missed its explicit spawn event");
         const uint64_t projectileId = projectile->getRuntimeId();
         const auto projectileStage = [&] {
             const auto *active = handler.getActorByRuntimeId(projectileId);
@@ -624,6 +724,7 @@ namespace {
         handler.tickActors();
         require(actor->getIntProperty("example:stage", 0) == 4, "the controller did not transition after the animation");
         require(projectileStage() == 4, "the projectile controller did not transition after the animation");
+        checkNaturalSpawn(handler);
         host.stop();
         require(BiomeChunkGenDataRegistry::getBiomeId("example:gem_fields") < 0
                 && std::filesystem::is_regular_file(directory / "custom-biome-ids.json"),

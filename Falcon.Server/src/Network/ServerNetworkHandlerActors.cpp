@@ -222,10 +222,13 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
-    if (mob != nullptr)
+    if (mob != nullptr) {
         mob->upgradeDefinition(*this, false);
-    else if (!spawnEvent.empty())
+        if (definition != nullptr && !spawnEvent.empty() && ActorClassRegistry::getPrototype(identifier) == nullptr)
+            mob->startDefinition(*this);
+    } else if (!spawnEvent.empty()) {
         EntityEvents::fire(*this, *result, spawnEvent);
+    }
     mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
