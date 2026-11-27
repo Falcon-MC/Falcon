@@ -208,10 +208,23 @@ namespace {
                         "type":"minecraft:overworld", "top_material":"minecraft:calcite",
                         "sea_floor_material":"minecraft:calcite", "mid_material":"minecraft:stone"
                     }},
+                    "minecraft:subsurface_builder":{"builder":{
+                        "type":"minecraft:noise_gradient",
+                        "noise_descriptor":{"name":"example:gradient","first_octave":-5,"amplitudes":[1,0,1]},
+                        "non_replaceable_blocks":["minecraft:bedrock"],
+                        "noise_block_specifiers":[{"range":{"min":-1,"max":1},"block":"minecraft:smooth_basalt"}]
+                    }},
                     "minecraft:replace_biomes": {"replacements":[{
                         "dimension":"minecraft:overworld","amount":1,"noise_frequency_scale":1,"targets":[)"
             << targets << R"(]}]}
                 }
+            }
+        })";
+        std::ofstream(pack / "biomes" / "ocean.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:biome":{
+                "description":{"identifier":"minecraft:ocean"},
+                "components":{"minecraft:tags":{"tags":["example_ocean_override"]}}
             }
         })";
         std::ofstream(pack / "features" / "gem_block.json") << R"({
@@ -274,6 +287,32 @@ namespace {
                 "distribution":{"iterations":1,"x":2,"y":120,"z":2}
             }
         })";
+        std::ofstream(pack / "features" / "template.json") << R"({
+            "format_version":"1.26.30",
+            "minecraft:structure_template_feature":{
+                "description":{"identifier":"example:template"},
+                "structure_name":"example:piece","facing_direction":"north",
+                "constraints":{"block_intersection":{"block_allowlist":["minecraft:air"]}}
+            }
+        })";
+        std::ofstream(pack / "features" / "search.json") << R"({
+            "format_version":"1.21.20",
+            "minecraft:search_feature":{
+                "description":{"identifier":"example:search"}, "places_feature":"example:gem_block",
+                "search_axis":"+x","search_volume":{"min":[0,0,0],"max":[1,0,0]},"required_successes":2
+            }
+        })";
+        const auto rule = [&](const char *name, const char *feature, const char *pass, int32_t x) {
+            std::ofstream file(pack / "feature_rules" / (std::string(name) + ".json"));
+            file << R"({"format_version":"1.21.20","minecraft:feature_rules":{
+                "description":{"identifier":"example:)" << name << R"(","places_feature":"example:)" << feature << R"("},
+                "conditions":{"placement_pass":")" << pass << R"(",
+                    "minecraft:biome_filter":{"test":"has_biome_tag","value":"example_gem_fields"}},
+                "distribution":{"iterations":1,"x":)" << x << R"(,"y":280,"z":8}}})";
+        };
+        rule("template", "template", "surface_pass", 12);
+        rule("search_ok", "search", "final_pass", 2);
+        rule("search_fail", "search", "final_pass", 11);
     }
 
     void writeAnimationPack(const std::filesystem::path &pack) {
@@ -306,7 +345,7 @@ namespace {
                 }
             }
         })";
-        std::ofstream(pack / "animation_controllers" / "example.json") << R"({
+        std::ofstream(pack / "animation_controllers" / "example.json") << R"json({
             "format_version":"1.10.0",
             "animation_controllers":{
                 "controller.animation.example":{
@@ -315,14 +354,14 @@ namespace {
                         "waiting":{
                             "on_entry":["v.enter = 1;", "@s example:entry"],
                             "animations":[{"timeline":"v.enter == 1"}],
-                            "transitions":[{"finished":"v.finished && q.all_animations_finished"}],
+                            "transitions":[{"finished":"v.finished && q.all_animations_finished && (math.sin(30) > 0.49 ? math.hermite_blend(0.5) == 0.5 : 0)"}],
                             "on_exit":["@s example:exit"]
                         },
                         "finished":{"on_entry":["@s example:next"]}
                     }
                 }
             }
-        })";
+        })json";
     }
 
     void checkServerLoadsPackData(const std::filesystem::path &directory) {
@@ -381,6 +420,10 @@ namespace {
         const auto &piece = plan->mPieces.front();
         require(chunk.getBlock(piece.x & 15, piece.y, piece.z & 15).mName == "minecraft:diamond_block",
                 "a newly generated chunk omitted the pack structure or its block processor");
+        const int32_t ocean = BiomeChunkGenDataRegistry::getBiomeId("minecraft:ocean");
+        require(ocean >= 0 && BiomeChunkGenDataRegistry::hasTag(ocean, "example_ocean_override")
+                && !BiomeChunkGenDataRegistry::hasTag(ocean, "overworld"),
+                "a vanilla biome override did not replace its tags");
         const int32_t customBiome = BiomeChunkGenDataRegistry::getBiomeId("example:gem_fields");
         require(customBiome >= 0 && (int32_t) chunk.getBiomeAt(3, 270, 5) == customBiome,
                 "the generator did not apply the custom biome replacement");
@@ -405,6 +448,18 @@ namespace {
             }
         }
         require(hasOreGroup, "the pack-defined ore vein was not placed");
+        bool hasGradient = false;
+        for (int32_t y = -56; y < -24; ++y)
+            hasGradient |= chunk.getBlock(2, y, 2).mName == "minecraft:smooth_basalt";
+        require(hasGradient && chunk.getBlock(2, LevelChunk::MIN_Y, 2).mName == "minecraft:bedrock",
+                "the subsurface noise gradient did not place its material or preserve bedrock");
+        require(chunk.getBlock(12, 280, 8).mName == "minecraft:gold_block",
+                "the structure template feature did not place the template");
+        require(chunk.getBlock(2, 280, 8).mName == "minecraft:emerald_block"
+                && chunk.getBlock(3, 280, 8).mName == "minecraft:emerald_block",
+                "the search feature did not place both successful results");
+        require(chunk.getBlock(11, 280, 8).mName == "minecraft:air",
+                "a search feature below its success threshold left a block behind");
         const auto &biomes = handler.getBiomes().getBiomes();
         require(std::any_of(biomes.begin(), biomes.end(), [customBiome](const auto &definition) {
                     return definition.mId == customBiome && definition.mName == "example:gem_fields"

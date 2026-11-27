@@ -7,7 +7,7 @@
 // usage:
 //   FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1 [--csv file] [--json file]
 //                        [--min-block-match pct] [--terrain-only] [--dimension 0|1|2] [--blocks file]
-//                        [--order rows|spiral|reverse|random:<n>] [--threads n]
+//                        [--order rows|spiral|reverse|random:<n>] [--threads n] [--behavior-packs dir]
 //   FalconWorldGenParity --db <path> --seed <int64> --column x,z [--terrain-only]
 //   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
 //
@@ -53,6 +53,10 @@
 
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Debug/ContentLogEndPoint.h"
+#include "Scripting/BehaviorPackManager.h"
+#include "Server/ServerPaths.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
+#include "World/Level/LevelGen/Structure/JigsawStructures.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -152,6 +156,7 @@ namespace {
 
     struct Options {
         std::string mDb;
+        std::string mBehaviorPacks;
         int64_t mSeed = 0;
         bool mHasSeed = false;
         bool mHasArea = false;
@@ -246,7 +251,7 @@ namespace {
         LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
         LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2] [--blocks file]");
         LOG_ERROR(LogAreaID::Level, "                            [--block-states] [--dump file]");
-        LOG_ERROR(LogAreaID::Level, "                            [--order rows|spiral|reverse|random:<n>] [--threads n]");
+        LOG_ERROR(LogAreaID::Level, "                            [--order rows|spiral|reverse|random:<n>] [--threads n] [--behavior-packs dir]");
         LOG_ERROR(LogAreaID::Level, "                            [--mineshaft-markers minY,maxY] [--min-mineshaft-marker-match pct]");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --far");
@@ -279,6 +284,8 @@ namespace {
 
             if (flag == "--db") {
                 options.mDb = value;
+            } else if (flag == "--behavior-packs") {
+                options.mBehaviorPacks = value;
             } else if (flag == "--seed") {
                 if (!parseInt64(value, options.mSeed)) {
                     LOG_ERROR(LogAreaID::Level, "--seed must be a 64-bit integer, got '%s'", value.c_str());
@@ -388,6 +395,7 @@ namespace {
     // LevelDB's recovery and lock files must never touch the original BDS world
     class WorldCopy {
     public:
+        const std::filesystem::path &root() const { return mRoot; }
         ~WorldCopy() {
             if (mRoot.empty())
                 return;
@@ -1472,6 +1480,22 @@ namespace {
 
         BlockPaletteRegistry::getInstance().initialize();
         BiomeChunkGenDataRegistry::initialize();
+        if (!options.mBehaviorPacks.empty()) {
+            if (!hasReferenceSeed || levelDat.getLong("RandomSeed") != options.mSeed) {
+                LOG_ERROR(LogAreaID::Level, "--behavior-packs requires a reference world with the same seed");
+                return EXIT_INVALID;
+            }
+            BehaviorPackManager packs;
+            packs.discover(options.mBehaviorPacks);
+            if (packs.getPacks().empty()) {
+                LOG_ERROR(LogAreaID::Level, "No behavior packs found in '%s'", options.mBehaviorPacks.c_str());
+                return EXIT_INVALID;
+            }
+            ServerPaths::setRoot(copy.root());
+            BiomeChunkGenDataRegistry::loadPacks(packs.getPacks());
+            OverworldRulePlacer::loadPacks(packs.getPacks());
+            JigsawStructures::packStructures().loadPacks(packs.getPacks());
+        }
         const BiomeNames biomes;
 
         if (options.mHasColumn)

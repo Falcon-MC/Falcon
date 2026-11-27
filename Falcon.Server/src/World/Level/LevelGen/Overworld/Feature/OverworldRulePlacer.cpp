@@ -2,6 +2,8 @@
 
 #include "Core/Json/Json.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Scripting/ScriptStructureRegistry.h"
+#include "World/Level/Structure/McStructure.h"
 #include "Scripting/Content/PackBlockState.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatures.h"
 #include "World/Level/Structure/StructureBlockRotation.h"
@@ -2918,14 +2920,37 @@ namespace {
                                        || operation == "not");
     }
 
+    struct PackSearch {
+        std::array<int32_t, 3> mMin{};
+        std::array<int32_t, 3> mMax{};
+        std::array<int32_t, 3> mOrder{};
+        int32_t mSign = 1;
+        int32_t mRequired = 1;
+    };
+
+    struct PackTemplate {
+        std::string mName;
+        std::shared_ptr<const McStructure> mShape;
+        int32_t mRotation = -1;
+        int32_t mGroundLevel = 0;
+        bool mGrounded = false;
+        bool mUnburied = false;
+        bool mCentered = false;
+        bool mCheckIntersection = false;
+        bool mOnlySolidIntersection = true;
+        std::vector<std::string> mAllowed;
+    };
+
     struct PackFeature {
-        enum class Type { SingleBlock, Aggregate, Sequence, Weighted, Scatter, Ore, SurfaceThreshold, Snap };
+        enum class Type { SingleBlock, Aggregate, Sequence, Weighted, Scatter, Ore, SurfaceThreshold, Snap, Search, Structure };
         Type mType = Type::SingleBlock;
         std::vector<std::pair<BlockState, int32_t>> mBlocks;
         std::vector<std::pair<std::string, int32_t>> mChildren;
         std::vector<std::string> mMayReplace;
         PackScatter mScatter;
         OreDefinition mOre;
+        PackSearch mSearch;
+        std::unique_ptr<PackTemplate> mTemplate;
         OverworldRulePlacer::SnapOptions mSnap;
         int32_t mBelowSurface = 0;
         bool mRotate = false;
@@ -3020,6 +3045,79 @@ namespace {
             out.mChildren.emplace_back(child, 1);
             return true;
         }
+        if (type == "minecraft:structure_template_feature") {
+            const auto &constraints = packMember(value, "constraints");
+            if (packMember(value, "adjustment_radius").number() != 0 || constraints.get("leveled") != nullptr)
+                return false;
+            out.mType = Type::Structure;
+            out.mTemplate = std::make_unique<PackTemplate>();
+            auto &piece = *out.mTemplate;
+            piece.mName = packMember(value, "structure_name").string();
+            const std::string facing = packMember(value, "facing_direction").string("random");
+            static const std::array<std::string_view, 4> DIRECTIONS{"north", "east", "south", "west"};
+            const auto direction = std::find(DIRECTIONS.begin(), DIRECTIONS.end(), facing);
+            const double ground = packMember(value, "ground_level").number();
+            if (piece.mName.empty() || (direction == DIRECTIONS.end() && facing != "random")
+                || !(ground >= 0 && ground <= INT32_MAX && ground == std::trunc(ground)))
+                return false;
+            if (direction != DIRECTIONS.end())
+                piece.mRotation = (int32_t) (direction - DIRECTIONS.begin());
+            piece.mGroundLevel = (int32_t) ground;
+            piece.mCentered = packMember(value, "rotate_around_center").boolean();
+            piece.mGrounded = constraints.get("grounded") != nullptr;
+            piece.mUnburied = constraints.get("unburied") != nullptr;
+            if (const auto *intersection = constraints.get("block_intersection")) {
+                piece.mCheckIntersection = true;
+                piece.mOnlySolidIntersection = packMember(*intersection,
+                        "only_check_intersection_for_motion_blocking_blocks").boolean(true);
+                const auto *allowed = intersection->get("block_allowlist");
+                if (allowed == nullptr)
+                    allowed = intersection->get("block_whitelist");
+                if (allowed != nullptr) {
+                    for (const auto &entry: allowed->mArray) {
+                        if (!entry->isString() || entry->mString.empty())
+                            return false;
+                        piece.mAllowed.push_back(blockName(entry->mString));
+                    }
+                }
+            }
+            return true;
+        }
+        if (type == "minecraft:search_feature") {
+            out.mType = Type::Search;
+            const std::string child = packMember(value, "places_feature").string();
+            const std::string axis = packMember(value, "search_axis").string();
+            const auto &volume = packMember(value, "search_volume");
+            const auto &min = packMember(volume, "min").mArray;
+            const auto &max = packMember(volume, "max").mArray;
+            const double required = packMember(value, "required_successes").number(1);
+            if (child.empty() || axis.size() != 2 || (axis[0] != '+' && axis[0] != '-')
+                || axis[1] < 'x' || axis[1] > 'z' || min.size() != 3 || max.size() != 3
+                || !(required >= 1 && required <= MAX_PACK_PLACEMENTS && required == std::trunc(required)))
+                return false;
+            auto &search = out.mSearch;
+            search.mOrder[0] = axis[1] - 'x';
+            search.mSign = axis[0] == '-' ? -1 : 1;
+            search.mRequired = (int32_t) required;
+            size_t orderIndex = 1;
+            int64_t cells = 1;
+            for (size_t index = 0; index < 3; ++index) {
+                const double low = min[index]->number(512);
+                const double high = max[index]->number(-512);
+                if (!(low >= -384 && high <= 384 && low <= high
+                      && low == std::trunc(low) && high == std::trunc(high)))
+                    return false;
+                search.mMin[index] = (int32_t) low;
+                search.mMax[index] = (int32_t) high;
+                cells *= search.mMax[index] - search.mMin[index] + 1;
+                if ((int32_t) index != search.mOrder[0])
+                    search.mOrder[orderIndex++] = (int32_t) index;
+            }
+            if (cells > MAX_PACK_PLACEMENTS || cells < required)
+                return false;
+            out.mChildren.emplace_back(child, 1);
+            return true;
+        }
         if (type == "minecraft:snap_to_surface_feature") {
             out.mType = Type::Snap;
             auto &snap = out.mSnap;
@@ -3106,6 +3204,102 @@ namespace {
         return entries.back().first;
     }
 
+    bool placePackTemplate(BlockManager &blocks, const PackTemplate &piece, const Vector3i &position,
+                           std::mt19937 &random) {
+        if (!piece.mShape)
+            return false;
+        const auto &shape = *piece.mShape;
+        const Vector3i size = shape.getSize();
+        McStructure::PlaceOptions options;
+        options.mRotation = piece.mRotation < 0 ? nextInt(random, 4) : piece.mRotation;
+        const int32_t ground = std::min(piece.mGroundLevel, size.y - 1);
+        const int32_t baseY = position.y - ground;
+        if (size.y <= 0 || baseY < LevelChunk::MIN_Y || baseY + size.y - 1 > LevelChunk::MAX_Y)
+            return false;
+        Vector3i origin = position;
+        if (piece.mCentered) {
+            const auto rotatedSize = shape.rotatedSize(options.mRotation);
+            origin.x -= rotatedSize.x / 2;
+            origin.z -= rotatedSize.z / 2;
+        }
+
+        const auto visit = [&](const auto &function) {
+            for (int32_t x = 0; x < size.x; ++x) {
+                for (int32_t z = 0; z < size.z; ++z) {
+                    for (int32_t y = 0; y < size.y; ++y) {
+                        const Vector3i cell(x, y, z);
+                        auto at = shape.transform(cell, options);
+                        at.x += origin.x;
+                        at.y += baseY;
+                        at.z += origin.z;
+                        if (!function(cell, at))
+                            return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        if ((piece.mGrounded || piece.mCheckIntersection || piece.mUnburied)
+            && !visit([&](const Vector3i &cell, const Vector3i &at) {
+                const auto *block = shape.getBlock(cell);
+                if (piece.mUnburied && cell.y == size.y - 1 && at.y < LevelChunk::MAX_Y
+                    && !DecorationSupport::isAir(blocks.getBlockAt(at.x, at.y + 1, at.z)))
+                    return false;
+                if (block == nullptr)
+                    return true;
+                if (piece.mGrounded && cell.y == ground && !DecorationSupport::isAir(*block)
+                    && !BlockSupport::isSolid(blocks.getBlockAt(at.x, at.y - 1, at.z)))
+                    return false;
+                return !piece.mCheckIntersection || (piece.mOnlySolidIntersection && !BlockSupport::isSolid(*block))
+                       || contains(piece.mAllowed, blocks.getBlockAt(at.x, at.y, at.z));
+            }))
+            return false;
+
+        return visit([&](const Vector3i &cell, const Vector3i &at) {
+            if (const auto *block = shape.getBlock(cell)) {
+                blocks.setBlockStateAt(at.x, at.y, at.z, StructureBlockRotation::apply(*block, options.mRotation, 0));
+                if (const auto *data = shape.getBlockEntity(cell)) {
+                    Tag actor = *data;
+                    actor.putInt("x", at.x);
+                    actor.putInt("y", at.y);
+                    actor.putInt("z", at.z);
+                    blocks.storeGeneratedBlockActor(std::move(actor));
+                }
+            }
+            if (const auto *overlay = shape.getBlock(cell, 1))
+                blocks.setExtraBlockAt(at.x, at.y, at.z, StructureBlockRotation::apply(*overlay, options.mRotation, 0));
+            return true;
+        });
+    }
+
+    class SearchBlocks : public BlockManager {
+    public:
+        explicit SearchBlocks(BlockManager &source) : BlockManager(source.getLevel()) {
+            readPendingFrom(&source);
+        }
+
+        void populateBeeNest(int32_t x, int32_t y, int32_t z, int32_t bees) override {
+            mNests.push_back({x, y, z, bees});
+        }
+
+        void storeGeneratedBlockActor(Tag data) override {
+            mBlockActors.push_back(std::move(data));
+        }
+
+        void commit(BlockManager &parent) {
+            parent.merge(*this);
+            for (auto &data: mBlockActors)
+                parent.storeGeneratedBlockActor(std::move(data));
+            for (const auto &[x, y, z, bees]: mNests)
+                parent.populateBeeNest(x, y, z, bees);
+        }
+
+    private:
+        std::vector<std::array<int32_t, 4>> mNests;
+        std::vector<Tag> mBlockActors;
+    };
+
     bool placePackFeature(BlockManager &blocks, const std::string &name, Vector3i &pos, std::mt19937 &random,
                           int32_t &placements, int32_t depth = 0) {
         constexpr int32_t WORLD_LIMIT = 30000000;
@@ -3133,6 +3327,37 @@ namespace {
         }
         if (feature.mType == Type::Ore)
             return placeOre(blocks, feature.mOre, pos.x, pos.y, pos.z, random);
+        if (feature.mType == Type::Structure)
+            return placePackTemplate(blocks, *feature.mTemplate, pos, random);
+        if (feature.mType == Type::Search) {
+            const auto &search = feature.mSearch;
+            const auto &[outer, middle, inner] = search.mOrder;
+            std::array<int32_t, 3> offset{};
+            int32_t needed = search.mRequired;
+            SearchBlocks accepted(blocks);
+            const int32_t start = search.mSign > 0 ? search.mMin[outer] : search.mMax[outer];
+            const int32_t end = search.mSign > 0 ? search.mMax[outer] : search.mMin[outer];
+            for (offset[outer] = start; offset[outer] != end + search.mSign; offset[outer] += search.mSign) {
+                for (offset[middle] = search.mMin[middle]; offset[middle] <= search.mMax[middle]; ++offset[middle]) {
+                    for (offset[inner] = search.mMin[inner]; offset[inner] <= search.mMax[inner]; ++offset[inner]) {
+                        if (placements <= 0)
+                            return false;
+                        Vector3i candidate(pos.x + offset[0], pos.y + offset[1], pos.z + offset[2]);
+                        SearchBlocks attempt(static_cast<BlockManager &>(accepted));
+                        if (!placePackFeature(attempt, feature.mChildren.front().first, candidate, random,
+                                              placements, depth + 1))
+                            continue;
+                        attempt.commit(accepted);
+                        if (--needed == 0) {
+                            accepted.commit(blocks);
+                            pos = candidate;
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
         if (feature.mType == Type::Snap) {
             int32_t snapped[3]{};
             if (!OverworldRulePlacer::snapPosition(blocks, feature.mSnap, pos.x, pos.y, pos.z, random, snapped))
@@ -3235,6 +3460,18 @@ void OverworldRulePlacer::loadPacks(const std::vector<BehaviorPack> &packs) {
                 && readPackScatter(packMember(entry, "distribution"), rule.mScatter))
                 packRules[id] = std::move(rule);
         });
+    }
+
+    if (std::any_of(packFeatures.begin(), packFeatures.end(), [](const auto &entry) {
+            return entry.second.mTemplate != nullptr;
+        })) {
+        ScriptStructureRegistry templates;
+        for (const BehaviorPack &pack: packs)
+            templates.addPack(pack.mPath);
+        for (auto &[name, feature]: packFeatures) {
+            if (feature.mTemplate)
+                feature.mTemplate->mShape = templates.find(feature.mTemplate->mName);
+        }
     }
 
     if (packRules.empty())

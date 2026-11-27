@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <numbers>
 #include <random>
 #include <vector>
 
@@ -87,22 +88,33 @@ namespace {
             return mPosition < mSource.size() && mSource[mPosition] == token;
         }
 
+        MolangValue _branch(bool active, MolangValue (Parser::*parse)()) {
+            const bool saved = mEvaluate;
+            mEvaluate = saved && active;
+            MolangValue value = (this->*parse)();
+            mEvaluate = saved;
+            return value;
+        }
+
         MolangValue _ternary() {
             MolangValue condition = _or();
             if (!_accept("?"))
                 return condition;
 
-            MolangValue whenTrue = _ternary();
-            _accept(":");
-            MolangValue whenFalse = _ternary();
-            return condition.isTrue() ? whenTrue : whenFalse;
+            const bool takeTrue = condition.isTrue();
+            MolangValue whenTrue = _branch(takeTrue, &Parser::_ternary);
+            MolangValue whenFalse;
+            if (_accept(":"))
+                whenFalse = _branch(!takeTrue, &Parser::_ternary);
+            return takeTrue ? whenTrue : whenFalse;
         }
 
         MolangValue _or() {
             MolangValue left = _and();
             while (_accept("||")) {
-                const MolangValue right = _and();
-                left = MolangValue::ofNumber(left.isTrue() || right.isTrue() ? 1.0 : 0.0);
+                const bool value = left.isTrue();
+                const MolangValue right = _branch(!value, &Parser::_and);
+                left = MolangValue::ofNumber(value || right.isTrue());
             }
             return left;
         }
@@ -110,8 +122,9 @@ namespace {
         MolangValue _and() {
             MolangValue left = _equality();
             while (_accept("&&")) {
-                const MolangValue right = _equality();
-                left = MolangValue::ofNumber(left.isTrue() && right.isTrue() ? 1.0 : 0.0);
+                const bool value = left.isTrue();
+                const MolangValue right = _branch(value, &Parser::_equality);
+                left = MolangValue::ofNumber(value && right.isTrue());
             }
             return left;
         }
@@ -272,6 +285,8 @@ namespace {
         }
 
         MolangValue _call(const std::string &name, const std::vector<MolangValue> &arguments) const {
+            if (!mEvaluate)
+                return {};
             if (mContext.mVariables != nullptr) {
                 const std::string variable = _variableName(name);
                 if (!variable.empty()) {
@@ -292,6 +307,40 @@ namespace {
             if (!query.empty())
                 return _query(query, arguments);
 
+            if (name.starts_with("math.")) {
+                constexpr double RADIANS = std::numbers::pi / 180.0;
+                const double a = _argument(arguments, 0);
+                const double b = _argument(arguments, 1);
+                const double t = _argument(arguments, 2);
+                const auto minAngle = [](double value) {
+                    const double wrapped = std::fmod(value, 360.0);
+                    return wrapped >= 180.0 ? wrapped - 360.0 : wrapped < -180.0 ? wrapped + 360.0 : wrapped;
+                };
+                if (name == "math.pi")
+                    return MolangValue::ofNumber(std::numbers::pi);
+                if (name == "math.sin")
+                    return MolangValue::ofNumber(std::sin(a * RADIANS));
+                if (name == "math.cos")
+                    return MolangValue::ofNumber(std::cos(a * RADIANS));
+                if (name == "math.atan2")
+                    return MolangValue::ofNumber(std::atan2(a, b) / RADIANS);
+                if (name == "math.min_angle")
+                    return MolangValue::ofNumber(minAngle(a));
+                if (name == "math.sqrt")
+                    return MolangValue::ofNumber(a >= 0.0 ? std::sqrt(a) : 0.0);
+                if (name == "math.pow")
+                    return MolangValue::ofNumber(std::pow(a, b));
+                if (name == "math.exp")
+                    return MolangValue::ofNumber(std::exp(a));
+                if (name == "math.ln")
+                    return MolangValue::ofNumber(a > 0.0 ? std::log(a) : 0.0);
+                if (name == "math.lerp")
+                    return MolangValue::ofNumber(std::lerp(a, b, t));
+                if (name == "math.lerprotate")
+                    return MolangValue::ofNumber(a + minAngle(b - a) * t);
+                if (name == "math.hermite_blend")
+                    return MolangValue::ofNumber(a * a * (3.0 - 2.0 * a));
+            }
             if (name == "math.clamp")
                 return MolangValue::ofNumber(
                         std::min(std::max(_argument(arguments, 0), _argument(arguments, 1)), _argument(arguments, 2)));
@@ -442,6 +491,7 @@ namespace {
         const std::string &mSource;
         const ServerActor *mActor;
         const MolangContext &mContext;
+        bool mEvaluate = true;
         std::unordered_map<std::string, MolangValue> mTemporary;
         size_t mPosition = 0;
     };

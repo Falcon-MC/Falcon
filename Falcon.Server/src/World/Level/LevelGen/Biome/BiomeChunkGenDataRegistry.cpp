@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cmath>
+#include <deque>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -243,9 +244,25 @@ namespace {
         return (uint16_t) (strings.size() - 1);
     }
 
+    struct GradientDefinition {
+        std::string mName;
+        int32_t mFirstOctave = 0;
+        std::vector<float> mAmplitudes;
+        std::vector<NoiseGradientSurfaceBuilder::Range> mRanges;
+        std::vector<const BlockState *> mNonReplaceable;
+        std::deque<BlockState> mBlocks;
+
+        const BlockState *keep(BlockState block) {
+            mBlocks.push_back(std::move(block));
+            return &mBlocks.back();
+        }
+    };
+
     struct PackBiome {
         std::optional<ClimateAttributes> mClimate;
         std::optional<SurfaceBuilderComponent> mSurface;
+        std::optional<GradientDefinition> mSurfaceGradient;
+        std::optional<GradientDefinition> mSubsurfaceGradient;
         std::array<std::optional<BlockState>, 5> mMaterials;
     };
 
@@ -266,9 +283,65 @@ namespace {
         return value == nullptr ? EMPTY : *value;
     }
 
+    bool readGradient(const json::Value &builder, GradientDefinition &out) {
+        const auto *descriptor = builder.get("noise_descriptor");
+        if (descriptor == nullptr)
+            descriptor = builder.get("noise");
+        if (descriptor == nullptr)
+            return false;
+        out.mName = member(*descriptor, "name").string();
+        const auto &amplitudes = member(*descriptor, "amplitudes").mArray;
+        const double first = member(*descriptor, "first_octave").number(1);
+        if (out.mName.empty() || amplitudes.empty() || amplitudes.size() > 100
+            || !(first >= -126 && first <= 0 && first == std::trunc(first)))
+            return false;
+
+        out.mFirstOctave = (int32_t) first;
+        for (const auto &entry: amplitudes) {
+            const double amplitude = entry->number(-1);
+            if (!(amplitude >= 0 && amplitude <= 100))
+                return false;
+            out.mAmplitudes.push_back((float) amplitude);
+        }
+        if (std::none_of(out.mAmplitudes.begin(), out.mAmplitudes.end(), [](float value) { return value > 0; }))
+            return false;
+
+        for (const auto &entry: member(builder, "noise_block_specifiers").mArray) {
+            if (const auto *noise = entry->get("noise"); noise != nullptr && noise->string() != out.mName)
+                continue;
+            auto block = PackBlockState::read(member(*entry, "block"));
+            if (!block)
+                continue;
+            const auto *range = entry->get("range");
+            const double min = range == nullptr ? member(*entry, "threshold").number(0) : member(*range, "min").number(2);
+            const double max = range == nullptr ? 1.0 : member(*range, "max").number(-2);
+            if (min >= -1.0 && min < max && max <= 1.0)
+                out.mRanges.push_back({(float) min, (float) max, out.keep(std::move(*block))});
+        }
+
+        const auto &excluded = member(builder, "non_replaceable_blocks");
+        for (const auto &entry: excluded.mArray) {
+            if (auto block = PackBlockState::read(*entry))
+                out.mNonReplaceable.push_back(out.keep(std::move(*block)));
+        }
+        if (auto block = PackBlockState::read(excluded))
+            out.mNonReplaceable.push_back(out.keep(std::move(*block)));
+        return !out.mRanges.empty();
+    }
+
     void readSurface(PackBiome &biome, const json::Value &components, const SurfaceBuilderComponent *original) {
         const auto &surfaceBuilder = member(components, "minecraft:surface_builder");
+        const auto &subsurface = member(member(components, "minecraft:subsurface_builder"), "builder");
+        if (member(subsurface, "type").string() == "minecraft:noise_gradient"
+            && !readGradient(subsurface, biome.mSubsurfaceGradient.emplace()))
+            biome.mSubsurfaceGradient.reset();
+
         const auto *builder = surfaceBuilder.get("builder");
+        if (builder != nullptr && member(*builder, "type").string() == "minecraft:noise_gradient") {
+            if (readGradient(*builder, biome.mSurfaceGradient.emplace()))
+                return;
+            biome.mSurfaceGradient.reset();
+        }
         const auto *material = builder != nullptr ? builder : components.get("minecraft:surface_parameters");
         if (material == nullptr && original == nullptr)
             return;
@@ -458,8 +531,8 @@ void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs
         const int32_t id = vanillaId >= 0 ? vanillaId : savedId != nullptr ? savedId->integer(-1) : -1;
         if (id < 0)
             continue;
-        auto existing = std::find_if(_definitions().begin(), _definitions().end(), [id](const BiomeDefinitionData &biome) {
-            return biome.mId == id;
+        auto existing = std::find_if(_definitions().begin(), _definitions().end(), [&name](const BiomeDefinitionData &biome) {
+            return stripNamespace(biome.mName) == name;
         });
         const bool custom = vanillaId < 0;
         if ((!custom && existing == _definitions().end())
@@ -469,9 +542,10 @@ void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs
         const auto &components = *definition;
         auto &replacementBiome = packBiomes[id];
         BiomeDefinitionData data = custom ? BiomeDefinitionData() : *existing;
-        data.mId = (uint16_t) id;
-        if (custom)
+        if (custom) {
+            data.mId = (uint16_t) id;
             data.mName = name;
+        }
         if (const auto *climate = components.get("minecraft:climate")) {
             ClimateAttributes &attributes = replacementBiome.mClimate.emplace();
             attributes.mTemperature = data.mTemperature =
@@ -481,6 +555,10 @@ void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs
             attributes.mRain = data.mRain = data.mDownfall > 0.0f;
         }
         const auto &tags = member(member(components, "minecraft:tags"), "tags");
+        if (!tags.isArray() && !custom) {
+            _tagsByBiome().erase(id);
+            data.mTagIndexes.reset();
+        }
         if (tags.isArray() && _definitionStrings().size() + tags.mArray.size() + 1 <= UINT16_MAX) {
             auto &activeTags = _tagsByBiome()[id];
             activeTags.clear();
@@ -525,6 +603,20 @@ void BiomeChunkGenDataRegistry::loadPacks(const std::vector<BehaviorPack> &packs
         } else {
             *existing = std::move(data);
         }
+    }
+}
+
+void BiomeChunkGenDataRegistry::buildPackGradients(int64_t seed,
+                                                   std::map<int32_t, NoiseGradientSurfaceBuilder> &surface,
+                                                   std::map<int32_t, NoiseGradientSurfaceBuilder> &subsurface) {
+    const auto add = [seed](auto &builders, int32_t id, const std::optional<GradientDefinition> &gradient) {
+        if (gradient)
+            builders.try_emplace(id, seed, gradient->mName, gradient->mFirstOctave,
+                                 gradient->mAmplitudes, gradient->mRanges, gradient->mNonReplaceable);
+    };
+    for (const auto &[id, biome]: packBiomes) {
+        add(surface, id, biome.mSurfaceGradient);
+        add(subsurface, id, biome.mSubsurfaceGradient);
     }
 }
 

@@ -1,8 +1,10 @@
 #pragma once
 
 #include "Protocol/Types/BiomeDefinitionData.h"
+#include "World/Level/LevelGen/Overworld/Surface/NoiseGradientSurfaceBuilder.h"
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -39,6 +41,9 @@ public:
     static void initialize();
 
     static void loadPacks(const std::vector<BehaviorPack> &packs);
+
+    static void buildPackGradients(int64_t seed, std::map<int32_t, NoiseGradientSurfaceBuilder> &surface,
+                                   std::map<int32_t, NoiseGradientSurfaceBuilder> &subsurface);
 
     static bool hasReplacements(DimensionType dimension);
 
