@@ -1,5 +1,9 @@
 #include "Core/NBT/NbtIo.h"
 
+#include <string>
+#include <unordered_set>
+#include <utility>
+
 namespace {
 
     int16_t readShort(ReadOnlyBinaryStream &stream, NbtVariant variant) {
@@ -245,6 +249,11 @@ Tag NbtIo::readValue(ReadOnlyBinaryStream &stream, Tag::Type type, NbtVariant va
 
         case Tag::Type::Compound: {
             Tag compound = Tag::ofCompound();
+            // put() compares a key with every key before it, which made reading a compound of tens of thousands of
+            // entries (a world's dynamic properties) quadratic. Past a few entries the keys seen so far go in a set
+            // and a new key is appended; a key seen before still replaces the earlier value, as put() does.
+            constexpr size_t indexFrom = 16;
+            std::unordered_set<std::string> seen;
 
             for (;;) {
                 const unsigned char entryTypeId = stream.getByte();
@@ -259,7 +268,17 @@ Tag NbtIo::readValue(ReadOnlyBinaryStream &stream, Tag::Type type, NbtVariant va
                     throw BinaryDataException("NBT compound has too many entries");
 
                 const std::string key = readString(stream, variant);
-                compound.put(key, readValue(stream, entryType, variant, maxDepth - 1));
+                Tag value = readValue(stream, entryType, variant, maxDepth - 1);
+                if (compound.size() < indexFrom) {
+                    compound.put(key, std::move(value));
+                    continue;
+                }
+                if (seen.empty())
+                    seen.insert(compound.getKeys().begin(), compound.getKeys().end());
+                if (seen.insert(key).second)
+                    compound.append(key, std::move(value));
+                else
+                    compound.put(key, std::move(value));
             }
         }
 

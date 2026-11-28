@@ -5,6 +5,8 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 inline Tag serializeDynamicProperties(const std::unordered_map<std::string, DynamicPropertyValue> &properties) {
     Tag root = Tag::ofCompound();
@@ -36,7 +38,8 @@ inline Tag serializeDynamicProperties(const std::unordered_map<std::string, Dyna
                 continue;
         }
 
-        root.put(entry.first, stored);
+        // map keys are unique: put() would look each one up, seconds of autosave with tens of thousands
+        root.append(entry.first, std::move(stored));
     }
 
     return root;
@@ -47,9 +50,14 @@ inline void deserializeDynamicProperties(const Tag &root,
     if (!root.isCompound())
         return;
 
-    for (const std::string &name: root.getKeys()) {
-        const Tag *stored = root.get(name);
-        if (stored == nullptr || !stored->isCompound())
+    // side by side: a lookup per key is quadratic on a large compound
+    const std::vector<std::string> &names = root.getKeys();
+    const std::vector<Tag> &values = root.getValues();
+    properties.reserve(properties.size() + names.size());
+    for (size_t i = 0; i < names.size() && i < values.size(); i++) {
+        const std::string &name = names[i];
+        const Tag *stored = &values[i];
+        if (!stored->isCompound())
             continue;
 
         DynamicPropertyValue value;

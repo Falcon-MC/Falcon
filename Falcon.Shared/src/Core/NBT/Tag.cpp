@@ -271,6 +271,16 @@ void Tag::put(const std::string &key, Tag value) {
     mValues.push_back(std::move(value));
 }
 
+void Tag::append(const std::string &key, Tag value) {
+    _expect(Type::Compound);
+
+    if (value.mType == Type::End)
+        throw NbtException("Cannot store an END tag in a compound");
+
+    mKeys.push_back(key);
+    mValues.push_back(std::move(value));
+}
+
 bool Tag::remove(const std::string &key) {
     _expect(Type::Compound);
 
