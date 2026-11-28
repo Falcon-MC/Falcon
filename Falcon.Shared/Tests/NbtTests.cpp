@@ -3,7 +3,6 @@
 #include "Core/Json/Json.h"
 #include "Core/Utility/BinaryStream.h"
 
-#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -417,10 +416,7 @@ namespace {
         settings.mMaxListSize = 1024 * 1024;
         ReadOnlyBinaryStream stream(bigEncoded);
         stream.setEncodingSettings(settings);
-        const auto start = std::chrono::steady_clock::now();
         const Tag bigDecoded = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-        std::printf("50000-entry compound read in %lld ms\n", ms);
         check(bigDecoded == big, "50000-entry compound round trip");
     }
 
