@@ -3,6 +3,7 @@
 #include "Core/Json/Json.h"
 #include "Core/Utility/BinaryStream.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -392,6 +393,37 @@ namespace {
         check(Tag::ofList(Tag::Type::Int, {Tag::ofInt(1), Tag::ofInt(2)}).toString() == "[1,2]", "list toString");
     }
 
+    void testLargeCompound() {
+        Tag root = Tag::ofCompound();
+        for (int i = 0; i < 40; i++)
+            root.putInt("k" + std::to_string(i), i);
+
+        // a key repeated past the first few entries still replaces the earlier value, as put() does
+        std::string encoded = encodeTag(root, NbtVariant::LittleEndian, "");
+        encoded.pop_back(); // the compound's END
+        encoded += bytes({3, 2, 0, 'k', '5', 99, 0, 0, 0, 0});
+        ReadOnlyBinaryStream duplicate(encoded);
+        const Tag decoded = NbtIo::readTag(duplicate, NbtVariant::LittleEndian);
+        check(decoded.size() == 40, "large compound: a repeated key is not added twice");
+        check(decoded.getInt("k5") == 99, "large compound: a repeated key replaces the earlier value");
+        check(decoded.getKeys() == root.getKeys(), "large compound: key order kept");
+
+        // as many entries as a big world's dynamic properties: read in linear time
+        Tag big = Tag::ofCompound();
+        for (int i = 0; i < 50000; i++)
+            big.append("property:" + std::to_string(i), Tag::ofInt(i));
+        const std::string bigEncoded = encodeTag(big, NbtVariant::LittleEndian, "");
+        EncodingSettings settings;
+        settings.mMaxListSize = 1024 * 1024;
+        ReadOnlyBinaryStream stream(bigEncoded);
+        stream.setEncodingSettings(settings);
+        const auto start = std::chrono::steady_clock::now();
+        const Tag bigDecoded = NbtIo::readTag(stream, NbtVariant::LittleEndian);
+        const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+        std::printf("50000-entry compound read in %lld ms\n", ms);
+        check(bigDecoded == big, "50000-entry compound round trip");
+    }
+
 }
 
 int main() {
@@ -404,6 +436,7 @@ int main() {
     testMalformedInput();
     testJsonDepthLimit();
     testTagApi();
+    testLargeCompound();
 
     std::printf("%d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
