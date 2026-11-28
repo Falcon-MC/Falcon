@@ -136,7 +136,8 @@ namespace {
         }
     }
 
-    double calculateBreakSeconds(ServerPlayer &player, const BlockData *blockData) {
+    // situational: this tick's airborne and in-water slowdowns; without them the fastest the break can take
+    double calculateBreakSeconds(ServerPlayer &player, const BlockData *blockData, bool situational = true) {
         if (blockData == nullptr) {
             return 0.05;
         }
@@ -210,6 +211,8 @@ namespace {
             speedMultiplier *= std::pow(0.3, (double) fatigue->level());
 
         seconds /= (double) speedMultiplier;
+        if (!situational)
+            return seconds;
 
         // the client's rate this tick: no grace after landing
         if (player.isRiding() || (!player.isOnGround() && !player.isFlying()))
@@ -236,8 +239,10 @@ namespace {
         return 1.0 / (seconds * 20.0);
     }
 
+    // the fastest the break can take: the state at the finish would hold a jump or a step into water on the last tick
+    // to a 5x time; those slowdowns already count through the progress, added each tick at that tick's rate
     int64_t expectedBreakTicks(ServerPlayer &player, const BlockData *blockData) {
-        const double seconds = calculateBreakSeconds(player, blockData);
+        const double seconds = calculateBreakSeconds(player, blockData, false);
         if (seconds < 0.0)
             return std::numeric_limits<int64_t>::max();
 
