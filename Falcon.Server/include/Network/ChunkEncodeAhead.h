@@ -36,7 +36,8 @@ public:
         std::string mEncoded;
     };
 
-    // the most a tick copies and encodes ahead; the chunks past either cap are encoded at their send as before
+    // the most a tick copies and encodes ahead: jobs, and bytes kept until finish() (chunk copies and block actor
+    // payloads, counted before they are kept); the chunks past either cap are encoded at their send as before
     static constexpr size_t MAX_JOBS_PER_TICK = 256;
     static constexpr size_t MAX_COPIED_BYTES_PER_TICK = 8 * 1024 * 1024;
 
@@ -61,6 +62,12 @@ public:
 
     // the bytes a send of the same chunk would make on the main thread
     static std::string encode(const Job &job);
+
+    // what one chunk keeps until finish(), known before any of it is kept: the block actors read from storage are
+    // remembered for its send, and a chunk not in the cache also has a job holding its copy and the block actors
+    static size_t retainedBytes(bool fromStorage, bool cached, size_t snapshotBytes, size_t blockActorBytes) {
+        return (fromStorage ? blockActorBytes : 0) + (cached ? 0 : snapshotBytes + blockActorBytes);
+    }
 
     // block entities start() read from storage for a chunk whose block entities are not loaded; null once the
     // chunk changed or was reloaded. Main thread

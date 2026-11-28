@@ -105,22 +105,30 @@ void ChunkEncodeAhead::start(ServerNetworkHandler &owner) {
             const LevelChunk *chunk = level.peekChunkPtr(chunkX, chunkZ);
             if (chunk == nullptr)
                 continue;
-            const size_t chunkBytes = chunk->snapshotNetworkBytes();
-            if (jobs.size() >= MAX_JOBS_PER_TICK || copiedBytes + chunkBytes > MAX_COPIED_BYTES_PER_TICK) {
+            if (jobs.size() >= MAX_JOBS_PER_TICK) {
                 full = true;
                 break;
             }
 
             const bool fromStorage = !level.getBlockActors().isChunkLoaded(chunkX, chunkZ);
             ChunkPacketCache::Stamp stamp = ChunkStreamHandler::chunkStamp(owner, level, chunkX, chunkZ);
+            const bool cached = cache.contains(key, stamp);
+            // counted before the block actors are remembered or the chunk is copied
+            const size_t retained = retainedBytes(fromStorage, cached, cached ? 0 : chunk->snapshotNetworkBytes(),
+                                                  stamp.mBlockActors.size());
+            if (copiedBytes + retained > MAX_COPIED_BYTES_PER_TICK) {
+                full = true;
+                break;
+            }
+            copiedBytes += retained;
+
             // the send of this chunk finds them here instead of reading storage a second time
             if (fromStorage)
                 mStoredBlockActors[StoredKey{&level, hash}] =
                         StoredBlockActors{stamp.mInstance, stamp.mRevision, stamp.mBlockActors};
-            if (cache.contains(key, stamp))
+            if (cached)
                 continue;
             queued.insert(key);
-            copiedBytes += chunkBytes + stamp.mBlockActors.size();
             jobs.push_back(Job{key, std::move(stamp), *picks.mContext, chunk->snapshotNetwork(), chunkX, chunkZ,
                                level.getDimensionId(), std::string()});
         }

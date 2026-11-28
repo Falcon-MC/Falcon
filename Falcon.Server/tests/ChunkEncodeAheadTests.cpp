@@ -118,6 +118,27 @@ namespace {
                 "an empty chunk reports a copy");
     }
 
+    // the batch cap counts the block actors with the copy, and both places they are kept, before keeping anything
+    void retainedBytesCountBlockActors() {
+        const size_t copy = 70000;
+        const size_t actors = 4096;
+        require(ChunkEncodeAhead::retainedBytes(false, false, copy, actors) == copy + actors,
+                "a job's block actors are left out of the count");
+        require(ChunkEncodeAhead::retainedBytes(true, false, copy, actors) == copy + actors + actors,
+                "block actors kept for the send and in the job are counted once");
+        require(ChunkEncodeAhead::retainedBytes(true, true, copy, actors) == actors,
+                "a cached chunk's block actors kept for its send are not counted");
+        require(ChunkEncodeAhead::retainedBytes(false, true, copy, actors) == 0,
+                "a cached chunk whose block actors are loaded counts bytes it does not keep");
+
+        // a chunk whose copy alone fits but whose block actors push past the cap stays out of the batch
+        const size_t used = ChunkEncodeAhead::MAX_COPIED_BYTES_PER_TICK - copy;
+        require(used + copy <= ChunkEncodeAhead::MAX_COPIED_BYTES_PER_TICK
+                        && used + ChunkEncodeAhead::retainedBytes(false, false, copy, actors)
+                                   > ChunkEncodeAhead::MAX_COPIED_BYTES_PER_TICK,
+                "block actors past the cap are not caught before the chunk is kept");
+    }
+
     void emptyChunk() {
         LevelChunk chunk(3, -7);
         require(chunk.snapshotNetwork().encode(nullptr) == encodedOnMain(chunk, nullptr),
@@ -231,6 +252,7 @@ int main() {
 
     check("empty chunk copy encodes like the chunk", emptyChunk);
     check("copy size is known before the copy", copySizeKnownBeforeCopy);
+    check("the batch cap counts block actors before keeping them", retainedBytesCountBlockActors);
     check("chunk copy encodes like the chunk, every palette width", sectionsMatch);
     check("worker packet equals the main thread packet", packetsMatch);
     check("copies stay the same while the chunks change", copiesAreImmutable);
