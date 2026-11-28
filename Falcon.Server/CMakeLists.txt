@@ -537,7 +537,9 @@ if(WIN32)
 endif()
 
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_link_options(FalconServer PRIVATE -static -fuse-ld=lld)
+    # scripts run on the main thread with a 1 MB stack cap: the 1 MB windows default leaves them no room and a
+    # heavy behavior pack stops loading part way; 8 MB as on linux
+    target_link_options(FalconServer PRIVATE -static -fuse-ld=lld -Wl,--stack,8388608)
 endif()
 
 option(FALCON_EXPORT_SYMBOLS "Export the server symbols so internal plugins can link against the executable" ON)
