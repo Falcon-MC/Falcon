@@ -12,10 +12,12 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -139,6 +141,100 @@ namespace {
                 "block actors past the cap are not caught before the chunk is kept");
     }
 
+    using Plan = ChunkEncodeAhead;
+
+    struct IntHasher {
+        size_t operator()(int value) const {
+            return std::hash<int>()(value);
+        }
+    };
+
+    // players' next sends as keys: player p asks for first + p * step + i
+    std::vector<std::vector<int>> picksOf(int players, int each, int step) {
+        std::vector<std::vector<int>> picks(players);
+        for (int p = 0; p < players; ++p)
+            for (int i = 0; i < each; ++i)
+                picks[p].push_back(p * step + i);
+        return picks;
+    }
+
+    // a warm cache, no block actors: every stamp is a hit that keeps nothing and makes no job; the stamps (and the
+    // storage reads they can make) still stop at the cap
+    void cachedChunksWithoutBlockActorsAreBounded() {
+        const auto picks = picksOf(50, 200, 1000);
+        size_t stamps = 0, kept = 0;
+        const Plan::PlanCounts counts = Plan::plan<int, IntHasher>(
+                picks,
+                [&](int) {
+                    ++stamps;
+                    return std::optional<Plan::Visit>(Plan::Visit{true, 0});
+                },
+                [&](int, const Plan::Visit &) { ++kept; });
+        require(stamps == Plan::MAX_CHUNKS_PER_TICK, "cache hits were stamped past the cap: " + std::to_string(stamps));
+        require(kept == Plan::MAX_CHUNKS_PER_TICK && counts.mChunks == Plan::MAX_CHUNKS_PER_TICK,
+                "cache hits were kept past the cap: " + std::to_string(kept));
+        require(counts.mJobs == 0 && counts.mBytes == 0, "cache hits made jobs or kept bytes");
+    }
+
+    // players next to each other ask for the same chunks: each is stamped once, hit or miss
+    void sharedChunksAreStampedOnce() {
+        const auto picks = picksOf(20, 100, 0); // all 20 players ask for keys 0..99
+        std::vector<int> stamped(100, 0);
+        for (bool cached: {true, false}) {
+            std::fill(stamped.begin(), stamped.end(), 0);
+            const Plan::PlanCounts counts = Plan::plan<int, IntHasher>(
+                    picks,
+                    [&](int key) {
+                        ++stamped[key];
+                        return std::optional<Plan::Visit>(Plan::Visit{cached, cached ? 0u : 100u});
+                    },
+                    [](int, const Plan::Visit &) {});
+            for (int key = 0; key < 100; ++key)
+                require(stamped[key] == 1, std::string(cached ? "a cache hit" : "a miss") + " was stamped "
+                                                   + std::to_string(stamped[key]) + " times");
+            require(counts.mChunks == 100 && counts.mJobs == (cached ? 0u : 100u), "shared chunks miscounted");
+        }
+    }
+
+    // misses stop at the chunk cap; the round order gives every player their nearest chunks first
+    void missesStopAtTheCapRoundByRound() {
+        const auto picks = picksOf(4, 500, 1000);
+        std::vector<int> keptOf(4, 0);
+        const Plan::PlanCounts counts = Plan::plan<int, IntHasher>(
+                picks, [](int) { return std::optional<Plan::Visit>(Plan::Visit{false, 1000}); },
+                [&](int key, const Plan::Visit &) { ++keptOf[key / 1000]; });
+        require(counts.mJobs == Plan::MAX_CHUNKS_PER_TICK, "misses past the cap became jobs");
+        for (int p = 0; p < 4; ++p)
+            require(keptOf[p] == (int) Plan::MAX_CHUNKS_PER_TICK / 4, "player " + std::to_string(p) + " got "
+                                                                          + std::to_string(keptOf[p]) + " chunks");
+    }
+
+    // chunks that are not loaded take no stamp and leave the cap to the ones that are
+    void unloadedChunksTakeNoStamp() {
+        const auto picks = picksOf(1, 1000, 0);
+        const Plan::PlanCounts counts = Plan::plan<int, IntHasher>(
+                picks,
+                [](int key) {
+                    if (key % 2 == 0)
+                        return std::optional<Plan::Visit>();
+                    return std::optional<Plan::Visit>(Plan::Visit{true, 0});
+                },
+                [](int key, const Plan::Visit &) { require(key % 2 == 1, "an unloaded chunk was kept"); });
+        require(counts.mChunks == Plan::MAX_CHUNKS_PER_TICK, "unloaded chunks used up the cap");
+    }
+
+    // the byte cap stops the batch before the chunk that would pass it is kept
+    void bytesStopBeforeTheChunkThatPassesTheCap() {
+        const auto picks = picksOf(1, 100, 0);
+        const size_t each = Plan::MAX_COPIED_BYTES_PER_TICK / 10 + 1;
+        size_t kept = 0;
+        const Plan::PlanCounts counts = Plan::plan<int, IntHasher>(
+                picks, [&](int) { return std::optional<Plan::Visit>(Plan::Visit{false, each}); },
+                [&](int, const Plan::Visit &) { ++kept; });
+        require(kept == 9 && counts.mBytes == 9 * each && counts.mBytes <= Plan::MAX_COPIED_BYTES_PER_TICK,
+                "the byte cap kept " + std::to_string(kept) + " chunks");
+    }
+
     void emptyChunk() {
         LevelChunk chunk(3, -7);
         require(chunk.snapshotNetwork().encode(nullptr) == encodedOnMain(chunk, nullptr),
@@ -256,6 +352,11 @@ int main() {
     check("chunk copy encodes like the chunk, every palette width", sectionsMatch);
     check("worker packet equals the main thread packet", packetsMatch);
     check("copies stay the same while the chunks change", copiesAreImmutable);
+    check("cached chunks without block actors stop at the chunk cap", cachedChunksWithoutBlockActorsAreBounded);
+    check("chunks several players ask for are stamped once", sharedChunksAreStampedOnce);
+    check("misses stop at the chunk cap, round by round", missesStopAtTheCapRoundByRound);
+    check("chunks not loaded take no stamp", unloadedChunksTakeNoStamp);
+    check("the byte cap stops before the chunk that passes it", bytesStopBeforeTheChunkThatPassesTheCap);
 
     BedrockLog::flush();
     return failures == 0 ? 0 : 1;

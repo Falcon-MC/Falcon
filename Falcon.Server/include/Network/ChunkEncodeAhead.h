@@ -8,9 +8,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Level;
@@ -36,10 +38,61 @@ public:
         std::string mEncoded;
     };
 
-    // the most a tick copies and encodes ahead: jobs, and bytes kept until finish() (chunk copies and block actor
-    // payloads, counted before they are kept); the chunks past either cap are encoded at their send as before
-    static constexpr size_t MAX_JOBS_PER_TICK = 256;
+    // the most a tick looks at and keeps ahead: distinct chunks stamped, cache hits included (a stamp can read the
+    // block actors from storage, and a hit makes no job, so the jobs alone don't bound it), and bytes kept until
+    // finish() (chunk copies and block actor payloads, counted before they are kept); the chunks past either cap are
+    // stamped and encoded at their send as before
+    static constexpr size_t MAX_CHUNKS_PER_TICK = 256;
     static constexpr size_t MAX_COPIED_BYTES_PER_TICK = 8 * 1024 * 1024;
+
+    // what start() learns about a chunk from its stamp
+    struct Visit {
+        bool mCached = false;
+        // what the chunk keeps until finish(), from retainedBytes()
+        size_t mRetained = 0;
+    };
+
+    struct PlanCounts {
+        size_t mChunks = 0;
+        size_t mJobs = 0;
+        size_t mBytes = 0;
+    };
+
+    // start()'s walk over the players' next sends, apart from the world so the caps can be tested: one chunk per
+    // player per round, so a capped batch still reaches every player's nearest chunks; each key once, cache hits
+    // too; it stops at the first cap reached. stamp(key) stamps a loaded chunk and returns nothing for one that
+    // isn't; keep(key, visit) keeps what the stamp read, and makes a job for a chunk not in the cache
+    template<typename Key, typename Hasher, typename StampFn, typename KeepFn>
+    static PlanCounts plan(const std::vector<std::vector<Key>> &picks, StampFn &&stamp, KeepFn &&keep) {
+        PlanCounts counts;
+        std::unordered_set<Key, Hasher> seen;
+        for (size_t round = 0;; ++round) {
+            bool more = false;
+            for (const std::vector<Key> &chunks: picks) {
+                if (round >= chunks.size())
+                    continue;
+                more = true;
+                const Key &key = chunks[round];
+                if (!seen.insert(key).second)
+                    continue;
+                if (counts.mChunks >= MAX_CHUNKS_PER_TICK)
+                    return counts;
+
+                const std::optional<Visit> visit = stamp(key);
+                if (!visit)
+                    continue;
+                counts.mChunks++;
+                if (counts.mBytes + visit->mRetained > MAX_COPIED_BYTES_PER_TICK)
+                    return counts;
+                counts.mBytes += visit->mRetained;
+                if (!visit->mCached)
+                    counts.mJobs++;
+                keep(key, *visit);
+            }
+            if (!more)
+                return counts;
+        }
+    }
 
     // throws std::system_error when a worker can't start, after stopping the ones that did
     explicit ChunkEncodeAhead(unsigned threadCount);

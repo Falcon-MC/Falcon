@@ -11,11 +11,23 @@
 #include <utility>
 
 namespace {
-    struct KeyHasher {
-        size_t operator()(const ChunkPacketCache::Key &key) const {
-            size_t hash = std::hash<const void *>()(key.mLevel);
-            hash = hash * 31 + std::hash<int64_t>()(key.mChunk);
-            return hash * 31 + std::hash<const void *>()(key.mContext);
+    // one chunk a player's send asks for, with what start() needs to stamp and copy it; the same chunk for the same
+    // codec is one pick, whoever asks
+    struct PickKey {
+        ChunkPacketCache::Key mKey;
+        Level *mLevel;
+        const PacketCodecContext *mContext;
+
+        bool operator==(const PickKey &other) const {
+            return mKey == other.mKey;
+        }
+    };
+
+    struct PickKeyHasher {
+        size_t operator()(const PickKey &pick) const {
+            size_t hash = std::hash<const void *>()(pick.mKey.mLevel);
+            hash = hash * 31 + std::hash<int64_t>()(pick.mKey.mChunk);
+            return hash * 31 + std::hash<const void *>()(pick.mKey.mContext);
         }
     };
 }
@@ -80,61 +92,55 @@ void ChunkEncodeAhead::start(ServerNetworkHandler &owner) {
             players.push_back(std::move(picks));
     }
 
+    std::vector<std::vector<PickKey>> keys;
+    keys.reserve(players.size());
+    for (const PlayerPicks &picks: players) {
+        std::vector<PickKey> &mine = keys.emplace_back();
+        mine.reserve(picks.mChunks.size());
+        for (int64_t hash: picks.mChunks)
+            mine.push_back(
+                    PickKey{ChunkPacketCache::Key{picks.mLevel, hash, picks.mContext}, picks.mLevel, picks.mContext});
+    }
+
     ChunkPacketCache &cache = owner.getChunkPacketCache();
     std::vector<Job> jobs;
-    size_t copiedBytes = 0;
-    // players near each other ask for the same chunks
-    std::unordered_set<ChunkPacketCache::Key, KeyHasher> queued;
-    // one chunk per player per round: a capped batch still reaches every player's nearest chunks; whatever the cap
-    // leaves is encoded at its send as before
-    bool full = false;
-    for (size_t round = 0; !full; ++round) {
-        bool more = false;
-        for (const PlayerPicks &picks: players) {
-            if (round >= picks.mChunks.size())
-                continue;
-            more = true;
-            const int64_t hash = picks.mChunks[round];
-            const ChunkPacketCache::Key key{picks.mLevel, hash, picks.mContext};
-            if (queued.count(key) != 0)
-                continue;
-
-            Level &level = *picks.mLevel;
-            const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
-            const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
-            const LevelChunk *chunk = level.peekChunkPtr(chunkX, chunkZ);
-            if (chunk == nullptr)
-                continue;
-            if (jobs.size() >= MAX_JOBS_PER_TICK) {
-                full = true;
-                break;
-            }
-
-            const bool fromStorage = !level.getBlockActors().isChunkLoaded(chunkX, chunkZ);
-            ChunkPacketCache::Stamp stamp = ChunkStreamHandler::chunkStamp(owner, level, chunkX, chunkZ);
-            const bool cached = cache.contains(key, stamp);
-            // counted before the block actors are remembered or the chunk is copied
-            const size_t retained = retainedBytes(fromStorage, cached, cached ? 0 : chunk->snapshotNetworkBytes(),
-                                                  stamp.mBlockActors.size());
-            if (copiedBytes + retained > MAX_COPIED_BYTES_PER_TICK) {
-                full = true;
-                break;
-            }
-            copiedBytes += retained;
-
-            // the send of this chunk finds them here instead of reading storage a second time
-            if (fromStorage)
-                mStoredBlockActors[StoredKey{&level, hash}] =
-                        StoredBlockActors{stamp.mInstance, stamp.mRevision, stamp.mBlockActors};
-            if (cached)
-                continue;
-            queued.insert(key);
-            jobs.push_back(Job{key, std::move(stamp), *picks.mContext, chunk->snapshotNetwork(), chunkX, chunkZ,
-                               level.getDimensionId(), std::string()});
-        }
-        if (!more)
-            break;
-    }
+    // what the last stamp read, kept by keep() right after it
+    const LevelChunk *chunk = nullptr;
+    bool fromStorage = false;
+    ChunkPacketCache::Stamp stamp;
+    plan<PickKey, PickKeyHasher>(
+            keys,
+            [&](const PickKey &pick) -> std::optional<Visit> {
+                Level &level = *pick.mLevel;
+                const int32_t chunkX = ChunkStreamHandler::unpackChunkX(pick.mKey.mChunk);
+                const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(pick.mKey.mChunk);
+                chunk = level.peekChunkPtr(chunkX, chunkZ);
+                if (chunk == nullptr)
+                    return std::nullopt;
+                fromStorage = !level.getBlockActors().isChunkLoaded(chunkX, chunkZ);
+                stamp = ChunkStreamHandler::chunkStamp(owner, level, chunkX, chunkZ);
+                Visit visit;
+                visit.mCached = cache.contains(pick.mKey, stamp);
+                // counted before the block actors are remembered or the chunk is copied
+                visit.mRetained = retainedBytes(fromStorage, visit.mCached,
+                                                visit.mCached ? 0 : chunk->snapshotNetworkBytes(),
+                                                stamp.mBlockActors.size());
+                return visit;
+            },
+            [&](const PickKey &pick, const Visit &visit) {
+                Level &level = *pick.mLevel;
+                const ChunkPacketCache::Key &key = pick.mKey;
+                // the send of this chunk finds them here instead of reading storage a second time
+                if (fromStorage)
+                    mStoredBlockActors[StoredKey{&level, key.mChunk}] =
+                            StoredBlockActors{stamp.mInstance, stamp.mRevision, stamp.mBlockActors};
+                if (visit.mCached)
+                    return;
+                jobs.push_back(Job{key, std::move(stamp), *pick.mContext, chunk->snapshotNetwork(),
+                                   ChunkStreamHandler::unpackChunkX(key.mChunk),
+                                   ChunkStreamHandler::unpackChunkZ(key.mChunk), level.getDimensionId(),
+                                   std::string()});
+            });
 
     if (jobs.empty())
         return;
