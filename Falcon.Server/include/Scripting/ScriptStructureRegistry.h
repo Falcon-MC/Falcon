@@ -35,6 +35,10 @@ public:
 
     bool exists(const std::string &identifier);
 
+    std::shared_ptr<McStructure> findPack(const std::string &identifier);
+
+    bool store(const std::string &identifier, std::shared_ptr<McStructure> structure, bool toWorld);
+
     // false when the identifier is taken
     bool add(const std::string &identifier, std::shared_ptr<McStructure> structure, bool toWorld);
 
@@ -60,6 +64,7 @@ public:
     void clear() {
         mMemory.clear();
         mPack.clear();
+        mPackLoaded.clear();
         mWorld.clear();
         mJigsaw.clear();
     }

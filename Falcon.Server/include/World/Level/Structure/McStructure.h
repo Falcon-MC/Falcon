@@ -36,6 +36,9 @@ public:
         // cells [mFromCell, mToCell) in y, x, z order: an animated placement sets them a step at a time
         int64_t mFromCell = 0;
         int64_t mToCell = INT64_MAX;
+        // animated callers keep the changed positions until the final slice
+        std::vector<Vector3i> *mPendingBlockUpdates = nullptr;
+        bool mFinishBlockUpdates = true;
         // called with each block before it is set: may change it, false skips the cell
         std::function<bool(const Vector3i &target, BlockState &state)> mFilter;
     };

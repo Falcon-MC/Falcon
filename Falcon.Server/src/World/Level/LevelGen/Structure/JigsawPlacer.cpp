@@ -265,8 +265,11 @@ bool JigsawPlacer::place(const Settings &settings, Result &result) {
     result.x = centreX;
     result.y = groundY + (anchorY - settings.mStartY);
     result.z = centreZ;
-    if (settings.mMaxDepth <= 0)
+    if (settings.mMaxDepth <= 0) {
+        if (settings.mKeepStartAtZeroDepth)
+            result.mPieces.push_back(start);
         return true;
+    }
 
     mPieces.push_back(start);
 

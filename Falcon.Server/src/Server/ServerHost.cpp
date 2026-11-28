@@ -3,7 +3,11 @@
 #include "BuildInfo.h"
 #include "World/Actor/AI/Goal/FollowCaravanGoal.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Definition/ServerAnimations.h"
 #include "World/Actor/Spawn/SpawnRules.h"
+#include "Server/CameraPresetRegistry.h"
+#include "World/Level/LevelGen/Structure/JigsawStructures.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Debug/BedrockLog.h"
@@ -291,6 +295,13 @@ namespace {
     // none may see the previous one's players or packs
     void resetProcessState() {
         EnderChestInventoryStore::getInstance().clear();
+        Localization::getInstance().loadPackTexts({});
+        CameraPresetRegistry::load({});
+        JigsawStructures::packStructures().loadPacks({});
+        OverworldRulePlacer::loadPacks({});
+        BiomeChunkGenDataRegistry::resetPacks();
+        EntityDefinitions::loadPacks({});
+        ServerAnimations::loadPacks({});
         CustomContentRegistry::getInstance().reset();
         StringToItemParser::getInstance().reset();
         FollowCaravanGoal::clearCaravans();

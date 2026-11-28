@@ -3,12 +3,34 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
 #include "Falcon/Plugin/PluginRegistrationScope.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
 #include <unordered_map>
 #include <vector>
 
 namespace {
+    class PackMobActor final : public MobActor {
+    public:
+        using MobActor::MobActor;
+
+        ActorCategory getCategory() const override {
+            return ActorCategory::Other;
+        }
+
+        ActorSize getSize() const override {
+            return definitionSize(ServerActor::getSize());
+        }
+
+        float getDefaultMaxHealth() const override {
+            return 20.0f;
+        }
+
+        bool followsDefinitionHealth() const override {
+            return true;
+        }
+    };
+
     struct Entry {
         ActorClassRegistry::Factory mFactory;
         const void *mOwner;
@@ -81,10 +103,14 @@ ActorSize ActorClassRegistry::getSize(const std::string &identifier) {
 
 std::unique_ptr<ServerActor> ActorClassRegistry::create(uint64_t runtimeId, const std::string &identifier) {
     const Factory factory = findFactory(identifier);
-    if (factory == nullptr)
-        return std::make_unique<ServerActor>(runtimeId, identifier);
+    if (factory != nullptr)
+        return factory(runtimeId, identifier);
 
-    return factory(runtimeId, identifier);
+    const auto *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
+    if (definition != nullptr && !definition->mIsProjectile)
+        return std::make_unique<PackMobActor>(runtimeId, identifier);
+
+    return std::make_unique<ServerActor>(runtimeId, identifier);
 }
 
 void ActorClassRegistry::activate(const void *owner) {

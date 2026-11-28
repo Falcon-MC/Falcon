@@ -1,5 +1,12 @@
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "Server/CameraPresetRegistry.h"
+#include "World/Level/LevelGen/Structure/JigsawStructures.h"
+#include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Definition/ServerAnimations.h"
+#include "Server/Localization.h"
 #include "Core/Threading/CpuCount.h"
 #include "World/Level/Block/SignEditing.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
@@ -7,6 +14,7 @@
 
 #include "Core/Text/StringUtil.h"
 
+#include "World/Actor/Spawn/SpawnRules.h"
 #include "World/Actor/Movement/PlayerMovementRegistry.h"
 
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -150,6 +158,9 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "Protocol/Packets/CommandBlockUpdatePacket.h"
+#include "Protocol/Packets/StructureBlockUpdatePacket.h"
+#include "Protocol/Packets/StructureTemplateDataRequestPacket.h"
+#include "World/Level/Block/Systems/StructureBlockSystem.h"
 #include "World/Level/Block/BedBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Item/CraftingRecipeTable.h"
@@ -680,6 +691,14 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
     mStartingWorlds.clear();
+    mBehaviorPacks.discover(ServerPaths::file("behavior_packs"));
+    _validatePackDependencies();
+    JigsawStructures::packStructures().loadPacks(mBehaviorPacks.getPacks());
+    BiomeChunkGenDataRegistry::loadPacks(mBehaviorPacks.getPacks());
+    mBiomes = BiomeRegistry();
+    OverworldRulePlacer::loadPacks(mBehaviorPacks.getPacks());
+    EntityDefinitions::loadPacks(mBehaviorPacks.getPacks());
+    ServerAnimations::loadPacks(mBehaviorPacks.getPacks());
     _openWorld(properties.getLevelName(), levelSeed, true);
     loadScoreboard();
 
@@ -748,6 +767,13 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         return false;
     }
 
+    mBehaviorPacks.discover(ServerPaths::file("behavior_packs"));
+    _validatePackDependencies();
+    Localization::getInstance().loadPackTexts(mBehaviorPacks.getPacks());
+    CameraPresetRegistry::load(mBehaviorPacks.getPacks());
+    for (const BehaviorPack &pack: mBehaviorPacks.getPacks())
+        SpawnRules::addPack(pack.mPath);
+
     mMaxPlayers = definition.mMaxNumPlayers;
     {
         std::lock_guard<std::mutex> lock(mAnnouncementMutex);
@@ -786,12 +812,12 @@ void ServerNetworkHandler::_loadScripts() {
 
     mScriptEngine.bindHost(*this);
 
-    mBehaviorPacks.discover(ServerPaths::file("behavior_packs"));
-    _validatePackDependencies();
-
     CustomContentRegistry::getInstance().setUpcomingCreatorFeatures(
             getLevel().hasExperiment("upcoming_creator_features"));
     CustomContentRegistry::getInstance().load(mBehaviorPacks, mItemDefinitions, mBlockDefinitions);
+    mCreativeItems.clear();
+    mCreativeSourceIndices.clear();
+    mCreativeGroups.clear();
 
     loadWorldDynamicProperties();
 
@@ -1095,6 +1121,7 @@ void ServerNetworkHandler::tick(bool paused) {
         RedstoneSystem::tick(*this, *level);
         PistonSystem::tick(*this, *level);
         CommandBlockSystem::tickCommandBlocks(*this, *level);
+        getWorldOf(*level).getStructureBlocks().tick(*this, *level);
     }
     mProfiler.endSection(ProfilerSection::Redstone);
 
@@ -1637,6 +1664,8 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::SetPlayerGameType,
             MinecraftPacketIds::BlockActorData,
             MinecraftPacketIds::CommandBlockUpdate,
+            MinecraftPacketIds::StructureBlockUpdate,
+            MinecraftPacketIds::StructureTemplateDataRequest,
             MinecraftPacketIds::BlockPickRequest,
             MinecraftPacketIds::ActorPickRequest,
             MinecraftPacketIds::Emote,
@@ -2637,6 +2666,16 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandBloc
         return;
 
     CommandBlockSystem::onCommandBlockUpdate(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const StructureBlockUpdatePacket &packet) {
+    if (ServerPlayer *player = _getPlayer(id); player != nullptr)
+        getWorldOf(getLevelFor(*player)).getStructureBlocks().update(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const StructureTemplateDataRequestPacket &packet) {
+    if (ServerPlayer *player = _getPlayer(id); player != nullptr)
+        getWorldOf(getLevelFor(*player)).getStructureBlocks().request(*this, *player, packet);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRequestPacket &packet) {

@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceMaterialAttributes.h"
 
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 
@@ -245,6 +247,8 @@ namespace {
 }
 
 const SurfaceBuilderComponent *SurfaceBuilderComponent::getForBiome(int32_t biomeId) {
+    if (const auto *pack = BiomeChunkGenDataRegistry::getPackSurface(biomeId))
+        return pack;
     const ComponentMap &map = components();
     const ComponentMap::const_iterator found = map.find(biomeId);
     if (found == map.end())

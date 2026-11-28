@@ -37,6 +37,26 @@ namespace {
         return player.getChunkStreamState().mRadius;
     }
 
+    void populatedChunkSendsWithoutResidentNeighbours() {
+        ServerNetworkHandler owner("Single populated chunk", "", 1);
+        Level &level = owner.getWorlds().getDefault().getOverworld();
+        level.insertChunk(LevelChunk(0, 0)).setPopulated(true);
+
+        const NetworkIdentifier id("stream", 500);
+        ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 9000, nullptr).first->second;
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setSpawnChunksReady(true);
+        player.moveToLevel(level);
+        player.setPosition(Vector3f(8.0f, 100.0f, 8.0f));
+        player.getChunkStreamState().mRadius = level.getViewDistance();
+
+        ServerTickProbe::nextChunkStreamTick(owner);
+        ChunkStreamHandler::tick(owner, player);
+        require(player.getSentChunks().count(ChunkStreamHandler::packChunk(0, 0)) == 1,
+                "fully populated centre chunk waited for its neighbours");
+        require(!level.isChunkResident(1, 0), "streaming synchronously loaded a neighbour");
+    }
+
     // a player crossing chunks while some wait to be sent: each one goes out once
     void flyingSendsEachChunkOnce() {
         ServerNetworkHandler owner("Chunk stream", "", 1);
@@ -116,6 +136,7 @@ int main() {
         require(grant(handler, id, player, 64) == 32, "a request beyond view-distance was not brought back to it");
         require(grant(handler, id, player, 2) == 5, "a request under 5 chunks was not raised to 5");
         flyingSendsEachChunkOnce();
+        populatedChunkSendsWithoutResidentNeighbours();
         std::cout << "chunk stream checks passed\n";
         host.stop();
     } catch (const std::exception &error) {

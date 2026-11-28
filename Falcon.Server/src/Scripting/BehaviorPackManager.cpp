@@ -93,7 +93,12 @@ bool BehaviorPackManager::_readManifest(const std::string &manifest, BehaviorPac
     const json::Value *modules = root->get("modules");
     if (modules && modules->isArray()) {
         for (const auto &module: modules->mArray) {
-            if (!module->isObject() || !module->get("type") || module->get("type")->string() != "script")
+            const json::Value *type = module->isObject() ? module->get("type") : nullptr;
+            if (type == nullptr || !type->isString())
+                continue;
+            if (type->mString == "data")
+                out.mHasDataModule = true;
+            if (type->mString != "script")
                 continue;
             if (out.hasScript() || !module->get("uuid") || !module->get("entry"))
                 return false;
@@ -149,6 +154,23 @@ bool BehaviorPackManager::_readManifest(const std::string &manifest, BehaviorPac
     return true;
 }
 
+void BehaviorPack::visitJson(std::string_view folder, const std::function<void(const json::Value &)> &visit) const {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(mPath) / folder;
+    std::error_code error;
+    std::vector<fs::path> files;
+    for (fs::recursive_directory_iterator it(root, error), end; !error && it != end; it.increment(error)) {
+        if (it->is_regular_file(error) && it->path().extension() == ".json")
+            files.push_back(it->path());
+    }
+    std::sort(files.begin(), files.end());
+    for (const fs::path &file: files) {
+        const auto document = json::parse(stripComments(readFile(file)));
+        if (document != nullptr && document->isObject())
+            visit(*document);
+    }
+}
+
 void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory) {
     const std::string manifest = readFile(std::filesystem::path(packDirectory) / "manifest.json");
     if (manifest.empty())
@@ -165,7 +187,7 @@ void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory)
     const std::filesystem::path base(pack.mPath);
     const bool hasContent = std::filesystem::exists(base / "items") || std::filesystem::exists(base / "blocks")
                             || std::filesystem::exists(base / "sounds" / "sound_definitions.json");
-    if (!pack.hasScript() && !hasContent)
+    if (!pack.hasScript() && !pack.mHasDataModule && !hasContent)
         return;
 
     mPacks.push_back(std::move(pack));

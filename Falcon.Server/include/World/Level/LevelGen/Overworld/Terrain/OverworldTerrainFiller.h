@@ -26,6 +26,8 @@ public:
     void fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer,
               const TerrainBeard *beard = nullptr) const;
 
+    void fillPreliminaryHeights(int32_t chunkX, int32_t chunkZ, int32_t *heightMap) const;
+
 private:
     // corners per chunk: 5 x 41 x 5, y varying fastest
     static constexpr int32_t CORNERS_XZ = 5;
@@ -43,7 +45,11 @@ private:
         std::vector<float> mVeinRidgeB;
     };
 
-    void _sampleCorners(int32_t chunkX, int32_t chunkZ, Corners &corners) const;
+    void _sampleCorners(int32_t chunkX, int32_t chunkZ, Corners &corners, bool sampleVeins) const;
+
+    template <bool HeightsOnly>
+    void _fill(int32_t chunkX, int32_t chunkZ, LevelChunk *chunk, int32_t *heightMap, OverworldAquifer &aquifer,
+               const TerrainBeard *beard) const;
 
     float _caves(float density, float x, float y, float z) const;
 

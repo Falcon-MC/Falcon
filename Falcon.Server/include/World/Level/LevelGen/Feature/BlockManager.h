@@ -26,6 +26,8 @@ public:
 
     virtual void populateBeeNest(int32_t x, int32_t y, int32_t z, int32_t beeCount);
 
+    virtual void storeGeneratedBlockActor(Tag data);
+
     void setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state);
 
     bool isCached(int32_t x, int32_t y, int32_t z) const;

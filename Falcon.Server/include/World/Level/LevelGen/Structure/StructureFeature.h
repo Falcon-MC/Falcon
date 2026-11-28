@@ -32,7 +32,7 @@ public:
     };
 
     StructureFeature(std::string name, int32_t spacing, int32_t separation, int32_t salt, Spread spread,
-                     Generator generator = Generator::MersenneTwister);
+                     Generator generator = Generator::MersenneTwister, bool registerFeature = true);
 
     virtual ~StructureFeature() = default;
 

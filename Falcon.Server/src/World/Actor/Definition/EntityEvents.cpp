@@ -1,5 +1,7 @@
 #include "World/Actor/Definition/EntityEvents.h"
 
+#include "World/Actor/Definition/EntityDefinitions.h"
+
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "Network/ServerNetworkHandler.h"
@@ -51,6 +53,19 @@ namespace {
             return;
         }
     }
+}
+
+void EntityEvents::fire(ServerNetworkHandler &owner, ServerActor &actor, const std::string &event, int32_t depth,
+                        Actor *other) {
+    if (auto *mob = dynamic_cast<MobActor *>(&actor)) {
+        fire(owner, *mob, event, depth, other);
+        return;
+    }
+    const auto *definition = EntityDefinitions::find(actor.getIdentifier());
+    const auto *events = definition == nullptr ? nullptr : definition->get("events");
+    const auto *node = events == nullptr ? nullptr : events->get(event);
+    if (node != nullptr)
+        _run(owner, actor, *node, depth, other);
 }
 
 void EntityEvents::fire(ServerNetworkHandler &owner, MobActor &mob, const std::string &event, int32_t depth,
@@ -186,7 +201,7 @@ void EntityEvents::_applyGroups(MobActor &mob, const json::Value &change, bool a
     }
 }
 
-void EntityEvents::_setProperties(ServerNetworkHandler &owner, MobActor &mob, const json::Value &properties) {
+void EntityEvents::_setProperties(ServerNetworkHandler &owner, ServerActor &mob, const json::Value &properties) {
     if (!properties.isObject())
         return;
 
@@ -215,7 +230,7 @@ void EntityEvents::_stopMovement(MobActor &mob, const json::Value &options) {
     mob.setMotion(motion);
 }
 
-void EntityEvents::_queueCommands(ServerNetworkHandler &owner, MobActor &mob, const json::Value &queue) {
+void EntityEvents::_queueCommands(ServerNetworkHandler &owner, ServerActor &mob, const json::Value &queue) {
     const json::Value *command = queue.get("command");
     if (command == nullptr)
         return;
@@ -231,63 +246,70 @@ void EntityEvents::_queueCommands(ServerNetworkHandler &owner, MobActor &mob, co
     }
 }
 
-bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::Value &node, int32_t depth,
+bool EntityEvents::_run(ServerNetworkHandler &owner, ServerActor &actor, const json::Value &node, int32_t depth,
                         Actor *other) {
     if (depth > MAX_DEPTH || !node.isObject())
         return false;
 
     if (const json::Value *filters = node.get("filters")) {
-        if (!EntityFilter::test(*filters, owner, mob, other))
+        if (!EntityFilter::test(*filters, owner, actor, other))
             return false;
     }
 
-    if (const json::Value *remove = node.get("remove"))
-        _applyGroups(mob, *remove, false);
-    if (const json::Value *add = node.get("add"))
-        _applyGroups(mob, *add, true);
+    auto *mobActor = dynamic_cast<MobActor *>(&actor);
+    if (mobActor != nullptr) {
+        MobActor &mob = *mobActor;
+        if (const json::Value *remove = node.get("remove"))
+            _applyGroups(mob, *remove, false);
+        if (const json::Value *add = node.get("add"))
+            _applyGroups(mob, *add, true);
+    }
+
     if (const json::Value *properties = node.get("set_property"))
-        _setProperties(owner, mob, *properties);
+        _setProperties(owner, actor, *properties);
 
-    if (node.get("reset_target") != nullptr)
-        mob.clearTarget();
-    if (const json::Value *stop = node.get("stop_movement"))
-        _stopMovement(mob, *stop);
-    if (node.get("set_home_position") != nullptr)
-        mob.setHomePosition(mob.getPosition());
+    if (mobActor != nullptr) {
+        MobActor &mob = *mobActor;
+        if (node.get("reset_target") != nullptr)
+            mob.clearTarget();
+        if (const json::Value *stop = node.get("stop_movement"))
+            _stopMovement(mob, *stop);
+        if (node.get("set_home_position") != nullptr)
+            mob.setHomePosition(mob.getPosition());
 
-    if (const json::Value *drop = node.get("drop_item")) {
-        const json::Value *slot = drop->get("slot");
-        if (slot != nullptr
-            && mob.getEquipment().dropSlot(owner, owner.getLevelFor(mob), mob.getPosition(), slot->string()))
-            mob.getEquipment().broadcast(owner, mob);
+        if (const json::Value *drop = node.get("drop_item")) {
+            const json::Value *slot = drop->get("slot");
+            if (slot != nullptr
+                && mob.getEquipment().dropSlot(owner, owner.getLevelFor(mob), mob.getPosition(), slot->string()))
+                mob.getEquipment().broadcast(owner, mob);
+        }
+
+        if (const json::Value *sound = node.get("play_sound")) {
+            const json::Value *name = sound->get("sound");
+            if (name != nullptr)
+                mob.playDefinitionSound(owner, name->string());
+        }
+
+        if (const json::Value *particle = node.get("emit_particle"))
+            emitParticle(owner, mob, *particle);
+
+        if (const json::Value *homeEvent = node.get("execute_event_on_home_block")) {
+            const json::Value *name = homeEvent->get("event");
+            if (name != nullptr && mob.hasHome())
+                mob.fireBlockEvent(owner, blockAt(mob.getHomePosition()), name->string());
+        }
     }
-
-    if (const json::Value *sound = node.get("play_sound")) {
-        const json::Value *name = sound->get("sound");
-        if (name != nullptr)
-            mob.playDefinitionSound(owner, name->string());
-    }
-
-    if (const json::Value *particle = node.get("emit_particle"))
-        emitParticle(owner, mob, *particle);
-
     if (const json::Value *queue = node.get("queue_command"))
-        _queueCommands(owner, mob, *queue);
-
-    if (const json::Value *homeEvent = node.get("execute_event_on_home_block")) {
-        const json::Value *name = homeEvent->get("event");
-        if (name != nullptr && mob.hasHome())
-            mob.fireBlockEvent(owner, blockAt(mob.getHomePosition()), name->string());
-    }
+        _queueCommands(owner, actor, *queue);
 
     if (const json::Value *sequence = node.get("sequence")) {
         for (const std::unique_ptr<json::Value> &entry: sequence->mArray)
-            _run(owner, mob, *entry, depth + 1, other);
+            _run(owner, actor, *entry, depth + 1, other);
     }
 
     if (const json::Value *firstValid = node.get("first_valid")) {
         for (const std::unique_ptr<json::Value> &entry: firstValid->mArray) {
-            if (_run(owner, mob, *entry, depth + 1, other))
+            if (_run(owner, actor, *entry, depth + 1, other))
                 break;
         }
     }
@@ -302,15 +324,24 @@ bool EntityEvents::_run(ServerNetworkHandler &owner, MobActor &mob, const json::
             for (const std::unique_ptr<json::Value> &entry: randomize->mArray) {
                 roll -= entry->get("weight") != nullptr ? std::max(0, entry->get("weight")->integer(1)) : 1;
                 if (roll < 0) {
-                    _run(owner, mob, *entry, depth + 1, other);
+                    _run(owner, actor, *entry, depth + 1, other);
                     break;
                 }
             }
         }
     }
 
-    if (const json::Value *trigger = node.get("trigger"))
-        fireTrigger(owner, mob, trigger, other, depth + 1);
+    if (const json::Value *trigger = node.get("trigger")) {
+        if (mobActor != nullptr) {
+            fireTrigger(owner, *mobActor, trigger, other, depth + 1);
+        } else if (trigger->isString()) {
+            fire(owner, actor, trigger->mString, depth + 1, other);
+        } else if (const auto *event = trigger->get("event")) {
+            const auto *target = trigger->get("target");
+            if (target == nullptr || target->string() == SELF_TARGET)
+                fire(owner, actor, event->string(), depth + 1, other);
+        }
+    }
 
     return true;
 }

@@ -1,6 +1,12 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 
+#include "Core/Json/Json.h"
+#include "Scripting/BehaviorPackManager.h"
+#include "Scripting/ScriptStructureRegistry.h"
+#include "World/Level/Structure/McStructure.h"
+#include "Scripting/Content/PackBlockState.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatures.h"
+#include "World/Level/Structure/StructureBlockRotation.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
@@ -45,6 +51,7 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
 #include <cctype>
 #include <climits>
 #include <cmath>
@@ -79,7 +86,18 @@ namespace {
     struct ReplaceRule {
         Block (*mPlaces)();
         std::vector<std::string> mMayReplace;
+        std::optional<BlockState> mPackState;
     };
+
+    struct OreDefinition {
+        const char *mIdentifier = nullptr;
+        int32_t mCount = 0;
+        float mDiscardChanceOnAirExposure = 0.0f;
+        std::vector<ReplaceRule> mRules;
+    };
+
+    bool placeOre(BlockManager &blocks, const OreDefinition &ore, int32_t x, int32_t y, int32_t z,
+                  std::mt19937 &random);
 
     using FeatureRandom::between;
     using FeatureRandom::nextFloat;
@@ -96,9 +114,12 @@ namespace {
     using ExpressionPtr = const FeatureExpression *;
 
     // boost-style combine of the decoration seed with the rule's hash
-    uint32_t ruleSeed(uint32_t decorationSeed, const std::string &identifier) {
-        const uint32_t hash = static_cast<uint32_t>(hashedString(identifier));
+    uint32_t ruleSeed(uint32_t decorationSeed, uint32_t hash) {
         return decorationSeed ^ ((decorationSeed >> 2) + hash + (decorationSeed << 6) + 0x9E3779B9u);
+    }
+
+    uint32_t ruleSeed(uint32_t decorationSeed, const std::string &identifier) {
+        return ruleSeed(decorationSeed, (uint32_t) hashedString(identifier));
     }
 
     // one axis of a scatter: a single value or a distribution between two bounds
@@ -365,14 +386,19 @@ namespace {
         float mWorld[3];
     };
 
+    int32_t scatterCoordinate(float value) {
+        constexpr float LIMIT = 0x1p29f;
+        return std::isfinite(value) ? (int32_t) std::round(std::clamp(value, -LIMIT, LIMIT)) : 0;
+    }
+
     // a fixed_grid reads the iteration's grid index and leaves the rest for the next axis:
     // a signed remainder over the extent, not offset by its minimum
     int32_t sampleAxis(const Axis &axis, const ScatterVariables &variables, std::mt19937 &random, uint32_t *grid) {
-        const auto min = static_cast<int32_t>(std::round(axis.mMin->evaluate(variables)));
+        const auto min = scatterCoordinate(axis.mMin->evaluate(variables));
         if (axis.mDistribution == 0)
             return min;
 
-        const auto max = static_cast<int32_t>(std::round(axis.mMax->evaluate(variables)));
+        const auto max = scatterCoordinate(axis.mMax->evaluate(variables));
         if (max <= min)
             return min;
         if (axis.mDistribution != FIXED_GRID || grid == nullptr)
@@ -387,7 +413,8 @@ namespace {
 
     // the scatter's chance, then its iteration count
     int32_t iterationsOf(int32_t numerator, int32_t denominator, const ExpressionPtr &percent,
-                         const ExpressionPtr &iterations, const ScatterVariables &variables, std::mt19937 &random) {
+                         const ExpressionPtr &iterations, const ScatterVariables &variables, std::mt19937 &random,
+                         int32_t limit = INT32_MAX) {
         if (numerator > 0 && denominator > 0) {
             if (numerator != denominator && nextInt(random, denominator) >= numerator)
                 return 0;
@@ -398,7 +425,7 @@ namespace {
         }
 
         const float rounded = std::round(iterations->evaluate(variables));
-        return rounded > 0.0f ? static_cast<int32_t>(rounded) : 0;
+        return rounded > 0.0f ? (int32_t) std::min<double>(rounded, limit) : 0;
     }
 
     // each axis in the scatter's order, from the origin
@@ -791,14 +818,6 @@ namespace {
     }
 }
 
-// a minecraft:ore_feature of the behavior packs
-struct OverworldRulePlacer::OreDefinition {
-    const char *mIdentifier;
-    int32_t mCount;
-    float mDiscardChanceOnAirExposure;
-    std::vector<ReplaceRule> mRules;
-};
-
 // one of the game's own disk features, registered in
 struct OverworldRulePlacer::DiskDefinition {
     const char *mIdentifier;
@@ -995,16 +1014,14 @@ struct OverworldRulePlacer::ThresholdDefinition {
 
 // a minecraft:snap_to_surface_feature; surface 0 is ceiling, 1 floor, 2 wall and 3
 // random_horizontal
-struct OverworldRulePlacer::SnapDefinition {
+struct OverworldRulePlacer::SnapDefinition : SnapOptions {
     const char *mIdentifier;
     Placed mPlaces;
-    int32_t mVerticalSearchRange;
-    int32_t mSurface;
-    bool mAllowAirPlacement;
-    bool mAllowNonAirPlacement;
-    bool mAllowUnderwaterPlacement;
-    bool mEmbedInSurface;
-    std::vector<std::string> mAllowedSurfaceBlocks;
+
+    SnapDefinition(const char *identifier, Placed places, int32_t range, int32_t surface, bool air,
+                   bool nonAir, bool underwater, bool embedded, std::vector<std::string> allowed)
+            : SnapOptions{range, surface, air, nonAir, underwater, embedded, std::move(allowed)},
+              mIdentifier(identifier), mPlaces(places) {}
 };
 
 // a minecraft:partially_exposed_blob_feature; faces 0 down to 5 east
@@ -1091,6 +1108,30 @@ struct OverworldRulePlacer::GrowingPlantDefinition {
     // allow_water: the plant also grows through water, the next step still only through air
     bool mAllowWater;
 };
+
+struct OverworldRulePlacer::Feature {
+    const OreDefinition *mOre = nullptr;
+    const DiskDefinition *mDisk = nullptr;
+    const GeodeDefinition *mGeode = nullptr;
+    const LegacyTreeDefinition *mLegacyTree = nullptr;
+    Placed mPlaced;
+    bool mKelp = false;
+    // legacy:forest_foliage_feature
+    bool mForestFoliage = false;
+    // legacy:forest_rock_feature
+    bool mForestRock = false;
+    // legacy:springs_feature
+    bool mSprings = false;
+    // legacy:ice_feature
+    bool mLegacyIce = false;
+    const FossilDefinition *mFossil = nullptr;
+
+    bool isPorted() const {
+        return mOre != nullptr || mDisk != nullptr || mGeode != nullptr || mLegacyTree != nullptr || mPlaced.isSet()
+               || mKelp || mForestFoliage || mForestRock || mSprings || mLegacyIce || mFossil != nullptr;
+    }
+};
+
 
 OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry &entry) {
     // BDS 1.26.61 behavior packs, features/*.json
@@ -2756,8 +2797,824 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     return feature;
 }
 
+namespace {
+    const json::Value &packMember(const json::Value &object, const char *name) {
+        static const json::Value EMPTY;
+        const auto *value = object.get(name);
+        return value != nullptr ? *value : EMPTY;
+    }
+
+    std::string blockName(std::string name) {
+        if (!name.empty() && name.find(':') == std::string::npos)
+            return "minecraft:" + name;
+        return name;
+    }
+
+    struct PackScatter {
+        Axis mAxes[3];
+        int32_t mOrder = 1;
+        ExpressionPtr mIterations = nullptr;
+        ExpressionPtr mChance = nullptr;
+        int32_t mNumerator = 0;
+        int32_t mDenominator = 0;
+    };
+
+    constexpr int32_t MAX_PACK_PLACEMENTS = 4096;
+
+    std::string scatterExpression(const json::Value &value, const char *fallback) {
+        if (value.isString())
+            return value.mString.size() <= 1024 ? value.mString : std::string();
+        if (value.isNumber())
+            return std::to_string(value.mNumber);
+        return fallback;
+    }
+
+    bool readPackScatter(const json::Value &value, PackScatter &scatter) {
+        static const std::array<std::string_view, 6> ORDERS{"xyz", "xzy", "yxz", "yzx", "zxy", "zyx"};
+        const std::string order = packMember(value, "coordinate_eval_order").string("xzy");
+        const auto found = std::find(ORDERS.begin(), ORDERS.end(), order);
+        if (found == ORDERS.end())
+            return false;
+        scatter.mOrder = (int32_t) (found - ORDERS.begin());
+        scatter.mIterations = FeatureExpression::find(scatterExpression(packMember(value, "iterations"), "1"));
+        const auto &chance = packMember(value, "scatter_chance");
+        if (chance.isObject()) {
+            const double numerator = packMember(chance, "numerator").number(-1.0);
+            const double denominator = packMember(chance, "denominator").number(-1.0);
+            if (!(denominator >= 1 && denominator <= INT32_MAX && numerator >= 0 && numerator <= denominator)
+                || denominator != std::trunc(denominator) || numerator != std::trunc(numerator))
+                return false;
+            scatter.mNumerator = (int32_t) numerator;
+            scatter.mDenominator = (int32_t) denominator;
+            scatter.mChance = FeatureExpression::find("0");
+        } else {
+            scatter.mChance = FeatureExpression::find(scatterExpression(chance, "100"));
+        }
+        if (scatter.mIterations == nullptr || scatter.mChance == nullptr)
+            return false;
+
+        static const char *const AXIS_NAMES[]{"x", "y", "z"};
+        for (size_t index = 0; index < std::size(AXIS_NAMES); ++index) {
+            const auto &axis = packMember(value, AXIS_NAMES[index]);
+            if (!axis.isObject()) {
+                if (!parseAxis(0, scatterExpression(axis, "0"), {}, scatter.mAxes[index]))
+                    return false;
+                continue;
+            }
+            const std::string distribution = packMember(axis, "distribution").string();
+            const auto &extent = packMember(axis, "extent");
+            if (extent.mArray.size() != 2)
+                return false;
+            const int32_t type = distribution == "uniform" ? 1 : distribution == "gaussian" ? 2
+                                     : distribution == "triangle" ? 6 : 0;
+            if (type == 0 || !parseAxis(type, scatterExpression(*extent.mArray[0], ""),
+                                        scatterExpression(*extent.mArray[1], ""), scatter.mAxes[index]))
+                return false;
+        }
+        return drawnInOrder(scatter.mAxes, scatter.mOrder);
+    }
+
+    struct PackFilter {
+        enum class Type { All, Any, None, HasTag, LacksTag };
+        Type mType = Type::All;
+        std::string mTag;
+        std::vector<PackFilter> mChildren;
+
+        bool accepts(int32_t biome) const {
+            const auto acceptsChild = [biome](const PackFilter &child) { return child.accepts(biome); };
+            switch (mType) {
+                case Type::All: return std::all_of(mChildren.begin(), mChildren.end(), acceptsChild);
+                case Type::Any: return std::any_of(mChildren.begin(), mChildren.end(), acceptsChild);
+                case Type::None: return std::none_of(mChildren.begin(), mChildren.end(), acceptsChild);
+                case Type::HasTag: return BiomeChunkGenDataRegistry::hasTag(biome, mTag);
+                case Type::LacksTag: return !BiomeChunkGenDataRegistry::hasTag(biome, mTag);
+            }
+            return false;
+        }
+    };
+
+    bool readPackFilter(const json::Value &value, PackFilter &filter, uint32_t depth = 0) {
+        if (depth > 32)
+            return false;
+        const json::Value *children = value.isArray() ? &value : value.get("all_of");
+        if (children == nullptr && (children = value.get("any_of")) != nullptr)
+            filter.mType = PackFilter::Type::Any;
+        if (children == nullptr && (children = value.get("none_of")) != nullptr)
+            filter.mType = PackFilter::Type::None;
+        if (children != nullptr) {
+            if (!children->isArray())
+                return false;
+            for (const auto &child: children->mArray) {
+                if (!readPackFilter(*child, filter.mChildren.emplace_back(), depth + 1))
+                    return false;
+            }
+            return true;
+        }
+        if (packMember(value, "test").string() != "has_biome_tag")
+            return false;
+        filter.mTag = packMember(value, "value").string();
+        const std::string operation = packMember(value, "operator").string("==");
+        filter.mType = (operation == "!=" || operation == "not") ? PackFilter::Type::LacksTag
+                                                                 : PackFilter::Type::HasTag;
+        return !filter.mTag.empty() && (operation == "==" || operation == "equals" || operation == "!="
+                                       || operation == "not");
+    }
+
+    struct PackSearch {
+        std::array<int32_t, 3> mMin{};
+        std::array<int32_t, 3> mMax{};
+        std::array<int32_t, 3> mOrder{};
+        int32_t mSign = 1;
+        int32_t mRequired = 1;
+    };
+
+    struct PackTemplate {
+        std::string mName;
+        std::shared_ptr<const McStructure> mShape;
+        int32_t mRotation = -1;
+        int32_t mGroundLevel = 0;
+        int32_t mAdjustmentRadius = 0;
+        std::optional<int32_t> mMaxSteepness;
+        std::vector<Vector3i> mGroundChecks;
+        std::vector<Vector3i> mIntersectionChecks;
+        bool mGrounded = false;
+        bool mUnburied = false;
+        bool mCentered = false;
+        bool mCheckIntersection = false;
+        bool mOnlySolidIntersection = true;
+        std::vector<std::string> mAllowed;
+    };
+
+    struct PackFeature {
+        enum class Type { SingleBlock, Aggregate, Sequence, Weighted, Scatter, Ore, SurfaceThreshold, Snap, Search, Structure };
+        Type mType = Type::SingleBlock;
+        std::vector<std::pair<BlockState, int32_t>> mBlocks;
+        std::vector<std::pair<std::string, int32_t>> mChildren;
+        std::vector<std::string> mMayReplace;
+        PackScatter mScatter;
+        OreDefinition mOre;
+        PackSearch mSearch;
+        std::unique_ptr<PackTemplate> mTemplate;
+        OverworldRulePlacer::SnapOptions mSnap;
+        int32_t mBelowSurface = 0;
+        bool mRotate = false;
+        std::string mEarlyOut;
+    };
+
+    struct PackRule {
+        uint32_t mHash = 0;
+        std::string mFeature;
+        std::string mPass;
+        PackScatter mScatter;
+        PackFilter mFilter;
+    };
+
+    std::map<std::string, PackFeature> packFeatures;
+    using PassRules = std::array<std::vector<const PackRule *>, std::size(PASSES)>;
+    std::map<std::string, PackRule, std::less<>> packRules;
+    std::unordered_map<int32_t, PassRules> packRulesByBiome;
+
+    int32_t packWeight(const json::Value &value) {
+        const double weight = value.number();
+        return weight >= 1 && weight <= INT32_MAX && std::trunc(weight) == weight ? (int32_t) weight : 0;
+    }
+
+    bool readPackFeature(const std::string &type, const json::Value &value, PackFeature &out) {
+        using Type = PackFeature::Type;
+        if (type == "minecraft:single_block_feature") {
+            if (packMember(value, "enforce_placement_rules").boolean()
+                || packMember(value, "enforce_survivability_rules").boolean()
+                || value.get("may_attach_to") != nullptr || value.get("may_not_attach_to") != nullptr)
+                return false;
+            out.mRotate = packMember(value, "randomize_rotation").boolean();
+            for (const auto &allowed: packMember(value, "may_replace").mArray) {
+                if (!allowed->isString() || allowed->mString.empty())
+                    return false;
+                out.mMayReplace.push_back(blockName(allowed->mString));
+            }
+            const auto &places = packMember(value, "places_block");
+            if (places.isArray()) {
+                int32_t total = 0;
+                for (const auto &weighted: places.mArray) {
+                    auto block = PackBlockState::read(weighted->isString() ? *weighted : packMember(*weighted, "block"));
+                    const int32_t weight = weighted->isString() ? 1 : packWeight(packMember(*weighted, "weight"));
+                    if (!block || weight == 0 || weight > INT32_MAX - total)
+                        return false;
+                    total += weight;
+                    out.mBlocks.emplace_back(std::move(*block), weight);
+                }
+            } else {
+                if (auto block = PackBlockState::read(places))
+                    out.mBlocks.emplace_back(std::move(*block), 1);
+            }
+            return !out.mBlocks.empty();
+        }
+        if (type == "minecraft:ore_feature") {
+            out.mType = Type::Ore;
+            const double count = packMember(value, "count").number();
+            const double discard = packMember(value, "discard_chance_on_air_exposure").number();
+            if (!(count >= 1 && count <= 256 && count == std::trunc(count) && discard >= 0 && discard <= 1))
+                return false;
+            out.mOre.mCount = (int32_t) count;
+            out.mOre.mDiscardChanceOnAirExposure = (float) discard;
+            const auto addRule = [&](const json::Value &rule) {
+                ReplaceRule replaced{};
+                replaced.mPackState = PackBlockState::read(packMember(rule, "places_block"));
+                if (!replaced.mPackState)
+                    return false;
+                for (const auto &original: packMember(rule, "may_replace").mArray) {
+                    if (!original->isString())
+                        return false;
+                    replaced.mMayReplace.push_back(blockName(original->mString));
+                }
+                out.mOre.mRules.push_back(std::move(replaced));
+                return true;
+            };
+            const auto &rules = packMember(value, "replace_rules");
+            if (!rules.isArray())
+                return addRule(value);
+            for (const auto &rule: rules.mArray) {
+                if (!addRule(*rule))
+                    return false;
+            }
+            return !out.mOre.mRules.empty();
+        }
+        if (type == "minecraft:surface_relative_threshold_feature") {
+            out.mType = Type::SurfaceThreshold;
+            const std::string child = packMember(value, "feature_to_place").string();
+            const double margin = packMember(value, "minimum_distance_below_surface").number();
+            if (child.empty() || !(margin >= INT16_MIN && margin <= INT16_MAX && margin == std::trunc(margin)))
+                return false;
+            out.mBelowSurface = (int32_t) margin;
+            out.mChildren.emplace_back(child, 1);
+            return true;
+        }
+        if (type == "minecraft:structure_template_feature") {
+            const auto &constraints = packMember(value, "constraints");
+            const auto *adjustment = value.get("adjustment_radius");
+            const double radius = adjustment == nullptr ? 0 : adjustment->number(-1);
+            if (!(radius >= 0 && radius <= 16 && radius == std::trunc(radius)))
+                return false;
+            out.mType = Type::Structure;
+            out.mTemplate = std::make_unique<PackTemplate>();
+            auto &piece = *out.mTemplate;
+            piece.mName = packMember(value, "structure_name").string();
+            const std::string facing = packMember(value, "facing_direction").string("random");
+            static const std::array<std::string_view, 4> DIRECTIONS{"south", "west", "north", "east"};
+            const auto direction = std::find(DIRECTIONS.begin(), DIRECTIONS.end(), facing);
+            const double ground = packMember(value, "ground_level").number();
+            if (piece.mName.empty() || (direction == DIRECTIONS.end() && facing != "random")
+                || !(ground >= 0 && ground <= INT32_MAX && ground == std::trunc(ground)))
+                return false;
+            if (direction != DIRECTIONS.end())
+                piece.mRotation = (int32_t) (direction - DIRECTIONS.begin());
+            piece.mGroundLevel = (int32_t) ground;
+            piece.mAdjustmentRadius = (int32_t) radius;
+            if (const auto *leveled = constraints.get("leveled")) {
+                const auto *limit = leveled->get("max_steepness");
+                const double steepness = limit == nullptr ? 2 : limit->number(-1);
+                if (!leveled->isObject() || !(steepness >= 0 && steepness <= INT32_MAX
+                                              && steepness == std::trunc(steepness)))
+                    return false;
+                piece.mMaxSteepness = (int32_t) steepness;
+            }
+            piece.mCentered = packMember(value, "rotate_around_center").boolean();
+            piece.mGrounded = constraints.get("grounded") != nullptr;
+            piece.mUnburied = constraints.get("unburied") != nullptr;
+            if (const auto *intersection = constraints.get("block_intersection")) {
+                piece.mCheckIntersection = true;
+                piece.mOnlySolidIntersection = packMember(*intersection,
+                        "only_check_intersection_for_motion_blocking_blocks").boolean(true);
+                const auto *allowed = intersection->get("block_allowlist");
+                if (allowed == nullptr)
+                    allowed = intersection->get("block_whitelist");
+                if (allowed != nullptr) {
+                    for (const auto &entry: allowed->mArray) {
+                        if (!entry->isString() || entry->mString.empty())
+                            return false;
+                        piece.mAllowed.push_back(blockName(entry->mString));
+                    }
+                }
+            }
+            return true;
+        }
+        if (type == "minecraft:search_feature") {
+            out.mType = Type::Search;
+            const std::string child = packMember(value, "places_feature").string();
+            const std::string axis = packMember(value, "search_axis").string();
+            const auto &volume = packMember(value, "search_volume");
+            const auto &min = packMember(volume, "min").mArray;
+            const auto &max = packMember(volume, "max").mArray;
+            const double required = packMember(value, "required_successes").number(1);
+            if (child.empty() || axis.size() != 2 || (axis[0] != '+' && axis[0] != '-')
+                || axis[1] < 'x' || axis[1] > 'z' || min.size() != 3 || max.size() != 3
+                || !(required >= 1 && required <= MAX_PACK_PLACEMENTS && required == std::trunc(required)))
+                return false;
+            auto &search = out.mSearch;
+            search.mOrder[0] = axis[1] - 'x';
+            search.mSign = axis[0] == '-' ? -1 : 1;
+            search.mRequired = (int32_t) required;
+            size_t orderIndex = 1;
+            int64_t cells = 1;
+            for (size_t index = 0; index < 3; ++index) {
+                const double low = min[index]->number(512);
+                const double high = max[index]->number(-512);
+                if (!(low >= -384 && high <= 384 && low <= high
+                      && low == std::trunc(low) && high == std::trunc(high)))
+                    return false;
+                search.mMin[index] = (int32_t) low;
+                search.mMax[index] = (int32_t) high;
+                cells *= search.mMax[index] - search.mMin[index] + 1;
+                if ((int32_t) index != search.mOrder[0])
+                    search.mOrder[orderIndex++] = (int32_t) index;
+            }
+            if (cells > MAX_PACK_PLACEMENTS || cells < required)
+                return false;
+            out.mChildren.emplace_back(child, 1);
+            return true;
+        }
+        if (type == "minecraft:snap_to_surface_feature") {
+            out.mType = Type::Snap;
+            auto &snap = out.mSnap;
+            const std::string child = packMember(value, "feature_to_snap").string();
+            const double range = packMember(value, "vertical_search_range").number(
+                    packMember(value, "search_range").number(-1));
+            const std::string surface = packMember(value, "surface").string("floor");
+            static const std::array<std::string_view, 4> SURFACES{"ceiling", "floor", "wall", "random_horizontal"};
+            const auto found = std::find(SURFACES.begin(), SURFACES.end(), surface);
+            if (child.empty() || found == SURFACES.end() || !(range >= 0 && range <= 384 && range == std::trunc(range)))
+                return false;
+            out.mChildren.emplace_back(child, 1);
+            snap.mSurface = (int32_t) (found - SURFACES.begin());
+            snap.mVerticalSearchRange = (int32_t) range;
+            snap.mAllowAirPlacement = packMember(value, "allow_air_placement").boolean(true);
+            snap.mAllowNonAirPlacement = packMember(value, "allow_non_air_placement").boolean();
+            snap.mAllowUnderwaterPlacement = packMember(value, "allow_underwater_placement").boolean();
+            snap.mEmbedInSurface = packMember(value, "embed_in_surface").boolean();
+            const auto &allowed = packMember(value, "allowed_surface_blocks");
+            for (const auto &block: allowed.mArray) {
+                const std::string name = blockName(block->isString() ? block->mString : packMember(*block, "name").string());
+                if (name.empty())
+                    return false;
+                snap.mAllowedSurfaceBlocks.push_back(name);
+            }
+            if (allowed.isObject()) {
+                const std::string name = blockName(packMember(allowed, "name").string());
+                if (name.empty())
+                    return false;
+                snap.mAllowedSurfaceBlocks.push_back(name);
+            }
+            return true;
+        }
+        if (type == "minecraft:scatter_feature") {
+            out.mType = Type::Scatter;
+            const std::string child = packMember(value, "places_feature").string();
+            if (child.empty())
+                return false;
+            out.mChildren.emplace_back(child, 1);
+            const auto *distribution = value.get("distribution");
+            return readPackScatter(distribution != nullptr ? *distribution : value, out.mScatter);
+        }
+        if (type == "minecraft:aggregate_feature") {
+            out.mType = Type::Aggregate;
+            out.mEarlyOut = packMember(value, "early_out").string();
+        } else if (type == "minecraft:sequence_feature") {
+            out.mType = Type::Sequence;
+        } else if (type == "minecraft:weighted_random_feature") {
+            out.mType = Type::Weighted;
+        } else {
+            return false;
+        }
+        int32_t total = 0;
+        for (const auto &child: packMember(value, "features").mArray) {
+            std::string reference = child->string();
+            int32_t weight = 1;
+            if (out.mType == Type::Weighted) {
+                if (child->mArray.size() != 2)
+                    return false;
+                reference = child->mArray[0]->string();
+                weight = packWeight(*child->mArray[1]);
+            }
+            if (reference.empty() || weight == 0 || weight > INT32_MAX - total)
+                return false;
+            total += weight;
+            out.mChildren.emplace_back(std::move(reference), weight);
+        }
+        return !out.mChildren.empty();
+    }
+
+    template <typename Entries>
+    const typename Entries::value_type::first_type &weightedEntry(const Entries &entries, std::mt19937 &random) {
+        if (entries.size() == 1)
+            return entries.front().first;
+        int32_t total = 0;
+        for (const auto &entry: entries)
+            total += entry.second;
+        int32_t selected = nextInt(random, total);
+        for (const auto &entry: entries) {
+            selected -= entry.second;
+            if (selected < 0)
+                return entry.first;
+        }
+        return entries.back().first;
+    }
+
+    bool fitsBuildHeight(int32_t height) {
+        return height > 0 && height <= LevelChunk::MAX_Y - LevelChunk::MIN_Y + 1;
+    }
+
+    void prepareTemplateChecks(PackTemplate &piece) {
+        const auto &shape = *piece.mShape;
+        const Vector3i size = shape.getSize();
+        if (!fitsBuildHeight(size.y))
+            return;
+        piece.mGroundLevel = std::min(piece.mGroundLevel, size.y - 1);
+        const int32_t y = piece.mGroundLevel;
+        if (piece.mGrounded || piece.mMaxSteepness) {
+            for (int32_t x = 0; x < size.x; ++x) {
+                for (int32_t z = 0; z < size.z; ++z) {
+                    const Vector3i cell(x, y, z);
+                    const auto *block = shape.getBlock(cell);
+                    if (block != nullptr && !DecorationSupport::isAir(*block))
+                        piece.mGroundChecks.push_back(cell);
+                }
+            }
+        }
+
+        if (!piece.mCheckIntersection)
+            return;
+        for (int32_t x = 0; x < size.x; ++x) {
+            for (int32_t z = 0; z < size.z; ++z) {
+                for (int32_t y = 0; y < size.y; ++y) {
+                    const Vector3i cell(x, y, z);
+                    const auto *block = shape.getBlock(cell);
+                    if (block != nullptr && (!piece.mOnlySolidIntersection || BlockSupport::isSolid(*block)))
+                        piece.mIntersectionChecks.push_back(cell);
+                }
+            }
+        }
+    }
+
+    bool placePackTemplate(BlockManager &blocks, const PackTemplate &piece, Vector3i &position,
+                           std::mt19937 &random) {
+        if (!piece.mShape)
+            return false;
+        const auto &shape = *piece.mShape;
+        const Vector3i size = shape.getSize();
+        if (size.x <= 0 || size.z <= 0 || !fitsBuildHeight(size.y))
+            return false;
+        const int32_t rotation = piece.mRotation < 0 ? nextInt(random, 4) : piece.mRotation;
+        const int32_t baseY = position.y - piece.mGroundLevel;
+        if (baseY < LevelChunk::MIN_Y || baseY + size.y - 1 > LevelChunk::MAX_Y)
+            return false;
+
+        const auto rotatedSize = shape.rotatedSize(rotation);
+        const Vector3i pivot(piece.mCentered ? size.x / 2 : 0, 0, piece.mCentered ? size.z / 2 : 0);
+        const auto relative = [&](Vector3i at) {
+            at.x -= pivot.x;
+            at.z -= pivot.z;
+            StructureTemplate::rotate(rotation, at.x, at.z);
+            return at;
+        };
+        const auto first = relative(Vector3i(0, 0, 0));
+        const auto last = relative(Vector3i(size.x - 1, 0, size.z - 1));
+        const int32_t minX = std::min(first.x, last.x);
+        const int32_t minZ = std::min(first.z, last.z);
+        Vector3i origin(position.x, baseY, position.z);
+        const auto world = [&](const Vector3i &cell) {
+            const auto at = relative(cell);
+            return Vector3i(at.x + origin.x, at.y + origin.y, at.z + origin.z);
+        };
+        const auto solid = [&](int32_t x, int32_t y, int32_t z) {
+            return BlockSupport::isSolid(blocks.getBlockAt(x, y, z));
+        };
+        const auto fits = [&] {
+            constexpr int32_t WORLD_LIMIT = 30000000;
+            const int32_t x0 = origin.x + minX;
+            const int32_t z0 = origin.z + minZ;
+            if (x0 < -WORLD_LIMIT || x0 + rotatedSize.x - 1 > WORLD_LIMIT
+                || z0 < -WORLD_LIMIT || z0 + rotatedSize.z - 1 > WORLD_LIMIT)
+                return false;
+            // the decoration worker commits writes only to the chunks it stages
+            for (int32_t chunkX = x0 >> 4; chunkX <= ((x0 + rotatedSize.x - 1) >> 4); ++chunkX) {
+                for (int32_t chunkZ = z0 >> 4; chunkZ <= ((z0 + rotatedSize.z - 1) >> 4); ++chunkZ) {
+                    if (blocks.getLevel().peekChunkPtr(chunkX, chunkZ) == nullptr)
+                        return false;
+                }
+            }
+            if (piece.mGrounded) {
+                for (const auto &cell: piece.mGroundChecks) {
+                    const auto at = world(cell);
+                    if (!solid(at.x, at.y - 1, at.z))
+                        return false;
+                }
+            }
+            if (piece.mMaxSteepness) {
+                if (piece.mGroundChecks.empty())
+                    return false;
+                const int32_t range = std::min(*piece.mMaxSteepness, LevelChunk::MAX_Y - LevelChunk::MIN_Y);
+                for (const auto &sample: piece.mGroundChecks) {
+                    const auto at = world(sample);
+                    const int32_t lowest = std::max(LevelChunk::MIN_Y, at.y - 1 - range);
+                    const int32_t highest = std::min(LevelChunk::MAX_Y, at.y - 1 + range);
+                    bool aboveSolid = solid(at.x, highest + 1, at.z);
+                    bool foundSurface = false;
+                    for (int32_t y = highest; y >= lowest; --y) {
+                        const bool hereSolid = solid(at.x, y, at.z);
+                        if (hereSolid && !aboveSolid) {
+                            foundSurface = true;
+                            break;
+                        }
+                        aboveSolid = hereSolid;
+                    }
+                    if (!foundSurface)
+                        return false;
+                }
+            }
+            if (piece.mUnburied && baseY + size.y <= LevelChunk::MAX_Y) {
+                for (int32_t x = 0; x < rotatedSize.x; ++x) {
+                    for (int32_t z = 0; z < rotatedSize.z; ++z) {
+                        if (!DecorationSupport::isAir(blocks.getBlockAt(x0 + x, baseY + size.y, z0 + z)))
+                            return false;
+                    }
+                }
+            }
+            for (const auto &cell: piece.mIntersectionChecks) {
+                const auto at = world(cell);
+                if (!contains(piece.mAllowed, blocks.getBlockAt(at.x, at.y, at.z)))
+                    return false;
+            }
+            return true;
+        };
+
+        // the game visits a square spiral at the original y, starting east and turning south
+        static const std::array<Vector3i, 4> STEPS{Vector3i(1, 0, 0), Vector3i(0, 0, 1),
+                                                   Vector3i(-1, 0, 0), Vector3i(0, 0, -1)};
+        const int32_t width = 2 * piece.mAdjustmentRadius + 1;
+        int32_t attempts = width * width;
+        int32_t leg = 0;
+        int32_t left = 1;
+        Vector3i offset;
+        while (!fits()) {
+            if (--attempts == 0)
+                return false;
+            const Vector3i &step = STEPS[(size_t) (leg & 3)];
+            origin.x += step.x;
+            origin.z += step.z;
+            offset.x += step.x;
+            offset.z += step.z;
+            if (--left == 0)
+                left = ++leg / 2 + 1;
+        }
+
+        for (int32_t x = 0; x < size.x; ++x) {
+            for (int32_t z = 0; z < size.z; ++z) {
+                for (int32_t y = 0; y < size.y; ++y) {
+                    const Vector3i cell(x, y, z);
+                    const auto at = world(cell);
+                    if (const auto *block = shape.getBlock(cell)) {
+                        blocks.setBlockStateAt(at.x, at.y, at.z, StructureBlockRotation::apply(*block, rotation, 0));
+                        if (const auto *data = shape.getBlockEntity(cell)) {
+                            Tag actor = *data;
+                            actor.putInt("x", at.x);
+                            actor.putInt("y", at.y);
+                            actor.putInt("z", at.z);
+                            blocks.storeGeneratedBlockActor(std::move(actor));
+                        }
+                    }
+                    if (const auto *overlay = shape.getBlock(cell, 1))
+                        blocks.setExtraBlockAt(at.x, at.y, at.z, StructureBlockRotation::apply(*overlay, rotation, 0));
+                }
+            }
+        }
+        position.x += offset.x;
+        position.z += offset.z;
+        return true;
+    }
+
+    class SearchBlocks : public BlockManager {
+    public:
+        explicit SearchBlocks(BlockManager &source) : BlockManager(source.getLevel()) {
+            readPendingFrom(&source);
+        }
+
+        void populateBeeNest(int32_t x, int32_t y, int32_t z, int32_t bees) override {
+            mNests.push_back({x, y, z, bees});
+        }
+
+        void storeGeneratedBlockActor(Tag data) override {
+            mBlockActors.push_back(std::move(data));
+        }
+
+        void commit(BlockManager &parent) {
+            parent.merge(*this);
+            for (auto &data: mBlockActors)
+                parent.storeGeneratedBlockActor(std::move(data));
+            for (const auto &[x, y, z, bees]: mNests)
+                parent.populateBeeNest(x, y, z, bees);
+        }
+
+    private:
+        std::vector<std::array<int32_t, 4>> mNests;
+        std::vector<Tag> mBlockActors;
+    };
+
+    bool placePackFeature(BlockManager &blocks, const std::string &name, Vector3i &pos, std::mt19937 &random,
+                          int32_t &placements, int32_t depth = 0) {
+        constexpr int32_t WORLD_LIMIT = 30000000;
+        if (placements <= 0 || depth > 32 || pos.y < LevelChunk::MIN_Y || pos.y > LevelChunk::MAX_Y
+            || pos.x < -WORLD_LIMIT || pos.x > WORLD_LIMIT || pos.z < -WORLD_LIMIT || pos.z > WORLD_LIMIT)
+            return false;
+        --placements;
+        const auto found = packFeatures.find(name);
+        if (found == packFeatures.end())
+            return OverworldRulePlacer::placeFeature(blocks, name, pos.x, pos.y, pos.z, random);
+
+        const PackFeature &feature = found->second;
+        using Type = PackFeature::Type;
+        if (feature.mType == Type::SingleBlock) {
+            if (!feature.mMayReplace.empty()) {
+                const auto &current = blocks.getBlockAt(pos.x, pos.y, pos.z);
+                if (std::find(feature.mMayReplace.begin(), feature.mMayReplace.end(), current.mName)
+                    == feature.mMayReplace.end())
+                    return false;
+            }
+            const BlockState &block = weightedEntry(feature.mBlocks, random);
+            blocks.setBlockStateAt(pos.x, pos.y, pos.z, feature.mRotate
+                                    ? StructureBlockRotation::apply(block, nextInt(random, 4), 0) : block);
+            return true;
+        }
+        if (feature.mType == Type::Ore)
+            return placeOre(blocks, feature.mOre, pos.x, pos.y, pos.z, random);
+        if (feature.mType == Type::Structure)
+            return placePackTemplate(blocks, *feature.mTemplate, pos, random);
+        if (feature.mType == Type::Search) {
+            const auto &search = feature.mSearch;
+            const auto &[outer, middle, inner] = search.mOrder;
+            std::array<int32_t, 3> offset{};
+            int32_t needed = search.mRequired;
+            SearchBlocks accepted(blocks);
+            const int32_t start = search.mSign > 0 ? search.mMin[outer] : search.mMax[outer];
+            const int32_t end = search.mSign > 0 ? search.mMax[outer] : search.mMin[outer];
+            for (offset[outer] = start; offset[outer] != end + search.mSign; offset[outer] += search.mSign) {
+                for (offset[middle] = search.mMin[middle]; offset[middle] <= search.mMax[middle]; ++offset[middle]) {
+                    for (offset[inner] = search.mMin[inner]; offset[inner] <= search.mMax[inner]; ++offset[inner]) {
+                        if (placements <= 0)
+                            return false;
+                        Vector3i candidate(pos.x + offset[0], pos.y + offset[1], pos.z + offset[2]);
+                        SearchBlocks attempt(static_cast<BlockManager &>(accepted));
+                        if (!placePackFeature(attempt, feature.mChildren.front().first, candidate, random,
+                                              placements, depth + 1))
+                            continue;
+                        attempt.commit(accepted);
+                        if (--needed == 0) {
+                            accepted.commit(blocks);
+                            pos = candidate;
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        if (feature.mType == Type::Snap) {
+            int32_t snapped[3]{};
+            if (!OverworldRulePlacer::snapPosition(blocks, feature.mSnap, pos.x, pos.y, pos.z, random, snapped))
+                return false;
+            pos = Vector3i(snapped[0], snapped[1], snapped[2]);
+            return placePackFeature(blocks, feature.mChildren.front().first, pos, random, placements, depth + 1);
+        }
+        if (feature.mType == Type::SurfaceThreshold) {
+            if (placementContext.mClimate == nullptr
+                || placementContext.mClimate->preliminarySurfaceLevel(pos.x >> 2, pos.z >> 2) - feature.mBelowSurface
+                           <= pos.y)
+                return false;
+            return placePackFeature(blocks, feature.mChildren.front().first, pos, random, placements, depth + 1);
+        }
+        if (feature.mType == Type::Weighted)
+            return placePackFeature(blocks, weightedEntry(feature.mChildren, random), pos, random, placements, depth + 1);
+        bool success = false;
+        if (feature.mType == Type::Scatter) {
+            const auto &scatter = feature.mScatter;
+            const int32_t origin[]{pos.x, pos.y, pos.z};
+            ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
+            int32_t count = iterationsOf(scatter.mNumerator, scatter.mDenominator, scatter.mChance,
+                                         scatter.mIterations, variables, random, placements);
+            while (count-- > 0 && placements > 0) {
+                int32_t point[3]{};
+                scatterPosition(scatter.mAxes, scatter.mOrder, origin, variables, random, point);
+                Vector3i candidate(point[0], point[1], point[2]);
+                if (placePackFeature(blocks, feature.mChildren.front().first, candidate, random, placements, depth + 1)) {
+                    pos = candidate;
+                    success = true;
+                }
+            }
+            return success;
+        }
+        for (const auto &child: feature.mChildren) {
+            Vector3i next = pos;
+            const bool placed = placePackFeature(blocks, child.first, next, random, placements, depth + 1);
+            if (feature.mType == Type::Sequence) {
+                if (!placed)
+                    return false;
+                pos = next;
+            }
+            success = success || placed;
+            if (placements <= 0 || (!placed && feature.mEarlyOut == "first_failure")
+                || (placed && feature.mEarlyOut == "first_success"))
+                break;
+        }
+        return success;
+    }
+
+    void applyPackRules(BlockManager &blocks, const LevelChunk &chunk, uint32_t decorationSeed, int32_t biome,
+                        const std::vector<const PackRule *> &rules) {
+        for (const PackRule *rule: rules) {
+            const uint32_t seed = ruleSeed(decorationSeed, rule->mHash);
+            std::mt19937 scatter(seed);
+            std::mt19937 placement(seed);
+            const int32_t origin[]{chunk.getX() * 16, 0, chunk.getZ() * 16};
+            ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
+            const auto &dist = rule->mScatter;
+            int32_t remaining = MAX_PACK_PLACEMENTS;
+            int32_t count = iterationsOf(dist.mNumerator, dist.mDenominator, dist.mChance, dist.mIterations,
+                                         variables, scatter, remaining);
+            while (count-- > 0 && remaining > 0) {
+                int32_t position[3]{};
+                scatterPosition(dist.mAxes, dist.mOrder, origin, variables, scatter, position);
+                Vector3i pos(position[0], position[1], position[2]);
+                if (pos.y >= LevelChunk::MIN_Y && pos.y <= LevelChunk::MAX_Y
+                    && biomeAt(blocks, chunk, pos.x, pos.y, pos.z) == biome)
+                    placePackFeature(blocks, rule->mFeature, pos, placement, remaining);
+            }
+        }
+    }
+}
+
+void OverworldRulePlacer::loadPacks(const std::vector<BehaviorPack> &packs) {
+    packRulesByBiome.clear();
+    packFeatures.clear();
+    packRules.clear();
+    for (const auto &pack: packs) {
+        pack.visitJson("features", [](const json::Value &doc) {
+            for (const std::string &type: doc.mKeys) {
+                const json::Value &entry = *doc.mObject.at(type);
+                const std::string id = packMember(packMember(entry, "description"), "identifier").string();
+                PackFeature feature;
+                if (!id.empty() && readPackFeature(type, entry, feature))
+                    packFeatures[id] = std::move(feature);
+            }
+        });
+        pack.visitJson("feature_rules", [](const json::Value &doc) {
+            const auto &entry = packMember(doc, "minecraft:feature_rules");
+            const auto &description = packMember(entry, "description");
+            const auto &conditions = packMember(entry, "conditions");
+            const std::string id = packMember(description, "identifier").string();
+            PackRule rule;
+            rule.mHash = (uint32_t) hashedString(id);
+            rule.mFeature = packMember(description, "places_feature").string();
+            rule.mPass = packMember(conditions, "placement_pass").string();
+            if (!id.empty() && !rule.mFeature.empty() && !rule.mPass.empty()
+                && readPackFilter(packMember(conditions, "minecraft:biome_filter"), rule.mFilter)
+                && readPackScatter(packMember(entry, "distribution"), rule.mScatter))
+                packRules[id] = std::move(rule);
+        });
+    }
+
+    if (std::any_of(packFeatures.begin(), packFeatures.end(), [](const auto &entry) {
+            return entry.second.mTemplate != nullptr;
+        })) {
+        ScriptStructureRegistry templates;
+        for (const BehaviorPack &pack: packs)
+            templates.addPack(pack.mPath);
+        for (auto &[name, feature]: packFeatures) {
+            if (feature.mTemplate) {
+                feature.mTemplate->mShape = templates.find(feature.mTemplate->mName);
+                if (feature.mTemplate->mShape)
+                    prepareTemplateChecks(*feature.mTemplate);
+            }
+        }
+    }
+
+    if (packRules.empty())
+        return;
+    for (const auto &biome: BiomeChunkGenDataRegistry::getBiomeNames()) {
+        const int32_t id = BiomeChunkGenDataRegistry::getBiomeId(biome);
+        for (const auto &[identifier, rule]: packRules) {
+            const auto pass = std::find(std::begin(PASSES), std::end(PASSES), rule.mPass);
+            if (pass != std::end(PASSES) && rule.mFilter.accepts(id))
+                packRulesByBiome[id][(size_t) (pass - std::begin(PASSES))].push_back(&rule);
+        }
+    }
+}
+
 bool OverworldRulePlacer::placeFeature(BlockManager &blocks, const std::string &feature, int32_t x, int32_t y,
                                        int32_t z, std::mt19937 &random) {
+    if (packFeatures.contains(feature)) {
+        Vector3i position(x, y, z);
+        int32_t remaining = MAX_PACK_PLACEMENTS;
+        return placePackFeature(blocks, feature, position, random, remaining);
+    }
     BiomeFeatureEntry entry;
     entry.mFeature = feature;
     const Feature found = _find(entry);
@@ -2773,7 +3630,9 @@ bool OverworldRulePlacer::placeFeature(BlockManager &blocks, const std::string &
 }
 
 bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
-    if (!_find(entry).isPorted() || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
+    if (!packRules.empty() && packRules.contains(entry.mIdentifier))
+        return true;
+    if (!((!packFeatures.empty() && packFeatures.contains(entry.mFeature)) || _find(entry).isPorted()) || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
         return false;
 
     if (FeatureExpression::find(entry.mIterations) == nullptr)
@@ -2816,28 +3675,54 @@ void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, 
     placementContext.mClimate = climate;
 
     // each pass, every biome of the chunk, then its rules in order
-    for (const char *pass: PASSES) {
+    for (size_t pass = 0; pass < std::size(PASSES); ++pass) {
         for (int32_t biome: biomes) {
             const std::vector<BiomeFeatureEntry> *rules = BiomeChunkGenDataRegistry::getConsolidatedFeatures(biome);
-            if (rules == nullptr)
-                continue;
-
             placementContext.mSharesOrigin = true;
             placementContext.mOrigin[0] = static_cast<float>(chunk.getX() << 4);
             placementContext.mOrigin[1] = 0.0f;
             placementContext.mOrigin[2] = static_cast<float>(chunk.getZ() << 4);
-            for (const BiomeFeatureEntry &entry: *rules) {
-                if (entry.mPass != pass)
-                    continue;
+            if (rules != nullptr) {
+                for (const BiomeFeatureEntry &entry: *rules) {
+                    if (entry.mPass != PASSES[pass] || (!packRules.empty() && packRules.contains(entry.mIdentifier)))
+                        continue;
 
-                if (handles(entry))
-                    _placeRule(blocks, chunk, entry, _find(entry), decorationSeed, biomes.size() > 1 ? biome : -1);
-                else
-                    _drawUnported(blocks, chunk, entry, decorationSeed);
+                    if (handles(entry))
+                        _placeRule(blocks, chunk, entry, _find(entry), decorationSeed, biomes.size() > 1 ? biome : -1);
+                    else
+                        _drawUnported(blocks, chunk, entry, decorationSeed);
+                }
+            }
+            if (!packRulesByBiome.empty()) {
+                const auto found = packRulesByBiome.find(biome);
+                if (found != packRulesByBiome.end())
+                    applyPackRules(blocks, chunk, decorationSeed, biome, found->second[pass]);
             }
         }
     }
     placementContext = PlacementContext();
+}
+
+void OverworldRulePlacer::applyPackBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome,
+                                              uint32_t decorationSeed) {
+    if (packRulesByBiome.empty())
+        return;
+    const auto found = packRulesByBiome.find(biome);
+    if (found == packRulesByBiome.end())
+        return;
+
+    std::mt19937 decoration(decorationSeed);
+    const PlacementContext previous = placementContext;
+    placementContext = PlacementContext();
+    placementContext.mDecoration = &decoration;
+    placementContext.mSharesOrigin = true;
+    for (const auto &rules: found->second) {
+        placementContext.mOrigin[0] = (float) (chunk.getX() * 16);
+        placementContext.mOrigin[1] = 0.0f;
+        placementContext.mOrigin[2] = (float) (chunk.getZ() * 16);
+        applyPackRules(blocks, chunk, decorationSeed, biome, rules);
+    }
+    placementContext = previous;
 }
 
 void OverworldRulePlacer::drawBiomeRules(BlockManager &blocks, const LevelChunk &chunk, int32_t biome,
@@ -2949,9 +3834,11 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
 
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
     ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
+    const bool fromPack = !packFeatures.empty() && packFeatures.contains(entry.mFeature);
     int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator,
                                       FeatureExpression::find(entry.mChancePercent),
-                                      FeatureExpression::find(entry.mIterations), variables, scatter);
+                                      FeatureExpression::find(entry.mIterations), variables, scatter,
+                                      fromPack ? MAX_PACK_PLACEMENTS : INT32_MAX);
     if (iterations == 0)
         return;
 
@@ -2964,15 +3851,19 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
     // the feature draws from a second twister on the same seed, shared by every iteration
     std::mt19937 placement(seed);
     placementContext.mGaussianOwner = nullptr;
-    while (iterations-- > 0) {
+    int32_t remaining = MAX_PACK_PLACEMENTS;
+    while (iterations-- > 0 && remaining > 0) {
         int32_t position[3] = {0, 0, 0};
         scatterPosition(axes, entry.mEvalOrder, origin, variables, scatter, position);
 
         if (biomeFilter >= 0 && biomeAt(blocks, chunk, position[0], position[1], position[2]) != biomeFilter)
             continue;
 
-        if (feature.mOre != nullptr)
-            _placeOre(blocks, *feature.mOre, position[0], position[1], position[2], placement);
+        if (fromPack) {
+            Vector3i pos(position[0], position[1], position[2]);
+            placePackFeature(blocks, entry.mFeature, pos, placement, remaining);
+        } else if (feature.mOre != nullptr)
+            placeOre(blocks, *feature.mOre, position[0], position[1], position[2], placement);
         else if (feature.mDisk != nullptr)
             _placeDisk(blocks, *feature.mDisk, position[0], position[1], position[2], placement);
         else if (feature.mGeode != nullptr)
@@ -3000,7 +3891,7 @@ bool OverworldRulePlacer::placeOreVein(BlockManager &blocks, int32_t count, Bloc
                                        const std::vector<std::string> &mayReplace, int32_t x, int32_t y, int32_t z,
                                        std::mt19937 &random) {
     const OreDefinition ore{"", count, 0.0f, {{places, mayReplace}}};
-    return _placeOre(blocks, ore, x, y, z, random);
+    return placeOre(blocks, ore, x, y, z, random);
 }
 
 bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinition &fossil, int32_t x, int32_t y,
@@ -3077,172 +3968,179 @@ bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinit
     return true;
 }
 
-bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &ore, int32_t x, int32_t y, int32_t z,
-                                    std::mt19937 &random) {
-    const float size = static_cast<float>(ore.mCount);
-    const float inverse = 1.0f / size;
+namespace {
+    bool placeOre(BlockManager &blocks, const OreDefinition &ore, int32_t x, int32_t y, int32_t z,
+                  std::mt19937 &random) {
+        const float size = static_cast<float>(ore.mCount);
+        const float inverse = 1.0f / size;
 
-    const float angle = (nextFloat(random) * PI) * 10430.378f;
-    const float sine = FeatureMath::sineAt(angle);
-    const float cosine = FeatureMath::sineAt(angle + 16384.0f);
-    const float reach = size * 0.125f;
-    const float alongX = reach * sine;
-    const float alongZ = reach * cosine;
-    const float originX = static_cast<float>(x);
-    const float originZ = static_cast<float>(z);
-    const float originY = static_cast<float>(y);
+        const float angle = (nextFloat(random) * PI) * 10430.378f;
+        const float sine = FeatureMath::sineAt(angle);
+        const float cosine = FeatureMath::sineAt(angle + 16384.0f);
+        const float reach = size * 0.125f;
+        const float alongX = reach * sine;
+        const float alongZ = reach * cosine;
+        const float originX = static_cast<float>(x);
+        const float originZ = static_cast<float>(z);
+        const float originY = static_cast<float>(y);
 
-    const int32_t firstRoll = nextInt(random, 3);
-    const float startX = (alongX + 8.0f) + originX;
-    const float startZ = (alongZ + 8.0f) + originZ;
-    const int32_t secondRoll = nextInt(random, 3);
-    const float endX = (8.0f - alongX) + originX;
-    const float endZ = (8.0f - alongZ) + originZ;
-    const float endY = (static_cast<float>(secondRoll) + -2.0f) + originY;
-    const float startY = (static_cast<float>(firstRoll) + -2.0f) + originY;
+        const int32_t firstRoll = nextInt(random, 3);
+        const float startX = (alongX + 8.0f) + originX;
+        const float startZ = (alongZ + 8.0f) + originZ;
+        const int32_t secondRoll = nextInt(random, 3);
+        const float endX = (8.0f - alongX) + originX;
+        const float endZ = (8.0f - alongZ) + originZ;
+        const float endY = (static_cast<float>(secondRoll) + -2.0f) + originY;
+        const float startY = (static_cast<float>(firstRoll) + -2.0f) + originY;
 
-    const float deltaX = endX - startX;
-    const float deltaY = endY - startY;
-    const float deltaZ = endZ - startZ;
-    const float length = std::sqrt(deltaZ * deltaZ + (deltaY * deltaY + deltaX * deltaX));
-    const bool degenerate = length < 0.0001f;
-    const float directionX = degenerate ? 0.0f : deltaX / length;
-    const float directionZ = degenerate ? 0.0f : deltaZ / length;
-    const float directionY = degenerate ? 0.0f : deltaY / length;
-    const float horizontal = std::sqrt(directionZ * directionZ + directionX * directionX);
-    const bool vertical = horizontal < 0.0001f;
-    const float flatX = vertical ? 0.0f : directionX / horizontal;
-    const float flatZ = vertical ? 0.0f : directionZ / horizontal;
-    const float waveStep = PI * inverse;
+        const float deltaX = endX - startX;
+        const float deltaY = endY - startY;
+        const float deltaZ = endZ - startZ;
+        const float length = std::sqrt(deltaZ * deltaZ + (deltaY * deltaY + deltaX * deltaX));
+        const bool degenerate = length < 0.0001f;
+        const float directionX = degenerate ? 0.0f : deltaX / length;
+        const float directionZ = degenerate ? 0.0f : deltaZ / length;
+        const float directionY = degenerate ? 0.0f : deltaY / length;
+        const float horizontal = std::sqrt(directionZ * directionZ + directionX * directionX);
+        const bool vertical = horizontal < 0.0001f;
+        const float flatX = vertical ? 0.0f : directionX / horizontal;
+        const float flatZ = vertical ? 0.0f : directionZ / horizontal;
+        const float waveStep = PI * inverse;
 
-    std::vector<Sphere> spheres((size_t) ore.mCount);
-    for (int32_t i = 0; i < ore.mCount; i++) {
-        const float step = static_cast<float>(i);
-        Sphere &sphere = spheres[(size_t) i];
-        sphere.mZ = (deltaZ * step) * inverse + startZ;
-        sphere.mX = inverse * (deltaX * step) + startX;
-        sphere.mY = inverse * (deltaY * step) + startY;
-        const float roll = nextFloat(random);
-        const float wave = FeatureMath::sineAt((step * waveStep) * 10430.378f);
-        const float radius = ((wave + 1.0f) * ((roll * size) * 0.0625f) + 1.0f) * 0.5f;
-        sphere.mRadiusSquared = radius * radius;
-        sphere.mRadius = std::sqrt(sphere.mRadiusSquared);
-    }
-
-    // spheres inside a later, larger one are dropped
-    std::vector<const Sphere *> kept;
-    float maxRadiusSquared = 0.0f;
-    for (size_t i = 0; i < spheres.size(); i++) {
-        const Sphere &sphere = spheres[i];
-        bool inside = false;
-        for (size_t j = i + 1; j < spheres.size() && !inside; j++) {
-            const Sphere &other = spheres[j];
-            if (!(sphere.mRadius <= other.mRadius))
-                continue;
-
-            const float dx = other.mX - sphere.mX;
-            const float dy = other.mY - sphere.mY;
-            const float dz = other.mZ - sphere.mZ;
-            inside = other.mRadius > std::sqrt(dz * dz + (dy * dy + dx * dx)) + sphere.mRadius;
+        std::vector<Sphere> spheres((size_t) ore.mCount);
+        for (int32_t i = 0; i < ore.mCount; i++) {
+            const float step = static_cast<float>(i);
+            Sphere &sphere = spheres[(size_t) i];
+            sphere.mZ = (deltaZ * step) * inverse + startZ;
+            sphere.mX = inverse * (deltaX * step) + startX;
+            sphere.mY = inverse * (deltaY * step) + startY;
+            const float roll = nextFloat(random);
+            const float wave = FeatureMath::sineAt((step * waveStep) * 10430.378f);
+            const float radius = ((wave + 1.0f) * ((roll * size) * 0.0625f) + 1.0f) * 0.5f;
+            sphere.mRadiusSquared = radius * radius;
+            sphere.mRadius = std::sqrt(sphere.mRadiusSquared);
         }
 
-        if (inside)
-            continue;
-
-        kept.push_back(&sphere);
-        maxRadiusSquared = std::fmax(sphere.mRadiusSquared, maxRadiusSquared);
-    }
-
-    if (kept.empty())
-        return false;
-
-    int32_t minX = INT32_MAX;
-    int32_t minY = INT32_MAX;
-    int32_t minZ = INT32_MAX;
-    int32_t maxX = INT32_MIN;
-    int32_t maxY = INT32_MIN;
-    int32_t maxZ = INT32_MIN;
-    for (const Sphere *sphere: kept) {
-        minX = std::min(minX, static_cast<int32_t>(std::floor(sphere->mX - sphere->mRadius)));
-        minY = std::min(minY, static_cast<int32_t>(std::floor(sphere->mY - sphere->mRadius)));
-        minZ = std::min(minZ, static_cast<int32_t>(std::floor(sphere->mZ - sphere->mRadius)));
-        maxX = std::max(maxX, static_cast<int32_t>(std::floor(sphere->mRadius + sphere->mX)));
-        maxY = std::max(maxY, static_cast<int32_t>(std::floor(sphere->mY + sphere->mRadius)));
-        maxZ = std::max(maxZ, static_cast<int32_t>(std::floor(sphere->mZ + sphere->mRadius)));
-    }
-
-    // built once per thread and block: a vein is tried hundreds of times a chunk. keyed by the block, not the
-    // definition: the nether veins build theirs on the stack, one address for every ore
-    thread_local std::unordered_map<Block (*)(), BlockState> placedStates;
-    thread_local std::vector<const BlockState *> states;
-    states.clear();
-    for (const ReplaceRule &rule: ore.mRules) {
-        auto found = placedStates.find(rule.mPlaces);
-        if (found == placedStates.end())
-            found = placedStates.emplace(rule.mPlaces, rule.mPlaces().toBlockState()).first;
-        states.push_back(&found->second);
-    }
-
-    bool placed = false;
-    float centerX = static_cast<float>(minX) + 0.5f;
-    for (int32_t blockX = minX; blockX <= maxX; blockX++, centerX += 1.0f) {
-        const float flatAlongX = flatX * (centerX - startX);
-        const float alongFromX = (centerX - startX) * directionX;
-        float centerZ = static_cast<float>(minZ) + 0.5f;
-        for (int32_t blockZ = minZ; blockZ <= maxZ; blockZ++, centerZ += 1.0f) {
-            const float offsetZ = centerZ - startZ;
-            const float projection = flatZ * offsetZ + flatAlongX;
-            const float awayX = centerX - (projection * flatX + startX);
-            const float awayZ = centerZ - (projection * flatZ + startZ);
-            if (!(awayZ * awayZ + awayX * awayX <= maxRadiusSquared))
-                continue;
-
-            const float alongFromZ = offsetZ * directionZ;
-            float centerY = static_cast<float>(minY) + 0.5f;
-            for (int32_t blockY = minY; blockY <= maxY; blockY++, centerY += 1.0f) {
-                const float along = ((centerY - startY) * directionY + alongFromX) + alongFromZ;
-                const float lineX = centerX - (along * directionX + startX);
-                const float lineZ = centerZ - (along * directionZ + startZ);
-                const float lineY = centerY - (directionY * along + startY);
-                if (lineZ * lineZ + (lineY * lineY + lineX * lineX) > maxRadiusSquared)
+        // spheres inside a later, larger one are dropped
+        std::vector<const Sphere *> kept;
+        float maxRadiusSquared = 0.0f;
+        for (size_t i = 0; i < spheres.size(); i++) {
+            const Sphere &sphere = spheres[i];
+            bool inside = false;
+            for (size_t j = i + 1; j < spheres.size() && !inside; j++) {
+                const Sphere &other = spheres[j];
+                if (!(sphere.mRadius <= other.mRadius))
                     continue;
 
-                bool inside = false;
-                for (const Sphere *sphere: kept) {
-                    const float dx = centerX - sphere->mX;
-                    const float dz = centerZ - sphere->mZ;
-                    const float dy = centerY - sphere->mY;
-                    if (sphere->mRadiusSquared > dz * dz + (dy * dy + dx * dx)) {
-                        inside = true;
+                const float dx = other.mX - sphere.mX;
+                const float dy = other.mY - sphere.mY;
+                const float dz = other.mZ - sphere.mZ;
+                inside = other.mRadius > std::sqrt(dz * dz + (dy * dy + dx * dx)) + sphere.mRadius;
+            }
+
+            if (inside)
+                continue;
+
+            kept.push_back(&sphere);
+            maxRadiusSquared = std::fmax(sphere.mRadiusSquared, maxRadiusSquared);
+        }
+
+        if (kept.empty())
+            return false;
+
+        int32_t minX = INT32_MAX;
+        int32_t minY = INT32_MAX;
+        int32_t minZ = INT32_MAX;
+        int32_t maxX = INT32_MIN;
+        int32_t maxY = INT32_MIN;
+        int32_t maxZ = INT32_MIN;
+        for (const Sphere *sphere: kept) {
+            minX = std::min(minX, static_cast<int32_t>(std::floor(sphere->mX - sphere->mRadius)));
+            minY = std::min(minY, static_cast<int32_t>(std::floor(sphere->mY - sphere->mRadius)));
+            minZ = std::min(minZ, static_cast<int32_t>(std::floor(sphere->mZ - sphere->mRadius)));
+            maxX = std::max(maxX, static_cast<int32_t>(std::floor(sphere->mRadius + sphere->mX)));
+            maxY = std::max(maxY, static_cast<int32_t>(std::floor(sphere->mY + sphere->mRadius)));
+            maxZ = std::max(maxZ, static_cast<int32_t>(std::floor(sphere->mZ + sphere->mRadius)));
+        }
+
+        // built once per thread and block: a vein is tried hundreds of times a chunk. keyed by the block, not the
+        // definition: the nether veins build theirs on the stack, one address for every ore
+        thread_local std::unordered_map<Block (*)(), BlockState> placedStates;
+        thread_local std::vector<const BlockState *> states;
+        states.clear();
+        for (const ReplaceRule &rule: ore.mRules) {
+            if (rule.mPackState) {
+                states.push_back(&*rule.mPackState);
+                continue;
+            }
+            auto found = placedStates.find(rule.mPlaces);
+            if (found == placedStates.end())
+                found = placedStates.emplace(rule.mPlaces, rule.mPlaces().toBlockState()).first;
+            states.push_back(&found->second);
+        }
+
+        bool placed = false;
+        float centerX = static_cast<float>(minX) + 0.5f;
+        for (int32_t blockX = minX; blockX <= maxX; blockX++, centerX += 1.0f) {
+            const float flatAlongX = flatX * (centerX - startX);
+            const float alongFromX = (centerX - startX) * directionX;
+            float centerZ = static_cast<float>(minZ) + 0.5f;
+            for (int32_t blockZ = minZ; blockZ <= maxZ; blockZ++, centerZ += 1.0f) {
+                const float offsetZ = centerZ - startZ;
+                const float projection = flatZ * offsetZ + flatAlongX;
+                const float awayX = centerX - (projection * flatX + startX);
+                const float awayZ = centerZ - (projection * flatZ + startZ);
+                if (!(awayZ * awayZ + awayX * awayX <= maxRadiusSquared))
+                    continue;
+
+                const float alongFromZ = offsetZ * directionZ;
+                float centerY = static_cast<float>(minY) + 0.5f;
+                for (int32_t blockY = minY; blockY <= maxY; blockY++, centerY += 1.0f) {
+                    const float along = ((centerY - startY) * directionY + alongFromX) + alongFromZ;
+                    const float lineX = centerX - (along * directionX + startX);
+                    const float lineZ = centerZ - (along * directionZ + startZ);
+                    const float lineY = centerY - (directionY * along + startY);
+                    if (lineZ * lineZ + (lineY * lineY + lineX * lineX) > maxRadiusSquared)
+                        continue;
+
+                    bool inside = false;
+                    for (const Sphere *sphere: kept) {
+                        const float dx = centerX - sphere->mX;
+                        const float dz = centerZ - sphere->mZ;
+                        const float dy = centerY - sphere->mY;
+                        if (sphere->mRadiusSquared > dz * dz + (dy * dy + dx * dx)) {
+                            inside = true;
+                            break;
+                        }
+                    }
+
+                    if (!inside)
+                        continue;
+
+                    const BlockState &current = blocks.getBlockAt(blockX, blockY, blockZ);
+                    for (size_t index = 0; index < ore.mRules.size(); index++) {
+                        const ReplaceRule &rule = ore.mRules[index];
+                        if (!(rule.mPackState && rule.mMayReplace.empty()) && !contains(rule.mMayReplace, current))
+                            continue;
+
+                        const BlockState &state = *states[index];
+                        if (current.getHash() == state.getHash() && current == state)
+                            continue;
+
+                        const float discard = ore.mDiscardChanceOnAirExposure;
+                        if (discard > 0.0f && !(discard < 1.0f && nextFloat(random) >= discard)
+                            && exposedToAir(blocks, blockX, blockY, blockZ))
+                            continue;
+
+                        blocks.setBlockStateAt(blockX, blockY, blockZ, state);
+                        placed = true;
                         break;
                     }
                 }
-
-                if (!inside)
-                    continue;
-
-                const BlockState &current = blocks.getBlockAt(blockX, blockY, blockZ);
-                for (size_t index = 0; index < ore.mRules.size(); index++) {
-                    if (!contains(ore.mRules[index].mMayReplace, current))
-                        continue;
-
-                    const BlockState &state = *states[index];
-                    if (current.getHash() == state.getHash() && current == state)
-                        continue;
-
-                    const float discard = ore.mDiscardChanceOnAirExposure;
-                    if (discard > 0.0f && !(discard < 1.0f && nextFloat(random) >= discard)
-                        && exposedToAir(blocks, blockX, blockY, blockZ))
-                        continue;
-
-                    blocks.setBlockStateAt(blockX, blockY, blockZ, state);
-                    placed = true;
-                    break;
-                }
             }
         }
+        return placed;
     }
-    return placed;
 }
 
 bool OverworldRulePlacer::_placeDisk(BlockManager &blocks, const DiskDefinition &disk, int32_t x, int32_t y, int32_t z,
@@ -4004,7 +4902,14 @@ bool OverworldRulePlacer::_placeThreshold(BlockManager &blocks, const ThresholdD
 
 bool OverworldRulePlacer::_placeSnap(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
                                      std::mt19937 &random) {
-    int32_t snapped[3] = {x, y, z};
+    int32_t snapped[3]{};
+    if (!snapPosition(blocks, snap, x, y, z, random, snapped))
+        return false;
+    return _place(blocks, snap.mPlaces, snapped[0], snapped[1], snapped[2], random);
+}
+
+bool OverworldRulePlacer::snapPosition(BlockManager &blocks, const SnapOptions &snap, int32_t x, int32_t y,
+                                       int32_t z, std::mt19937 &random, int32_t (&snapped)[3]) {
     bool found = false;
     int32_t surface = snap.mSurface;
     if (surface == 2) {
@@ -4037,12 +4942,10 @@ bool OverworldRulePlacer::_placeSnap(BlockManager &blocks, const SnapDefinition 
         found = _snapAlong(blocks, snap, x, y, z, face, snapped);
     }
 
-    if (!found)
-        return false;
-    return _place(blocks, snap.mPlaces, snapped[0], snapped[1], snapped[2], random);
+    return found;
 }
 
-bool OverworldRulePlacer::_snapAlong(BlockManager &blocks, const SnapDefinition &snap, int32_t x, int32_t y, int32_t z,
+bool OverworldRulePlacer::_snapAlong(BlockManager &blocks, const SnapOptions &snap, int32_t x, int32_t y, int32_t z,
                                      int32_t face, int32_t snapped[3]) {
     // from an open start along the face while the blocks stay open, to a surface that supports it;
     // from a solid start while they stay solid, to an open block

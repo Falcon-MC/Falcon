@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 #include "Core/NBT/Tag.h"
 
@@ -24,6 +25,11 @@ struct MolangContext {
     int32_t mPlayerLevel = 0;
     // read by query.block_state
     const Tag *mBlockStates = nullptr;
+    std::unordered_map<std::string, MolangValue> *mVariables = nullptr;
+    double mAnimationTime = 0.0;
+    double mStateTime = 0.0;
+    bool mAnyAnimationFinished = false;
+    bool mAllAnimationsFinished = false;
 };
 
 class Molang {

@@ -18,14 +18,17 @@ public:
         return BLOCK_ACTOR_ID;
     }
 
+    Tag getSpawnCompound() const override;
+
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    Mode mMode = Mode::Data;
+    Mode mMode = Mode::Save;
     int32_t mRedstoneSaveMode = 0;
-    Vector3i mOffset;
-    Vector3i mSize;
+    Vector3i mOffset{0, -1, 0};
+    Vector3i mSize{5, 5, 5};
+    bool mPowered = false;
     std::string mStructureName;
     bool mHasFilteredName = false;
     std::string mFilteredName;
@@ -41,4 +44,7 @@ public:
     float mAnimationSeconds = 0.0f;
     float mIntegrity = 100.0f;
     int64_t mSeed = 0;
+
+private:
+    void _putFields(Tag &data) const;
 };

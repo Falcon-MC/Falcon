@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 
+#include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 
 #include <unordered_map>
@@ -86,6 +88,8 @@ namespace {
 }
 
 const ClimateAttributes *ClimateAttributes::getForBiome(int32_t biomeId) {
+    if (const auto *pack = BiomeChunkGenDataRegistry::getPackClimate(biomeId))
+        return pack;
     const ClimateMap &map = climates();
     const ClimateMap::const_iterator found = map.find(biomeId);
     if (found == map.end())

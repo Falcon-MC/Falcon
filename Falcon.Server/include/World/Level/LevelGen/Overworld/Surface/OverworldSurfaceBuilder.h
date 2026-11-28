@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 #include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
 
+#include <map>
 #include <random>
 #include <vector>
 
@@ -36,7 +37,7 @@ private:
 
     void _digSwampPuddle(LevelChunk &chunk, int32_t x, int32_t z, int32_t height, int32_t maxDepth) const;
 
-    const NoiseGradientSurfaceBuilder *_noiseGradientFor(int32_t biome) const;
+    const NoiseGradientSurfaceBuilder *_noiseGradientFor(int32_t biome, bool subsurface) const;
 
     // after every column has its surface
     void _buildSubsurface(LevelChunk &chunk) const;
@@ -55,4 +56,6 @@ private:
     NormalNoisePtr mIcebergSurfaceNoise;
     NoiseGradientSurfaceBuilder mSulfurCaves;
     MesaSurfaceBuilder mMesa;
+    std::map<int32_t, NoiseGradientSurfaceBuilder> mPackSurface;
+    std::map<int32_t, NoiseGradientSurfaceBuilder> mPackSubsurface;
 };

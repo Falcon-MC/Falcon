@@ -5,7 +5,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/PlayerSkinPacket.h"
-#include "Protocol/Types/CameraPresets.h"
+#include "Server/CameraPresetRegistry.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Mob/MobEquipment.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -215,7 +215,7 @@ namespace {
         if (preset == nullptr || ease > LAST_EASE || !std::isfinite(easeTime) || !finiteVec3(position)
             || !finiteVec3(rotation))
             return 0;
-        const int presetId = cameraPresetRuntimeId(preset);
+        const int presetId = CameraPresetRegistry::runtimeId(preset);
         if (presetId < 0)
             return 0;
 

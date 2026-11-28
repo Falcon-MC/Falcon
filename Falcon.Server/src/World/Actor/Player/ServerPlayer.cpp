@@ -31,7 +31,7 @@
 #include "Protocol/Packets/TextPacket.h"
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
-#include "Protocol/Types/CameraPresets.h"
+#include "Server/CameraPresetRegistry.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "Scripting/Binding/ScriptRaycast.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -1240,7 +1240,7 @@ void ServerPlayer::readSyncedClientOptions(const std::string &clientData) {
 
 void ServerPlayer::recordCamera(const CameraInstructionPacket &packet) {
     mCameraState.mPresent = true;
-    const std::vector<CameraPreset> &presets = standardCameraPresets();
+    const std::vector<CameraPreset> &presets = CameraPresetRegistry::getPresets();
     const int32_t preset = packet.mSetInstruction.mPresetRuntimeId;
     if (packet.mHasSetInstruction && preset >= 0 && (size_t) preset < presets.size())
         mCameraState.mPreset = presets[(size_t) preset].mIdentifier;

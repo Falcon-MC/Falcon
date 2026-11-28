@@ -29,7 +29,7 @@
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/CameraShakePacket.h"
 #include "Protocol/Packets/ClientboundControlSchemeSetPacket.h"
-#include "Protocol/Types/CameraPresets.h"
+#include "Server/CameraPresetRegistry.h"
 #include "Core/Math/VectorMath.h"
 #include "World/Level/Block/BlockNames.h"
 
@@ -1954,11 +1954,25 @@ namespace {
         const ServerPlayer::CameraState &camera = target.mPlayer->getCameraState();
         if (!camera.mPresent)
             return target.mApi->throwError("EngineError", "An internal engine error occurred.");
-        const std::vector<int32_t> allowed = allowedControlSchemes(camera.mPreset);
+        const std::vector<CameraPreset> &presets = CameraPresetRegistry::getPresets();
+        std::string basePreset = camera.mPreset;
+        int32_t defaultScheme = -1;
+        for (int id = CameraPresetRegistry::runtimeId(basePreset); id >= 0;
+             id = CameraPresetRegistry::runtimeId(basePreset)) {
+            const CameraPreset &preset = presets[(size_t) id];
+            if (defaultScheme < 0 && preset.mHasControlScheme)
+                defaultScheme = (int32_t) preset.mControlScheme;
+            if (preset.mParentPreset.empty())
+                break;
+            basePreset = preset.mParentPreset;
+        }
+
+        const std::vector<int32_t> allowed = allowedControlSchemes(basePreset);
         if (scheme < 0) {
             if (allowed.empty())
                 return target.mApi->throwError("EngineError", "An internal engine error occurred.");
-            scheme = allowed.front();
+            scheme = std::find(allowed.begin(), allowed.end(), defaultScheme) == allowed.end() ? allowed.front()
+                                                                                              : defaultScheme;
         } else if (std::find(allowed.begin(), allowed.end(), scheme) == allowed.end()) {
             return target.mApi->throwError("InvalidArgumentError", std::string("Invalid value passed. Control Scheme '")
                                                                            + CONTROL_SCHEMES[scheme]
@@ -2606,7 +2620,7 @@ namespace {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        const int preset = cameraPresetRuntimeId(toString(ctx, argv[0]));
+        const int preset = CameraPresetRegistry::runtimeId(toString(ctx, argv[0]));
         if (preset < 0)
             return api->throwError("Error", "Invalid camera preset.");
         if (player == nullptr)
@@ -2707,7 +2721,7 @@ namespace {
         if (!ok)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        const int preset = cameraPresetRuntimeId(name);
+        const int preset = CameraPresetRegistry::runtimeId(name);
         if (preset < 0)
             return api->throwError("Error", "Invalid camera preset!");
         packet.mSetInstruction.mPresetRuntimeId = preset;
@@ -2731,7 +2745,7 @@ namespace {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        const int preset = cameraPresetRuntimeId(toString(ctx, argv[0]));
+        const int preset = CameraPresetRegistry::runtimeId(toString(ctx, argv[0]));
         if (preset < 0)
             return api->throwError("Error", "Invalid camera preset!");
 

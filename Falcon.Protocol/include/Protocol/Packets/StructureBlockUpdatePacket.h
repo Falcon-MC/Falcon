@@ -22,6 +22,6 @@ public:
 
     Vector3i mBlockPosition;
     StructureEditorData mEditorData;
-    bool mPowered = false;
+    bool mTrigger = false;
     bool mWaterlogged = false;
 };

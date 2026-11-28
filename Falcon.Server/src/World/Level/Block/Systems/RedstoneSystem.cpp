@@ -15,6 +15,7 @@
 #include "World/Actor/Misc/PrimedTntActor.h"
 #include "World/Level/Block/ButtonBlock.h"
 #include "World/Level/Block/CommandBlock.h"
+#include "World/Level/Block/StructureBlock.h"
 #include "World/Level/Block/DaylightDetectorBlock.h"
 #include "World/Level/Block/DispenserBlock.h"
 #include "World/Level/Block/DoorBlock.h"
@@ -370,7 +371,7 @@ namespace {
         if (dynamic_cast<const TrapDoorBlock *>(block) != nullptr || dynamic_cast<const FenceGateBlock *>(block) != nullptr
             || dynamic_cast<const TntBlock *>(block) != nullptr || dynamic_cast<const DispenserBlock *>(block) != nullptr
             || dynamic_cast<const CrafterBlock *>(block) != nullptr || CommandBlock::matches(state.mName)
-            || isConsumerName(state.mName))
+            || dynamic_cast<const StructureBlock *>(block) != nullptr || isConsumerName(state.mName))
             return CircuitKind::Consumer;
         const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
         if (custom != nullptr && custom->mRedstoneConsumer)

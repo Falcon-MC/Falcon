@@ -56,10 +56,11 @@ namespace {
 }
 
 StructureFeature::StructureFeature(std::string name, int32_t spacing, int32_t separation, int32_t salt, Spread spread,
-                                   Generator generator)
+                                   Generator generator, bool registerFeature)
         : mName(std::move(name)), mSpacing(spacing), mSeparation(separation), mSalt(salt), mSpread(spread),
           mGenerator(generator) {
-    _registry().push_back(this);
+    if (registerFeature)
+        _registry().push_back(this);
 }
 
 const std::string &StructureFeature::getName() const {

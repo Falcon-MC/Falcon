@@ -65,6 +65,11 @@ std::shared_ptr<McStructure> ScriptStructureRegistry::find(const std::string &id
         }
     }
 
+    return findPack(id);
+}
+
+std::shared_ptr<McStructure> ScriptStructureRegistry::findPack(const std::string &identifier) {
+    const std::string id = normalize(identifier);
     const auto cached = mPackLoaded.find(id);
     if (cached != mPackLoaded.end())
         return cached->second;
@@ -80,6 +85,19 @@ std::shared_ptr<McStructure> ScriptStructureRegistry::find(const std::string &id
     std::shared_ptr<McStructure> loaded = std::make_shared<McStructure>(std::move(structure));
     mPackLoaded[id] = loaded;
     return loaded;
+}
+
+bool ScriptStructureRegistry::store(const std::string &identifier, std::shared_ptr<McStructure> structure, bool toWorld) {
+    const std::string id = normalize(identifier);
+    if (!toWorld) {
+        mMemory[id] = std::move(structure);
+        return true;
+    }
+    if (mStorage == nullptr || !mStorage->saveSavedData(WORLD_PREFIX + id, structure->toNbt(), false))
+        return false;
+    mWorld[id] = std::move(structure);
+    mMemory.erase(id);
+    return true;
 }
 
 bool ScriptStructureRegistry::exists(const std::string &identifier) {

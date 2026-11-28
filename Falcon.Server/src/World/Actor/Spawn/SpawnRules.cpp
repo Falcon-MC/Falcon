@@ -6,6 +6,9 @@
 #include "SpawnRulesJson.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <utility>
 
 namespace {
@@ -228,6 +231,61 @@ void SpawnRules::initialize() {
 
     LOG_INFO(LogAreaID::Server, "Loaded %zu spawn rules and %zu despawn rules", _rules().size(),
              _despawnRules().size());
+}
+
+void SpawnRules::addPack(const std::string &packRoot) {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(packRoot) / "spawn_rules";
+    std::error_code error;
+    std::vector<fs::path> files;
+    for (fs::recursive_directory_iterator entry(root, error), end; !error && entry != end; entry.increment(error)) {
+        if (entry->is_regular_file(error) && entry->path().extension() == ".json")
+            files.push_back(entry->path());
+    }
+    std::sort(files.begin(), files.end());
+
+    for (const fs::path &path: files) {
+        std::ifstream file(path, std::ios::binary);
+        std::stringstream contents;
+        contents << file.rdbuf();
+        const std::unique_ptr<json::Value> document = json::parse(contents.str());
+        const json::Value *entry = document != nullptr ? document->get("minecraft:spawn_rules") : nullptr;
+        const json::Value *description = entry != nullptr ? entry->get("description") : nullptr;
+        const json::Value *identifier = description != nullptr ? description->get("identifier") : nullptr;
+        const json::Value *population = description != nullptr ? description->get("population_control") : nullptr;
+        const json::Value *conditions = entry != nullptr ? entry->get("conditions") : nullptr;
+        if (identifier == nullptr || !identifier->isString() || identifier->mString.empty()
+            || population == nullptr || !population->isString() || population->mString.empty()
+            || conditions == nullptr || (!conditions->isObject() && !conditions->isArray())) {
+            LOG_WARN(LogAreaID::Server, "Invalid spawn rules in %s", path.string().c_str());
+            continue;
+        }
+
+        SpawnRule rule;
+        rule.mIdentifier = identifier->mString;
+        rule.mPopulation = population->mString;
+        if (conditions->isObject()) {
+            rule.mConditions.push_back(readCondition(*conditions));
+        } else {
+            if (!std::all_of(conditions->mArray.begin(), conditions->mArray.end(),
+                             [](const auto &condition) { return condition->isObject(); })) {
+                LOG_WARN(LogAreaID::Server, "Invalid spawn conditions in %s", path.string().c_str());
+                continue;
+            }
+            for (const auto &condition: conditions->mArray)
+                rule.mConditions.push_back(readCondition(*condition));
+        }
+
+        auto &rules = _rules();
+        const auto existing = std::find_if(rules.begin(), rules.end(), [&](const SpawnRule &candidate) {
+            return candidate.mIdentifier == rule.mIdentifier;
+        });
+        _populations()[rule.mIdentifier] = rule.mPopulation;
+        if (existing == rules.end())
+            rules.push_back(std::move(rule));
+        else
+            *existing = std::move(rule);
+    }
 }
 
 const std::vector<SpawnRule> &SpawnRules::getRules() {

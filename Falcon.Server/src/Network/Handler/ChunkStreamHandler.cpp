@@ -290,33 +290,6 @@ namespace {
         }
     }
 
-    // decoration spills trees and grass into neighbours: complete only once all eight are populated,
-    // else the vegetation pops in front of the player
-    bool neighboursPopulated(Level &level, int32_t chunkX, int32_t chunkZ) {
-        bool populated = true;
-        for (int32_t dx = -1; dx <= 1; ++dx) {
-            for (int32_t dz = -1; dz <= 1; ++dz) {
-                if ((dx == 0 && dz == 0) || level.isChunkPopulated(chunkX + dx, chunkZ + dz))
-                    continue;
-
-                level.requestChunkAsync(chunkX + dx, chunkZ + dz);
-                populated = false;
-            }
-        }
-        return populated;
-    }
-
-    // neighboursPopulated without requesting the missing ones
-    bool neighboursArePopulated(Level &level, int32_t chunkX, int32_t chunkZ) {
-        for (int32_t dx = -1; dx <= 1; ++dx) {
-            for (int32_t dz = -1; dz <= 1; ++dz) {
-                if ((dx != 0 || dz != 0) && !level.isChunkPopulated(chunkX + dx, chunkZ + dz))
-                    return false;
-            }
-        }
-        return true;
-    }
-
     void loadQueuedChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player,
                           int32_t attempts) {
         // chunk retries keep running while the world is paused
@@ -352,14 +325,11 @@ namespace {
                 continue;
             }
 
+            // the generator applies neighbouring decorations before marking the chunk populated
             if (level.isChunkPopulated(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
-                if (neighboursPopulated(level, chunkX, chunkZ)) {
-                    pushQueue(state, state.mReadyToSend, hash);
-                    progressed = true;
-                } else {
-                    requeue.push_back(hash);
-                }
+                pushQueue(state, state.mReadyToSend, hash);
+                progressed = true;
                 continue;
             }
 
@@ -560,7 +530,7 @@ void ChunkStreamHandler::peekNextSends(ServerNetworkHandler &owner, ServerPlayer
             const int64_t hash = popQueue(state, loading);
             const int32_t chunkX = unpackChunkX(hash);
             const int32_t chunkZ = unpackChunkZ(hash);
-            if (level.isChunkPopulated(chunkX, chunkZ) && neighboursArePopulated(level, chunkX, chunkZ))
+            if (level.isChunkPopulated(chunkX, chunkZ))
                 queue.push_back(hash);
         }
         makeQueue(state, queue);
