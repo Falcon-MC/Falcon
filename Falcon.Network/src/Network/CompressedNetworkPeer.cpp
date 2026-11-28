@@ -19,6 +19,26 @@ namespace {
     const unsigned short OBSERVED_BATCHES = 64;
     const size_t MAX_COMPARED_SIZE = 256 * 1024;
 
+    struct PacketDeflater {
+        z_stream mStream{};
+        bool mInitialized = false;
+
+        ~PacketDeflater() {
+            if (mInitialized)
+                deflateEnd(&mStream);
+        }
+
+        bool reset() {
+            if (mInitialized)
+                return deflateReset(&mStream) == Z_OK;
+
+            mStream = {};
+            mInitialized = deflateInit2(&mStream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, RAW_DEFLATE_WINDOW_BITS, 8,
+                                        Z_DEFAULT_STRATEGY) == Z_OK;
+            return mInitialized;
+        }
+    };
+
     bool deflateLikeGame(const char *data, size_t length, std::string &outData) {
         z_stream stream{};
         if (deflateInit2(&stream, GAME_DEFLATE_LEVEL, Z_DEFLATED, RAW_DEFLATE_WINDOW_BITS, GAME_MEMORY_LEVEL,
@@ -83,11 +103,12 @@ void CompressedNetworkPeer::disableCompression() {
 }
 
 bool CompressedNetworkPeer::_compressZlib(const std::string &input, std::string &outData) {
-    z_stream stream{};
-
-    if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, RAW_DEFLATE_WINDOW_BITS, 8, Z_DEFAULT_STRATEGY) != Z_OK)
+    // Each batch has its own deflate history. Reset it while retaining the per-thread work buffers.
+    static thread_local PacketDeflater deflater;
+    if (!deflater.reset())
         return false;
 
+    z_stream &stream = deflater.mStream;
     outData.resize(deflateBound(&stream, (uLong) input.size()));
 
     stream.next_in = (Bytef *) input.data();
@@ -97,7 +118,6 @@ bool CompressedNetworkPeer::_compressZlib(const std::string &input, std::string 
 
     const int result = deflate(&stream, Z_FINISH);
     const size_t written = outData.size() - stream.avail_out;
-    deflateEnd(&stream);
 
     if (result != Z_STREAM_END)
         return false;

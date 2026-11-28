@@ -124,7 +124,7 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
             continue;
         }
 
-        LevelChunk *chunk = level.isChunkPopulated(chunkX, chunkZ) ? level.peekChunkPtr(chunkX, chunkZ) : nullptr;
+        const LevelChunk *chunk = level.isChunkPopulated(chunkX, chunkZ) ? level.peekChunkPtr(chunkX, chunkZ) : nullptr;
         if (chunk == nullptr) {
             entry.mResult = SubChunkRequestResult::ChunkNotFound;
             entry.mHeightMapType = HeightMapDataType::NoData;

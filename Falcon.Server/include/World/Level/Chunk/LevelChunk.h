@@ -169,6 +169,7 @@ public:
     // writes through it skip the network revision: only for chunks not resident yet, like a storage load
     SubChunk &getSubChunk(int index) {
         _ensureUnpacked();
+        mRandomTickDirtySections |= uint32_t{1} << index;
         return mSubChunks[index];
     }
 
@@ -176,6 +177,13 @@ public:
         _ensureUnpacked();
         return mSubChunks[index];
     }
+
+    struct RandomTickSections {
+        uint32_t mNonEmpty = 0;
+        uint32_t mEligible = 0;
+    };
+
+    RandomTickSections getRandomTickSections(bool (*mayTick)(const BlockState &)) const;
 
     static int subChunkIndexFor(int32_t y) {
         return (y - MIN_Y) >> 4;
@@ -307,6 +315,8 @@ private:
     ChunkWriteLog mWriteLog;
     // mutable: const reads unpack a packed chunk first
     mutable std::vector<SubChunk> mSubChunks;
+    mutable RandomTickSections mRandomTickSections;
+    mutable uint32_t mRandomTickDirtySections = (uint32_t{1} << SUB_CHUNK_COUNT) - 1;
     std::vector<int16_t> mHeightmap;
     mutable LightStorage mSkyLight;
     mutable LightStorage mBlockLight;

@@ -8,6 +8,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <deque>
 
@@ -29,6 +30,15 @@ namespace {
 
     int emission(const BlockState &state) {
         return BlockLightProperties::lightLevel(BlockLightProperties::packed(state));
+    }
+
+    int skyHeightInSection(const SubChunk &section, int x, int z) {
+        for (int y = 15; y >= 0; --y) {
+            const int32_t packed = BlockLightProperties::packed(section.getBlock(x, y, z));
+            if (BlockLightProperties::lightFilter(packed) > 1 || BlockLightProperties::diffusesSkyLight(packed))
+                return y + 1;
+        }
+        return 0;
     }
 
     class ChunkLightAccess {
@@ -187,17 +197,16 @@ int32_t LightSystem::calculateSkyLightSubtracted(const Level &level, bool includ
 }
 
 void LightSystem::updateHeightAt(LevelChunk &chunk, int x, int z) {
+    const LevelChunk &readOnly = chunk;
     for (int index = LevelChunk::SUB_CHUNK_COUNT - 1; index >= 0; --index) {
-        if (chunk.getSubChunk(index).isEmpty())
+        const SubChunk &section = readOnly.getSubChunk(index);
+        if (section.isEmpty())
             continue;
 
-        const int32_t baseY = LevelChunk::MIN_Y + index * 16;
-        for (int32_t y = baseY + 15; y >= baseY; --y) {
-            const int32_t packed = BlockLightProperties::packed(chunk.getBlock(x, y, z));
-            if (BlockLightProperties::lightFilter(packed) > 1 || BlockLightProperties::diffusesSkyLight(packed)) {
-                chunk.setHeight(x, z, y + 1);
-                return;
-            }
+        const int height = skyHeightInSection(section, x, z);
+        if (height != 0) {
+            chunk.setHeight(x, z, LevelChunk::MIN_Y + index * 16 + height);
+            return;
         }
     }
 
@@ -205,9 +214,34 @@ void LightSystem::updateHeightAt(LevelChunk &chunk, int x, int z) {
 }
 
 void LightSystem::computeHeightmap(LevelChunk &chunk) {
+    const LevelChunk &readOnly = chunk;
+    std::array<int32_t, 256> heights;
+    heights.fill(LevelChunk::MIN_Y);
+    size_t remaining = heights.size();
+    for (int index = LevelChunk::SUB_CHUNK_COUNT - 1; index >= 0 && remaining != 0; --index) {
+        const SubChunk &section = readOnly.getSubChunk(index);
+        if (section.isEmpty())
+            continue;
+
+        const int32_t baseY = LevelChunk::MIN_Y + index * 16;
+        for (int x = 0; x < 16; ++x) {
+            for (int z = 0; z < 16; ++z) {
+                int32_t &height = heights[(size_t) (x * 16 + z)];
+                if (height != LevelChunk::MIN_Y)
+                    continue;
+
+                const int localHeight = skyHeightInSection(section, x, z);
+                if (localHeight != 0) {
+                    height = baseY + localHeight;
+                    --remaining;
+                }
+            }
+        }
+    }
+
     for (int x = 0; x < 16; ++x) {
         for (int z = 0; z < 16; ++z)
-            updateHeightAt(chunk, x, z);
+            chunk.setHeight(x, z, heights[(size_t) (x * 16 + z)]);
     }
 }
 
@@ -261,7 +295,7 @@ void LightSystem::computeBlockLight(LevelChunk &chunk) {
     std::deque<LightNode> spread;
 
     for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; ++index) {
-        if (!chunk.getSubChunk(index).hasLightEmitter())
+        if (!static_cast<const LevelChunk &>(chunk).getSubChunk(index).hasLightEmitter())
             continue;
 
         const int32_t baseY = LevelChunk::MIN_Y + index * 16;

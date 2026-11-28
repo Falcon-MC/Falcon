@@ -9,6 +9,8 @@
 #include "Core/NBT/NbtIo.h"
 #include "World/Level/Block/BlockNames.h"
 
+#include <algorithm>
+#include <bit>
 #include <deque>
 #include <mutex>
 #include <unordered_map>
@@ -21,19 +23,27 @@ namespace {
     void putIndexWords(BinaryStream &stream, const PaletteIndices &indices, int bitsPerBlock) {
         const int blocksPerWord = 32 / bitsPerBlock;
         const int wordCount = (SubChunk::BLOCK_COUNT + blocksPerWord - 1) / blocksPerWord;
+        const auto &words = indices.words();
+        const bool sameLayout = indices.bitsPerIndex() == (uint32_t) bitsPerBlock
+                                && words.size() == (size_t) wordCount;
+        if constexpr (std::endian::native == std::endian::little) {
+            if (sameLayout) {
+                stream.put(words.data(), words.size() * sizeof(uint32_t));
+                return;
+            }
+        }
+
         std::string bytes((size_t) wordCount * 4, '\0');
-        if (indices.words().empty()) {
+        if (words.empty()) {
             stream.put(bytes);
             return;
         }
 
-        const bool sameLayout = indices.bitsPerIndex() == (uint32_t) bitsPerBlock
-                                && indices.words().size() == (size_t) wordCount;
         int blockIndex = 0;
         for (int word = 0; word < wordCount; word++) {
             uint32_t packed = 0;
             if (sameLayout) {
-                packed = indices.words()[(size_t) word];
+                packed = words[(size_t) word];
             } else {
                 for (int slot = 0; slot < blocksPerWord && blockIndex < SubChunk::BLOCK_COUNT; slot++) {
                     packed |= ((uint32_t) indices[(size_t) blockIndex]) << (slot * bitsPerBlock);
@@ -371,7 +381,7 @@ bool SubChunk::isEmpty() const {
 
 bool SubChunk::hasDynamicShapes() const {
     for (const BlockState *state: mPalette) {
-        const Block *block = VanillaBlocks::fromIdentifier(state->mName);
+        const Block *block = VanillaBlocks::fromState(*state);
         if (block != nullptr && block->hasDynamicShape())
             return true;
     }
@@ -393,6 +403,33 @@ bool SubChunk::paletteMatches(PaletteQuery query, bool (*matches)(const BlockSta
     }
 
     return cached == 1;
+}
+
+bool SubChunk::hasRandomTickStates(bool (*mayTick)(const BlockState &)) const {
+    if (!mRandomTickPaletteValid) {
+        mRandomTickPaletteMask = 0;
+        if (mPalette.size() > 64) {
+            // A large palette still gets the section-level skip. Individual picks use the normal test.
+            if (std::any_of(mPalette.begin(), mPalette.end(), [mayTick](const BlockState *state) {
+                    return mayTick(*state);
+                }))
+                mRandomTickPaletteMask = UINT64_MAX;
+        } else {
+            for (size_t i = 0; i < mPalette.size(); ++i) {
+                if (mayTick(*mPalette[i]))
+                    mRandomTickPaletteMask |= uint64_t{1} << i;
+            }
+        }
+        mRandomTickPaletteValid = true;
+    }
+    return mRandomTickPaletteMask != 0;
+}
+
+const BlockState *SubChunk::getPotentialRandomTickState(int x, int y, int z) const {
+    const uint16_t index = mBlocks.empty() ? 0 : mBlocks[_index(x, y, z)];
+    if (mRandomTickPaletteMask != UINT64_MAX && ((mRandomTickPaletteMask >> (index & 63)) & 1) == 0)
+        return nullptr;
+    return mPalette[index];
 }
 
 bool SubChunk::hasLightEmitter() const {

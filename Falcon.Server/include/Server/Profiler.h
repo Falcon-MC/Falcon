@@ -30,7 +30,21 @@ enum class ProfilerSection : int {
     NetworkHandlePacket = 20,
     Fire = 21,
     ChunkPopulation = 22,
-    Count = 23
+    RandomTicks,
+    Precipitation,
+    TickPreparation,
+    Plugins,
+    NetworkEvents,
+    OverworldMaintenance,
+    ActorTick,
+    Visibility,
+    ChunkUnloads,
+    OtherDimensions,
+    NaturalSpawning,
+    Scripts,
+    ClientMaintenance,
+    TickAccounting,
+    Count
 };
 
 const char *getProfilerSectionName(ProfilerSection section);
@@ -60,6 +74,7 @@ struct ProfilerPlayerStats {
 struct ProfilerTickSample {
     int64_t mTick = 0;
     double mTotalMs = 0.0;
+    double mThreadCpuMs = -1.0;
     double mSectionMs[(int) ProfilerSection::Count] = {};
     uint32_t mPlayerCount = 0;
     uint32_t mLoadedChunks = 0;
@@ -80,7 +95,7 @@ public:
 
     bool stop(const std::string &directory, std::string &outPath, std::string &outError);
 
-    void beginTick(int64_t tick);
+    void beginTick(int64_t tick, std::chrono::steady_clock::time_point start);
 
     void endTick(uint32_t playerCount, uint32_t loadedChunks, uint32_t pendingChunkTasks, uint32_t fluidProcessed,
                  uint32_t fluidScheduled);
@@ -109,7 +124,9 @@ private:
     std::chrono::steady_clock::time_point mStopTime;
 
     std::chrono::steady_clock::time_point mTickStart;
-    std::chrono::steady_clock::time_point mSectionStart[(int) ProfilerSection::Count];
+    std::chrono::steady_clock::time_point mSectionStart;
+    double mTickCpuStartMs = -1.0;
+    std::vector<ProfilerSection> mSectionStack;
     ProfilerTickSample mCurrent;
 
     std::vector<ProfilerTickSample> mSamples;
