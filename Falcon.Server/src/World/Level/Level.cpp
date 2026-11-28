@@ -23,6 +23,7 @@
 #include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/Block/LiquidView.h"
 
+#include <array>
 #include <atomic>
 #include <algorithm>
 #include <bitset>
@@ -44,14 +45,18 @@ namespace {
     // rises whenever a chunk leaves a level: a remembered chunk is good only for the epoch it was found in
     std::atomic<uint64_t> gChunkEpoch{1};
 
-    // the last chunk a thread looked up: an actor asks about the same one many times in a row
+    // Actor and block queries often revisit a handful of neighbouring chunks.
     struct ChunkMemo {
         const Level *mLevel = nullptr;
         int64_t mKey = 0;
         LevelChunk *mChunk = nullptr;
         uint64_t mEpoch = 0;
     };
-    thread_local ChunkMemo tChunkMemo;
+    ChunkMemo &chunkMemo(int64_t key) {
+        thread_local std::array<ChunkMemo, 16> entries;
+        const uint64_t packed = (uint64_t) key;
+        return entries[(packed ^ ((packed >> 32) * 13)) & (entries.size() - 1)];
+    }
 
     // a level without a server (tools, tests) tells no one
     void emitChunkEvent(Level &level, EventSignal<ChunkAfterEvent> LevelAfterSignals::*which, int32_t chunkX,
@@ -605,11 +610,10 @@ void Level::_generate(LevelChunk &chunk) {
 }
 
 LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
-    const int64_t key = _packChunk(chunkX, chunkZ);
+    if (LevelChunk *resident = peekChunkPtr(chunkX, chunkZ))
+        return *resident;
 
-    auto it = mChunks.find(key);
-    if (it != mChunks.end())
-        return it->second;
+    const int64_t key = _packChunk(chunkX, chunkZ);
 
     // a synchronous read never overtakes an older pending-change write; streaming retries instead of
     // waiting on the tick thread
@@ -684,18 +688,19 @@ void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
     // neighbours too: a connection held at an unloaded chunk border resolves on its arrival
     for (int32_t dx = -1; dx <= 1; ++dx) {
         for (int32_t dz = -1; dz <= 1; ++dz) {
-            LevelChunk *chunk = peekChunkPtr(chunkX + dx, chunkZ + dz);
+            const LevelChunk *chunk = peekChunkPtr(chunkX + dx, chunkZ + dz);
             if (chunk == nullptr)
                 continue;
             for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; ++index) {
-                if (!chunk->getSubChunk(index).hasDynamicShapes())
+                const SubChunk &section = chunk->getSubChunk(index);
+                if (!section.hasDynamicShapes())
                     continue;
                 for (int x = 0; x < 16; ++x) {
                     for (int z = 0; z < 16; ++z) {
                         for (int y = 0; y < 16; ++y) {
                             const int worldY = (index + LevelChunk::LOWEST_SUB_CHUNK_Y) * 16 + y;
-                            const BlockState state = chunk->getBlock(x, worldY, z);
-                            const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+                            const BlockState &state = section.getBlock(x, y, z);
+                            const Block *block = VanillaBlocks::fromState(state);
                             if (block == nullptr || !block->hasDynamicShape())
                                 continue;
                             const Vector3i position(chunk->getX() * 16 + x, worldY, chunk->getZ() * 16 + z);
@@ -1029,7 +1034,7 @@ std::vector<int64_t> Level::consumeRepopulatedChunks() {
 bool Level::isChunkResident(int32_t chunkX, int32_t chunkZ) const {
     // the chunk asked about is most often the one just looked up
     const int64_t key = _packChunk(chunkX, chunkZ);
-    const ChunkMemo &memo = tChunkMemo;
+    const ChunkMemo &memo = chunkMemo(key);
     if (memo.mLevel == this && memo.mKey == key && memo.mEpoch == gChunkEpoch.load(std::memory_order_relaxed))
         return true;
     return mChunks.find(key) != mChunks.end();
@@ -1329,7 +1334,7 @@ Level::ChunkMemoGuard::~ChunkMemoGuard() {
 
 LevelChunk *Level::peekChunkPtr(int32_t chunkX, int32_t chunkZ) {
     const int64_t key = _packChunk(chunkX, chunkZ);
-    ChunkMemo &memo = tChunkMemo;
+    ChunkMemo &memo = chunkMemo(key);
     const uint64_t epoch = gChunkEpoch.load(std::memory_order_relaxed);
     if (memo.mLevel == this && memo.mKey == key && memo.mEpoch == epoch)
         return memo.mChunk;

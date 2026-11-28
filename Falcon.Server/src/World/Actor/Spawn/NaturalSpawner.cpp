@@ -10,6 +10,7 @@
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/LightSystem.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -193,22 +194,47 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
 
 void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ,
                                 int32_t difficulty, int32_t &mobCount, const std::vector<Vector3f> &players) {
-    if (!level.isChunkResident(chunkX, chunkZ))
+    const LevelChunk *chunk = level.peekChunkPtr(chunkX, chunkZ);
+    if (chunk == nullptr)
         return;
 
     const int32_t x = chunkX * 16 + _nextInt(16);
     const int32_t z = chunkZ * 16 + _nextInt(16);
+    const int32_t localX = x & 15;
+    const int32_t localZ = z & 15;
+    const int32_t minY = level.getMinY();
+    const BlockState *previous = nullptr;
+    bool previousSolid = false;
+    const auto solid = [&](const BlockState &state) {
+        if (previous != &state) {
+            previous = &state;
+            previousSolid = isSolid(state);
+        }
+        return previousSolid;
+    };
 
     // column walked down from the top: the first floor is surface, every one below underground; each spawns one
     // herd after recounting the mobs around the chunk
     bool surface = true;
     int32_t y = level.getMaxY();
-    while (y > level.getMinY()) {
-        while (y > level.getMinY() && isSolid(level.getBlockState(x, y, z)))
+    while (y > minY) {
+        while (y > minY && solid(chunk->getBlock(localX, y, localZ)))
             --y;
-        while (y > level.getMinY() && !isSolid(level.getBlockState(x, y - 1, z)))
-            --y;
-        if (y <= level.getMinY())
+        // Empty sections contain no floor. In a nonempty section, search the same column in order.
+        while (y > minY) {
+            const int index = LevelChunk::subChunkIndexFor(y - 1);
+            const SubChunk &section = chunk->getSubChunk(index);
+            const int32_t bottom = std::max(minY, LevelChunk::MIN_Y + index * 16);
+            if (section.isLayerEmpty(0)) {
+                y = bottom;
+                continue;
+            }
+            while (y > bottom && !solid(section.getBlock(localX, (y - 1) & 15, localZ)))
+                --y;
+            if (y > bottom)
+                break;
+        }
+        if (y <= minY)
             return;
 
         SpawnSite site;
@@ -216,6 +242,9 @@ void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32
             Counts counts;
             _count(owner, level, chunkX, chunkZ, counts);
             _spawnCluster(owner, level, site, difficulty, mobCount, counts);
+            // Spawn callbacks may have changed the column. Reacquire it before resuming the scan.
+            if (y - 1 > minY)
+                chunk = &level.getChunk(chunkX, chunkZ);
         }
 
         surface = false;

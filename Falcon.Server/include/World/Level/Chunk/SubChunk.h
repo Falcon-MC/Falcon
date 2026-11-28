@@ -54,6 +54,11 @@ public:
     // cached until a palette changes; a palette may keep unused states: true only means worth scanning
     bool paletteMatches(PaletteQuery query, bool (*matches)(const BlockState &)) const;
 
+    bool hasRandomTickStates(bool (*mayTick)(const BlockState &)) const;
+
+    // After hasRandomTickStates, rejects known inert entries before dereferencing the palette.
+    const BlockState *getPotentialRandomTickState(int x, int y, int z) const;
+
     uint32_t getBiome(int x, int y, int z) const;
 
     void setBiome(int x, int y, int z, uint32_t biomeId);
@@ -111,6 +116,7 @@ private:
     // interned states: an entry costs a pointer
     std::vector<const BlockState *> mPalette;
     PaletteIndices mBlocks;
+    mutable uint64_t mRandomTickPaletteMask = 0;
     std::vector<const BlockState *> mPalette2;
     PaletteIndices mBlocks2;
     std::vector<uint32_t> mBiomePalette;
@@ -122,10 +128,12 @@ private:
         mPaletteQueries[3] = -1;
         mPaletteQueries[4] = -1;
         mEmptyCache = -1;
+        mRandomTickPaletteValid = false;
     }
 
     // per PaletteQuery: -1 until asked, then whether a palette state matched
     mutable int8_t mPaletteQueries[5] = {-1, -1, -1, -1, -1};
     // -1 until isEmpty() runs, then its answer; it only changes with a palette or the second layer's blocks
     mutable int8_t mEmptyCache = -1;
+    mutable bool mRandomTickPaletteValid = false;
 };

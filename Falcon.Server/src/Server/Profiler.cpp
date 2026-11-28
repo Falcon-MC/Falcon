@@ -36,12 +36,37 @@ namespace {
                                                                "Network decode",
                                                                "Network handle packet",
                                                                "Fire",
-                                                               "LevelChunk population"};
+                                                               "LevelChunk population",
+                                                               "Random ticks",
+                                                               "Precipitation",
+                                                               "Tick preparation",
+                                                               "Plugins and tick callbacks",
+                                                               "Network events",
+                                                               "Overworld maintenance",
+                                                               "Actor AI and updates",
+                                                               "Actor and player visibility",
+                                                               "Chunk unloads",
+                                                               "Other dimensions",
+                                                               "Natural spawning",
+                                                               "Pack functions and scripts",
+                                                               "Client maintenance",
+                                                               "Tick accounting"};
 
     const char *SECTION_COLORS[(int) ProfilerSection::Count] = {
             "#8b8b8b", "#4f9df7", "#7b61ff", "#00b8d4", "#ffb020", "#2dd4a7", "#f2622e", "#e0567c",
             "#9aa4b2", "#c084fc", "#e02f2f", "#5ed36a", "#37a86b", "#8fd94f", "#d98c00", "#7cc4ff",
-            "#a0a0ff", "#1f6feb", "#79b8ff", "#b392f0", "#f97583", "#ff7043", "#00c2a8"};
+            "#a0a0ff", "#1f6feb", "#79b8ff", "#b392f0", "#f97583", "#ff7043", "#00c2a8",
+            "#99ca68", "#5caee6", "#858fc3", "#b392f0", "#79b8ff", "#5ed36a", "#37a86b",
+            "#ffb020", "#d98c00", "#7b61ff", "#8fd94f", "#00b8d4", "#f97583", "#9aa4b2"};
+
+    double threadCpuMs() {
+#ifdef __linux__
+        timespec time{};
+        if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time) == 0)
+            return static_cast<double>(time.tv_sec) * 1000.0 + static_cast<double>(time.tv_nsec) / 1000000.0;
+#endif
+        return -1.0;
+    }
 
     bool createDirectory(const std::string &path) {
 #ifdef _WIN32
@@ -124,17 +149,20 @@ void Profiler::start(int64_t tick) {
     mStartTick = tick;
     mStartTime = std::chrono::steady_clock::now();
     mSamples.clear();
+    mSectionStack.clear();
     mPlayers.clear();
     mCurrent = ProfilerTickSample();
 }
 
-void Profiler::beginTick(int64_t tick) {
-    if (!mActive)
+void Profiler::beginTick(int64_t tick, std::chrono::steady_clock::time_point start) {
+    if (!mActive || mSamples.size() >= MAX_SAMPLES)
         return;
 
     mCurrent = ProfilerTickSample();
     mCurrent.mTick = tick;
-    mTickStart = std::chrono::steady_clock::now();
+    mTickStart = start;
+    mTickCpuStartMs = threadCpuMs();
+    mSectionStack.clear();
     mTickStarted = true;
 }
 
@@ -145,6 +173,10 @@ void Profiler::endTick(uint32_t playerCount, uint32_t loadedChunks, uint32_t pen
 
     mCurrent.mTotalMs =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mTickStart).count();
+    const double cpuEndMs = threadCpuMs();
+    if (mTickCpuStartMs >= 0.0 && cpuEndMs >= mTickCpuStartMs)
+        mCurrent.mThreadCpuMs = cpuEndMs - mTickCpuStartMs;
+    mTickStarted = false;
     mCurrent.mPlayerCount = playerCount;
     mCurrent.mLoadedChunks = loadedChunks;
     mCurrent.mPendingChunkTasks = pendingChunkTasks;
@@ -155,19 +187,26 @@ void Profiler::endTick(uint32_t playerCount, uint32_t loadedChunks, uint32_t pen
 }
 
 void Profiler::beginSection(ProfilerSection section) {
-    if (!mActive)
+    if (!mActive || !mTickStarted)
         return;
 
-    mSectionStart[(int) section] = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
+    if (!mSectionStack.empty()) {
+        mCurrent.mSectionMs[(int) mSectionStack.back()] +=
+                std::chrono::duration<double, std::milli>(now - mSectionStart).count();
+    }
+    mSectionStack.push_back(section);
+    mSectionStart = now;
 }
 
 void Profiler::endSection(ProfilerSection section) {
-    if (!mActive)
+    if (!mActive || !mTickStarted || mSectionStack.empty() || mSectionStack.back() != section)
         return;
 
-    const int index = (int) section;
-    mCurrent.mSectionMs[index] +=
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mSectionStart[index]).count();
+    const auto now = std::chrono::steady_clock::now();
+    mCurrent.mSectionMs[(int) section] += std::chrono::duration<double, std::milli>(now - mSectionStart).count();
+    mSectionStack.pop_back();
+    mSectionStart = now;
 }
 
 void Profiler::recordPlayer(const std::string &name, double milliseconds, uint32_t chunksSent) {
@@ -448,7 +487,22 @@ std::string Profiler::_buildReport() const {
 
     out << "</tbody></table></div>";
 
-    out << "</div></body></html>";
+    out << "<script id=\"falcon-tick-samples\" type=\"application/json\">{\"columns\":["
+        << "\"tick\",\"wall_ms\",\"thread_cpu_ms\",\"players\",\"chunks\",\"pending_chunks\"";
+    for (const char *name: SECTION_NAMES)
+        out << ",\"" << name << "\"";
+    out << "],\"ticks\":[" << std::fixed << std::setprecision(3);
+    for (size_t index = 0; index < mSamples.size(); ++index) {
+        const auto &sample = mSamples[index];
+        if (index != 0)
+            out << ',';
+        out << '[' << sample.mTick << ',' << sample.mTotalMs << ',' << sample.mThreadCpuMs << ','
+            << sample.mPlayerCount << ',' << sample.mLoadedChunks << ',' << sample.mPendingChunkTasks;
+        for (double duration: sample.mSectionMs)
+            out << ',' << duration;
+        out << ']';
+    }
+    out << "]}</script></div></body></html>";
 
     return out.str();
 }

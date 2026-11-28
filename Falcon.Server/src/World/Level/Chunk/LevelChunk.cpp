@@ -8,6 +8,7 @@ static_assert(LightStorage::SECTION_COUNT == LevelChunk::SUB_CHUNK_COUNT && Ligh
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <stdexcept>
 
 uint64_t LevelChunkInstance::next() {
@@ -85,6 +86,7 @@ void LevelChunk::_unpack() const {
         throw std::logic_error("Packed chunk holds malformed light");
 
     mSubChunks = std::move(subChunks);
+    mRandomTickDirtySections = (uint32_t{1} << SUB_CHUNK_COUNT) - 1;
     std::string().swap(mPackedData);
     mPacked = false;
 }
@@ -195,6 +197,7 @@ void LevelChunk::setBlock(int x, int32_t y, int z, const BlockState &state) {
         return;
 
     const int index = subChunkIndexFor(y);
+    mRandomTickDirtySections |= uint32_t{1} << index;
     if (mWriteLog.mWrites != nullptr) {
         const BlockState &before = mSubChunks[index].getBlock(x, y & 15, z);
         mSubChunks[index].setBlock(x, y & 15, z, state);
@@ -224,6 +227,7 @@ void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &
     }
 
     const int index = subChunkIndexFor(y);
+    mRandomTickDirtySections |= uint32_t{1} << index;
     if (mWriteLog.mWrites != nullptr) {
         const BlockState &before = mSubChunks[index].getBlock(x, y & 15, z, layer);
         mSubChunks[index].setBlock(x, y & 15, z, layer, state);
@@ -237,6 +241,24 @@ void LevelChunk::setBlock(int x, int32_t y, int z, int layer, const BlockState &
     for (auto &translated: mTranslatedSubChunkCache)
         translated.second[(size_t) index].clear();
     mDirty = true;
+}
+
+LevelChunk::RandomTickSections LevelChunk::getRandomTickSections(bool (*mayTick)(const BlockState &)) const {
+    _ensureUnpacked();
+    while (mRandomTickDirtySections != 0) {
+        const int index = std::countr_zero(mRandomTickDirtySections);
+        const uint32_t bit = uint32_t{1} << index;
+        const auto &section = mSubChunks[index];
+        mRandomTickSections.mNonEmpty &= ~bit;
+        mRandomTickSections.mEligible &= ~bit;
+        if (!section.isEmpty()) {
+            mRandomTickSections.mNonEmpty |= bit;
+            if (section.hasRandomTickStates(mayTick))
+                mRandomTickSections.mEligible |= bit;
+        }
+        mRandomTickDirtySections &= ~bit;
+    }
+    return mRandomTickSections;
 }
 
 void LevelChunk::forEachBlock(

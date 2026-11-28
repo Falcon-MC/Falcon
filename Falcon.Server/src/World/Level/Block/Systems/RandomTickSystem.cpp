@@ -9,10 +9,12 @@
 #include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/Block/BlockNames.h"
 
+#include <array>
+#include <bit>
 #include <random>
 #include <string>
+#include <string_view>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 namespace {
@@ -35,19 +37,35 @@ namespace {
         return custom != nullptr && (!custom->mCustomComponents.empty() || !custom->mPermutations.empty());
     }
 
-    bool stateTicksRandomly(const BlockState &state) {
+    struct TickBlock {
+        const Block *mBlock = nullptr;
+        bool mEligible = false;
+    };
+
+    TickBlock classify(const BlockState &state) {
         if (state.mName == BlockNames::AIR)
-            return false;
+            return {};
 
         const Block *block = VanillaBlocks::fromState(state);
-        return block != nullptr ? ticksRandomly(*block) : isScriptedBlock(state);
+        return {block, block != nullptr ? ticksRandomly(*block) : isScriptedBlock(state)};
     }
+
+    bool stateTicksRandomly(const BlockState &state) {
+        return classify(state).mEligible;
+    }
+
+    // Collection runs before callbacks. Interned states recur across chunks and their classification
+    // is stable throughout this pass, including when several packs provide custom blocks.
+    struct TickClassification {
+        const BlockState *mState = nullptr;
+        TickBlock mResult;
+    };
 
     struct Candidate {
         Vector3i mPosition;
         const Block *mBlock;
         // set for a pack block, mBlock is null then
-        std::string mCustom;
+        std::string_view mCustom;
     };
 
     std::mt19937 &generator() {
@@ -55,11 +73,40 @@ namespace {
         return random;
     }
 
-    // one call yields x, y and z from separate byte lanes: no distribution draw per coordinate
-    uint32_t nextUpdateLcg() {
-        static uint32_t state = 0x3c6ef35f;
-        state = state * 3 + 0x3c6ef35f;
-        return state >> 2;
+    constexpr uint32_t UPDATE_INCREMENT = 0x3c6ef35f;
+
+    uint32_t &updateState() {
+        static uint32_t state = UPDATE_INCREMENT;
+        return state;
+    }
+
+    struct LcgStep {
+        uint32_t mMultiplier = 1;
+        uint32_t mIncrement = 0;
+
+        uint32_t apply(uint32_t value) const {
+            return value * mMultiplier + mIncrement;
+        }
+
+        LcgStep then(const LcgStep &next) const {
+            return {mMultiplier * next.mMultiplier, next.apply(mIncrement)};
+        }
+    };
+
+    // each inert nonempty section still advances the same generator, including at high randomtickspeed
+    std::array<LcgStep, LevelChunk::SUB_CHUNK_COUNT + 1> skippedSections(uint32_t speed) {
+        LcgStep step;
+        LcgStep power{3, UPDATE_INCREMENT};
+        for (; speed != 0; speed >>= 1) {
+            if ((speed & 1) != 0)
+                step = step.then(power);
+            power = power.then(power);
+        }
+
+        std::array<LcgStep, LevelChunk::SUB_CHUNK_COUNT + 1> skips{};
+        for (size_t i = 1; i < skips.size(); ++i)
+            skips[i] = skips[i - 1].then(step);
+        return skips;
     }
 }
 
@@ -115,67 +162,77 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     static std::vector<Candidate> candidates;
     candidates.clear();
 
-    // the sections of a crowd's columns miss the cache one after the other: the chunks are looked up first,
-    // and the sections of the one after next asked for while this one is walked
-    static std::vector<LevelChunk *> chunks;
-    const std::vector<int64_t> &columns = level.getActiveColumnOrder();
-    chunks.clear();
-    chunks.reserve(columns.size());
-    for (const int64_t column: columns)
-        chunks.push_back(level.peekChunkPtr((int32_t) (column >> 32), (int32_t) (column & 0xffffffff)));
-
-    static const size_t PREFETCH_AHEAD = 2;
-    for (size_t position = 0; position < columns.size(); position++) {
-        if (position + PREFETCH_AHEAD < chunks.size() && chunks[position + PREFETCH_AHEAD] != nullptr) {
-            const LevelChunk &ahead = *chunks[position + PREFETCH_AHEAD];
-            for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; index++)
-                ahead.getSubChunk(index).prefetchQueries();
+    std::array<TickClassification, 1024> classifications{};
+    const auto skips = skippedSections((uint32_t) speed);
+    uint32_t lcgState = updateState();
+    const auto &columns = level.getActiveColumnOrder();
+    struct ActiveChunk {
+        const LevelChunk *mChunk;
+        LevelChunk::RandomTickSections mSections;
+    };
+    std::array<ActiveChunk, 16> batch;
+    for (size_t first = 0; first < columns.size(); first += batch.size()) {
+        size_t count = 0;
+        for (size_t i = first; i < columns.size() && i < first + batch.size(); ++i) {
+            const int64_t column = columns[i];
+            const LevelChunk *chunk = level.peekChunkPtr((int32_t) (column >> 32), (int32_t) column);
+            if (chunk == nullptr)
+                continue;
+            __builtin_prefetch(chunk);
+            batch[count++].mChunk = chunk;
         }
 
-        LevelChunk *chunk = chunks[position];
-        if (chunk == nullptr)
-            continue;
+        // Fetch the eligible section headers before drawing samples from their index buffers.
+        for (size_t i = 0; i < count; ++i) {
+            const LevelChunk &chunk = *batch[i].mChunk;
+            batch[i].mSections = chunk.getRandomTickSections(stateTicksRandomly);
+            for (uint32_t eligible = batch[i].mSections.mEligible; eligible != 0; eligible &= eligible - 1)
+                __builtin_prefetch(&chunk.getSubChunk(std::countr_zero(eligible)));
+        }
 
-        const int64_t column = columns[position];
-        const int32_t chunkX = (int32_t) (column >> 32);
-        const int32_t chunkZ = (int32_t) (column & 0xffffffff);
+        for (size_t i = 0; i < count; ++i) {
+            const LevelChunk *chunk = batch[i].mChunk;
+            const int32_t chunkX = chunk->getX();
+            const int32_t chunkZ = chunk->getZ();
+            auto sections = batch[i].mSections;
+            while (sections.mEligible != 0) {
+                const int index = std::countr_zero(sections.mEligible);
+                const uint32_t bit = uint32_t{1} << index;
+                lcgState = skips[std::popcount(sections.mNonEmpty & (bit - 1))].apply(lcgState);
+                sections.mNonEmpty &= ~(bit | (bit - 1));
+                sections.mEligible &= ~bit;
 
-        for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; index++) {
-            const SubChunk &subChunk = chunk->getSubChunk(index);
-            if (subChunk.isEmpty())
-                continue;
+                const SubChunk &subChunk = chunk->getSubChunk(index);
+                for (int32_t attempt = 0; attempt < speed; attempt++) {
+                    lcgState = lcgState * 3 + UPDATE_INCREMENT;
+                    const uint32_t lcg = lcgState >> 2;
+                    const int localX = (int) (lcg & 0x0f);
+                    const int localY = (int) ((lcg >> 8) & 0x0f);
+                    const int localZ = (int) ((lcg >> 16) & 0x0f);
 
-            // inert section (most of the underground): still draw its picks, other sections land on the same blocks
-            if (!subChunk.paletteMatches(SubChunk::PaletteQuery::RandomTick, stateTicksRandomly)) {
-                for (int32_t attempt = 0; attempt < speed; attempt++)
-                    nextUpdateLcg();
-                continue;
+                    const BlockState *state = subChunk.getPotentialRandomTickState(localX, localY, localZ);
+                    if (state == nullptr)
+                        continue;
+                    const uintptr_t address = reinterpret_cast<uintptr_t>(state);
+                    auto &lookup = classifications[((address >> 4) ^ (address >> 14)) & (classifications.size() - 1)];
+                    if (lookup.mState != state)
+                        lookup = {state, classify(*state)};
+                    if (!lookup.mResult.mEligible)
+                        continue;
+
+                    Candidate candidate;
+                    candidate.mPosition = Vector3i((chunkX << 4) + localX, LevelChunk::MIN_Y + index * 16 + localY,
+                                                   (chunkZ << 4) + localZ);
+                    candidate.mBlock = lookup.mResult.mBlock;
+                    if (candidate.mBlock == nullptr)
+                        candidate.mCustom = state->mName;
+                    candidates.push_back(candidate);
+                }
             }
-
-            for (int32_t attempt = 0; attempt < speed; attempt++) {
-                const uint32_t lcg = nextUpdateLcg();
-                const int localX = (int) (lcg & 0x0f);
-                const int localY = (int) ((lcg >> 8) & 0x0f);
-                const int localZ = (int) ((lcg >> 16) & 0x0f);
-
-                const BlockState &state = subChunk.getBlock(localX, localY, localZ);
-                if (state.mName == BlockNames::AIR)
-                    continue;
-
-                const Block *block = VanillaBlocks::fromState(state);
-                if (block != nullptr ? !ticksRandomly(*block) : !isScriptedBlock(state))
-                    continue;
-
-                Candidate candidate;
-                candidate.mPosition = Vector3i((chunkX << 4) + localX, LevelChunk::MIN_Y + index * 16 + localY,
-                                               (chunkZ << 4) + localZ);
-                candidate.mBlock = block;
-                if (block == nullptr)
-                    candidate.mCustom = state.mName;
-                candidates.push_back(std::move(candidate));
-            }
+            lcgState = skips[std::popcount(sections.mNonEmpty)].apply(lcgState);
         }
     }
+    updateState() = lcgState;
 
     // collect then tick: reactions never modify chunks mid-iteration; re-read, an earlier tick may have
     // replaced it
@@ -187,23 +244,14 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
 
         if (candidate.mBlock == nullptr) {
             if (before->mName == candidate.mCustom)
-                owner.getScriptEngine().onCustomBlockRandomTick(level, candidate.mCustom, position);
+                owner.getScriptEngine().onCustomBlockRandomTick(level, before->mName, position);
             continue;
         }
 
-        // copy: a reaction may rewrite the palette the peeked pointer points into
-        const BlockState current = *before;
-        candidate.mBlock->onRandomTick(owner, level, position, current);
+        // palettes point to interned states that outlive block changes
+        candidate.mBlock->onRandomTick(owner, level, position, *before);
 
-        const BlockState *after = level.peekBlockPtr(position.x, position.y, position.z);
-        if (after == nullptr)
-            continue;
-
-        if (*after == current) {
-            CopperSystem::onRandomTick(owner, level, position, current);
-            continue;
-        }
-
-        CopperSystem::onRandomTick(owner, level, position, BlockState(*after));
+        if (const BlockState *after = level.peekBlockPtr(position.x, position.y, position.z))
+            CopperSystem::onRandomTick(owner, level, position, *after);
     }
 }

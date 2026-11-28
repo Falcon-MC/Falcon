@@ -12,6 +12,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Block/BlockNames.h"
 
+#include <algorithm>
 #include <random>
 
 namespace {
@@ -92,17 +93,28 @@ bool PrecipitationSystem::isCold(Level &level, const Vector3i &position) {
 }
 
 void PrecipitationSystem::tickColumn(Level &level, int32_t x, int32_t z) {
+    const LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
+    if (chunk == nullptr)
+        return;
+
+    const int32_t minY = level.getMinY();
     int32_t surface = level.getMaxY();
-    while (surface >= level.getMinY()) {
-        const BlockState *state = level.peekBlockPtr(x, surface, z);
-        if (state == nullptr)
-            return;
-        if (state->mName != BlockNames::AIR)
+    while (surface >= minY) {
+        const int index = LevelChunk::subChunkIndexFor(surface);
+        const auto &section = chunk->getSubChunk(index);
+        const int32_t bottom = std::max(minY, LevelChunk::MIN_Y + index * 16);
+        if (section.isLayerEmpty(0)) {
+            surface = bottom - 1;
+            continue;
+        }
+
+        while (surface >= bottom && section.getBlock(x & 15, surface & 15, z & 15).mName == BlockNames::AIR)
+            --surface;
+        if (surface >= bottom)
             break;
-        --surface;
     }
 
-    if (surface < level.getMinY())
+    if (surface < minY)
         return;
 
     const Vector3i below(x, surface, z);

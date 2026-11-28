@@ -915,6 +915,10 @@ void ServerNetworkHandler::tick(bool paused) {
     if (!mIsListening)
         return;
 
+    if (!paused) {
+        mProfiler.beginTick(mCurrentTick + 1, tickStarted);
+        mProfiler.beginSection(ProfilerSection::TickPreparation);
+    }
     _retryLoginsAwaitingKeys();
     ++mChunkStreamTick;
     if (mChunkStreamTick % CHUNK_PACKET_EXPIRY_INTERVAL == 0)
@@ -992,7 +996,7 @@ void ServerNetworkHandler::tick(bool paused) {
     // chunk generation and saving copy whole chunks: freed memory piles up even without unloads
     if (mCurrentTick % HEAP_RELEASE_INTERVAL_TICKS == 0)
         Level::releaseFreedHeap();
-    mProfiler.beginTick(mCurrentTick);
+    mProfiler.endSection(ProfilerSection::TickPreparation);
 
     mProfiler.beginSection(ProfilerSection::Weather);
     // the dimension ticks its weather before it darkens the sky
@@ -1030,6 +1034,7 @@ void ServerNetworkHandler::tick(bool paused) {
     }
     mProfiler.endSection(ProfilerSection::ConsoleCommands);
 
+    mProfiler.beginSection(ProfilerSection::Plugins);
     mPluginManager->tick();
     EventSignal<ServerTickAfterEvent> &serverTick = mEventBus.after().mServerTick;
     if (serverTick.hasSubscribers()) {
@@ -1037,9 +1042,15 @@ void ServerNetworkHandler::tick(bool paused) {
         serverTick.emit(tickEvent);
     }
 
+    mProfiler.endSection(ProfilerSection::Plugins);
+
+    mProfiler.beginSection(ProfilerSection::NetworkEvents);
     mNetworkHandler->cork();
     mNetworkHandler->runEvents();
     mNetworkHandler->uncork();
+    mProfiler.endSection(ProfilerSection::NetworkEvents);
+
+    mProfiler.beginSection(ProfilerSection::OverworldMaintenance);
     _removeSimulatedPlayers();
     _reserveSimulatedSpawns();
     mPlayerIndexDirty = true;
@@ -1047,6 +1058,7 @@ void ServerNetworkHandler::tick(bool paused) {
     for (World *world: mWorlds.getWorlds())
         _tickOverworld(*world);
     _tickSpawnWarmup();
+    mProfiler.endSection(ProfilerSection::OverworldMaintenance);
 
     if (!mChunkEncodeAheadMade) {
         mChunkEncodeAheadMade = true;
@@ -1092,8 +1104,12 @@ void ServerNetworkHandler::tick(bool paused) {
     ItemActorHandler::tickItemActors(*this);
     mProfiler.endSection(ProfilerSection::ItemActors);
 
+    mProfiler.beginSection(ProfilerSection::ActorTick);
     tickActors();
     runQueuedActorCommands();
+    mProfiler.endSection(ProfilerSection::ActorTick);
+
+    mProfiler.beginSection(ProfilerSection::Visibility);
     updateActorVisibility();
     mNetworkHandler->cork();
     updatePlayerVisibility();
@@ -1101,15 +1117,20 @@ void ServerNetworkHandler::tick(bool paused) {
     for (auto &entry: mPlayers)
         broadcastPlayerMove(entry.second);
     mNetworkHandler->uncork();
+    mProfiler.endSection(ProfilerSection::Visibility);
 
     for (World *world: mWorlds.getWorlds()) {
+        mProfiler.beginSection(ProfilerSection::ChunkUnloads);
         _processChunkUnloads(world->getOverworld());
+        mProfiler.endSection(ProfilerSection::ChunkUnloads);
+        mProfiler.beginSection(ProfilerSection::OtherDimensions);
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
         for (Level *level: world->getLevels()) {
             if (Dimension::isCustom(level->getDimensionType()))
                 _tickDimension(*world, *level);
         }
+        mProfiler.endSection(ProfilerSection::OtherDimensions);
     }
 
     const std::vector<Level *> levels = getLevels();
@@ -1125,21 +1146,28 @@ void ServerNetworkHandler::tick(bool paused) {
     }
     mProfiler.endSection(ProfilerSection::Redstone);
 
-    mProfiler.beginSection(ProfilerSection::Fire);
     for (Level *level: levels) {
+        mProfiler.beginSection(ProfilerSection::Fire);
         FireSystem::tick(*this, *level);
+        mProfiler.endSection(ProfilerSection::Fire);
+        mProfiler.beginSection(ProfilerSection::RandomTicks);
         RandomTickSystem::tick(*this, *level);
+        mProfiler.endSection(ProfilerSection::RandomTicks);
+        mProfiler.beginSection(ProfilerSection::Precipitation);
         PrecipitationSystem::tick(*this, *level);
+        mProfiler.endSection(ProfilerSection::Precipitation);
     }
-    mProfiler.endSection(ProfilerSection::Fire);
 
+    mProfiler.beginSection(ProfilerSection::NaturalSpawning);
     for (Level *level: levels)
         mNaturalSpawner.tick(*this, *level);
+    mProfiler.endSection(ProfilerSection::NaturalSpawning);
 
     mProfiler.beginSection(ProfilerSection::Announcement);
     _updateServerAnnouncement();
     mProfiler.endSection(ProfilerSection::Announcement);
 
+    mProfiler.beginSection(ProfilerSection::Scripts);
     if (!mFunctions.getTickFunctions().empty()) {
         // pack content: game director level, never the console's
         ServerCommandOrigin server(this, CommandPermission::GameDirectors);
@@ -1149,7 +1177,9 @@ void ServerNetworkHandler::tick(bool paused) {
     mNetworkHandler->cork();
     mScriptEngine.tick(mCurrentTick);
     mNetworkHandler->uncork();
+    mProfiler.endSection(ProfilerSection::Scripts);
 
+    mProfiler.beginSection(ProfilerSection::ClientMaintenance);
     std::vector<std::pair<NetworkIdentifier, std::string>> timedOut;
     std::vector<NetworkIdentifier> idle;
     std::vector<std::pair<NetworkIdentifier, int>> unanswered;
@@ -1208,6 +1238,9 @@ void ServerNetworkHandler::tick(bool paused) {
         }
     }
 
+    mProfiler.endSection(ProfilerSection::ClientMaintenance);
+
+    mProfiler.beginSection(ProfilerSection::TickAccounting);
     uint32_t loadedChunks = 0;
     uint32_t pendingChunkTasks = 0;
     uint32_t fluidsProcessed = 0;
@@ -1221,6 +1254,7 @@ void ServerNetworkHandler::tick(bool paused) {
         fluidsScheduled += (uint32_t) overworld.getScheduledFluidCount();
     }
     ServerTelemetry::getInstance().setPlayers((int) mPlayers.size());
+    mProfiler.endSection(ProfilerSection::TickAccounting);
     mProfiler.endTick((uint32_t) mPlayers.size(), loadedChunks, pendingChunkTasks, fluidsProcessed, fluidsScheduled);
 
     const double elapsedMs =

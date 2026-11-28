@@ -8,6 +8,7 @@
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Protocol/Packets/CommandRequestPacket.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
+#include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Chunk/SubChunk.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/LightStorage.h"
@@ -15,6 +16,7 @@
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
+#include "World/Level/LightSystem.h"
 
 #include <algorithm>
 #include <atomic>
@@ -375,6 +377,72 @@ int main() {
             LOG_ERROR(LogAreaID::Server, "FAIL: %s: %s", name, error.what());
         }
     };
+    check("random tick sections react to chunk edits", []() {
+        LevelChunk chunk(0, 0);
+        const BlockState leaves("minecraft:oak_leaves");
+        const BlockState stone("minecraft:stone");
+        const BlockState water("minecraft:water");
+        const auto mayTick = [](const BlockState &state) { return state.mName == "minecraft:oak_leaves"; };
+        const auto verify = [&](uint32_t nonEmpty, uint32_t eligible) {
+            const auto sections = chunk.getRandomTickSections(mayTick);
+            require(sections.mNonEmpty == nonEmpty && sections.mEligible == eligible,
+                    "wrong random tick sections");
+        };
+
+        verify(0, 0);
+        chunk.setBlock(0, LevelChunk::MIN_Y, 0, stone);
+        verify(1u, 0);
+        chunk.setBlock(0, LevelChunk::MIN_Y, 0, leaves);
+        verify(1u, 1u);
+        const LevelChunk &readOnly = chunk;
+        const SubChunk &section = readOnly.getSubChunk(0);
+        require(section.getPotentialRandomTickState(0, 0, 0) == &section.getBlock(0, 0, 0)
+                        && section.getPotentialRandomTickState(1, 0, 0) == nullptr,
+                "small palette did not filter the sampled entries");
+
+        chunk.setBlock(0, LevelChunk::MIN_Y + 16, 0, 1, water);
+        chunk.setBlock(0, LevelChunk::MIN_Y + 16, 0, 1, leaves);
+        verify(3u, 1u);
+        chunk.getSubChunk(2).setBlock(0, 0, 0, leaves);
+        verify(7u, 5u);
+        chunk.pack();
+        verify(7u, 5u);
+
+        for (int i = 0; i < 65; ++i)
+            chunk.setBlock(i & 15, LevelChunk::MIN_Y + 1, i >> 4, BlockState("test:block_" + std::to_string(i)));
+        verify(7u, 5u);
+        const SubChunk &large = readOnly.getSubChunk(0);
+        require(large.getPotentialRandomTickState(0, 0, 0) == &large.getBlock(0, 0, 0)
+                        && large.getPotentialRandomTickState(0, 1, 0) == &large.getBlock(0, 1, 0),
+                "large palette did not fall back to classifying sampled entries");
+    });
+    check("heightmap walks nonempty sections without changing light blocking", []() {
+        LevelChunk chunk(0, 0);
+        const BlockState stone("minecraft:stone"), leaves("minecraft:oak_leaves"), glass("minecraft:glass");
+        chunk.setBlock(0, LevelChunk::MIN_Y, 0, stone);
+        chunk.setBlock(0, LevelChunk::MAX_Y, 0, glass);
+        chunk.setBlock(15, LevelChunk::MAX_Y, 15, leaves);
+        chunk.setBlock(2, 161, 4, stone);
+        chunk.setBlock(3, 160, 5, 1, stone);
+
+        LightSystem::computeHeightmap(chunk);
+        for (int x = 0; x < 16; ++x) {
+            for (int z = 0; z < 16; ++z) {
+                int expected = LevelChunk::MIN_Y;
+                for (int y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; --y) {
+                    const int32_t properties = BlockLightProperties::packed(chunk.getBlock(x, y, z));
+                    if (BlockLightProperties::lightFilter(properties) > 1
+                        || BlockLightProperties::diffusesSkyLight(properties)) {
+                        expected = y + 1;
+                        break;
+                    }
+                }
+                require(chunk.getHeight(x, z) == expected, "Bulk heightmap differs from a block-by-block scan");
+                LightSystem::updateHeightAt(chunk, x, z);
+                require(chunk.getHeight(x, z) == expected, "Single column height differs from a block-by-block scan");
+            }
+        }
+    });
     try {
         std::filesystem::create_directories(root);
         ServerHost host;
