@@ -36,6 +36,10 @@ public:
     // every filter of the definitions, compiled once: root must outlive them, up to the next call; nullptr drops them
     static void compileDefinitions(const json::Value *root);
 
+    static void clearPackDefinitions();
+
+    static void compilePackDefinition(const json::Value &definition);
+
     static bool test(const Group &filter, ServerNetworkHandler &owner, const ServerActor &self,
                      const Actor *other = nullptr);
 

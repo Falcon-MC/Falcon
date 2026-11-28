@@ -6,14 +6,66 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 struct BehaviorPack;
 
 class EntityDefinitions {
 public:
+    enum class ComponentId : uint32_t {
+        TypeFamily, Inventory, Strength, Movement, JumpStrength, FollowRange, IsChested, CollisionBox,
+        Transformation, InstantDespawn, SpellEffects, Timer, BreakBlocks, DamageOverTime, Scheduler, AttackCooldown,
+        Breathable, IsShaking, BurnsInDaylight, CanStandOnPowderSnow, Equippable, PushableByEntity, Count
+    };
+
+    struct NumericValue {
+        std::optional<float> mValue;
+        std::optional<float> mMinimum;
+        std::optional<float> mMaximum;
+        bool mRange = false;
+    };
+
+    struct Inventory {
+        float mSize = 5.0f;
+        float mSlotsPerStrength = 0.0f;
+        bool mMount = false;
+    };
+
+    struct Equippable {
+        size_t mSlots = 0;
+    };
+
+    struct Strength {
+        float mValue = 0.0f;
+        float mMaximum = 5.0f;
+    };
+
+    struct CollisionBox {
+        std::optional<float> mWidth;
+        std::optional<float> mHeight;
+    };
+
+    struct Component {
+        uint32_t mId;
+        const json::Value *mJson;
+        std::variant<std::monostate, std::vector<std::string>, NumericValue, Inventory, Strength, CollisionBox,
+                     Equippable> mFields;
+    };
+
+    using ComponentGroup = std::vector<Component>;
+
+    struct CompiledDefinition {
+        ComponentGroup mBase;
+        std::map<std::string, ComponentGroup, std::less<>> mGroups;
+        size_t mComponentSlots = 0;
+    };
+
+    static const CompiledDefinition *findCompiled(const json::Value *definition);
+
     static void initialize();
 
     static void loadPacks(const std::vector<BehaviorPack> &packs);
