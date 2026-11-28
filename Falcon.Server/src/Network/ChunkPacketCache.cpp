@@ -17,6 +17,18 @@ std::shared_ptr<const SharedPacket> ChunkPacketCache::get(const Key &key, const 
     return entry.mPacket;
 }
 
+bool ChunkPacketCache::contains(const Key &key, const Stamp &stamp) const {
+    const auto found = mEntries.find(key);
+    return found != mEntries.end() && found->second.mPacket != nullptr && found->second.mStamp == stamp;
+}
+
+void ChunkPacketCache::put(const Key &key, const Stamp &stamp, uint64_t tick, std::string encoded) {
+    Entry &entry = mEntries[key];
+    entry.mLastUsed = tick;
+    entry.mStamp = stamp;
+    entry.mPacket = std::make_shared<const SharedPacket>(std::move(encoded));
+}
+
 void ChunkPacketCache::expire(uint64_t tick) {
     for (auto it = mEntries.begin(); it != mEntries.end();) {
         if (tick - it->second.mLastUsed > EXPIRY_TICKS)

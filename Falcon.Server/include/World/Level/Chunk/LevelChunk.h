@@ -49,6 +49,17 @@ struct ChunkWriteLog {
     std::vector<ChunkWrite> *mWrites = nullptr;
 };
 
+// the sections LevelChunk::encodeNetwork reads, copied on the main thread: any thread can encode it while the
+// chunk changes
+struct LevelChunkNetworkSnapshot {
+    std::vector<SubChunk> mSections;
+
+    // the same bytes as LevelChunk::encodeNetwork at the time of the copy
+    std::string encode(const BlockNetworkIdMap *blockIds) const;
+
+    size_t copiedBytes() const;
+};
+
 // main thread once resident; workers only see copies; network encodings cached per sub-chunk
 class LevelChunk {
 public:
@@ -120,6 +131,12 @@ public:
     uint32_t getColumnBiome(int x, int z) const;
 
     std::string encodeNetwork(const BlockNetworkIdMap *blockIds = nullptr) const;
+
+    // main thread only: unpacks a packed chunk
+    LevelChunkNetworkSnapshot snapshotNetwork() const;
+
+    // the copiedBytes of the snapshot snapshotNetwork would make, without making it; main thread only
+    size_t snapshotNetworkBytes() const;
 
     const std::string &encodeNetworkAnchor() const;
 

@@ -65,6 +65,7 @@
 #include <chrono>
 #include <deque>
 
+class ChunkEncodeAhead;
 class ItemUseTransaction;
 class CommandOrigin;
 class CommandOutputMessage;
@@ -207,6 +208,11 @@ public:
 
     std::shared_ptr<const SharedPacket> &getSharedLoginPacket(SharedLoginPacket kind, int protocol) {
         return mSharedLoginPackets[std::make_pair((int) kind, protocol)];
+    }
+
+    // null with chunk-encode-threads at 0
+    const ChunkEncodeAhead *getChunkEncodeAhead() const {
+        return mChunkEncodeAhead.get();
     }
 
     ChunkPacketCache &getChunkPacketCache() {
@@ -1532,6 +1538,9 @@ private:
 
     std::map<std::pair<int, int>, std::shared_ptr<const SharedPacket>> mSharedLoginPackets;
     ChunkPacketCache mChunkPacketCache;
+    // null with chunk-encode-threads at 0; made on the first tick
+    std::unique_ptr<ChunkEncodeAhead> mChunkEncodeAhead;
+    bool mChunkEncodeAheadMade = false;
     std::vector<int64_t> mSpawnWarmup;
     // the chunks a PlayerSpawn status waits for, plus the neighbours their decoration needs
     static const int32_t SPAWN_WARMUP_RADIUS = 6;

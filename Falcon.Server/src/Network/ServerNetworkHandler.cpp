@@ -31,6 +31,7 @@
 #include "World/Level/Block/Systems/BlockContactSystem.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "Network/Handler/ChunkStreamHandler.h"
+#include "Network/ChunkEncodeAhead.h"
 #include "World/Item/ElytraItem.h"
 #include "World/Item/TotemItem.h"
 #include "Server/Commands/PlayerCommandOrigin.h"
@@ -1046,6 +1047,27 @@ void ServerNetworkHandler::tick(bool paused) {
     for (World *world: mWorlds.getWorlds())
         _tickOverworld(*world);
     _tickSpawnWarmup();
+
+    if (!mChunkEncodeAheadMade) {
+        mChunkEncodeAheadMade = true;
+        if (mProperties.getChunkEncodeThreads() > 0) {
+            try {
+                mChunkEncodeAhead =
+                        std::make_unique<ChunkEncodeAhead>((unsigned) mProperties.getChunkEncodeThreads());
+            } catch (const std::exception &error) {
+                LOG_WARN(LogAreaID::Server, "chunk-encode-threads: the threads could not start (%s); chunks are "
+                                            "encoded at their sends",
+                         error.what());
+            }
+        }
+    }
+    // after the world tick: the chunks it finished are among this tick's sends, which stay in the players' tick
+    if (mChunkEncodeAhead != nullptr) {
+        mProfiler.beginSection(ProfilerSection::ChunkStreaming);
+        mChunkEncodeAhead->start(*this);
+        mChunkEncodeAhead->finish(*this);
+        mProfiler.endSection(ProfilerSection::ChunkStreaming);
+    }
 
     mProfiler.beginSection(ProfilerSection::Players);
     mNetworkHandler->cork();

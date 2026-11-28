@@ -38,6 +38,11 @@ public:
     std::shared_ptr<const SharedPacket> get(const Key &key, const Stamp &stamp, uint64_t tick,
                                             const std::function<std::string()> &encode);
 
+    bool contains(const Key &key, const Stamp &stamp) const;
+
+    // an encoding made ahead of its send; get() hands it out while the stamp still matches
+    void put(const Key &key, const Stamp &stamp, uint64_t tick, std::string encoded);
+
     void expire(uint64_t tick);
 
     size_t size() const {

@@ -6,6 +6,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/ChunkEncodeAhead.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Protocol/Packets/LevelChunkPacket.h"
 #include "Protocol/Packets/NetworkChunkPublisherUpdatePacket.h"
@@ -24,6 +25,8 @@ namespace {
     const int64_t LOAD_RETRY_TICKS = 4;
     // queued chunks looked at per tick, generating ones included
     const size_t MAX_SCANNED_PER_TICK = 1024;
+    // queued chunks a prediction of the next sends looks at: the nearest decide a tick's sends
+    const size_t SEND_QUEUE_PEEK = 128;
     // pending chunk bytes shared by every player, and the most one player holds: alone, a player flying fast needs
     // more than one tick of chunks waiting on the network thread
     const size_t TOTAL_QUEUED_CHUNK_BYTES = 16 * 1024 * 1024;
@@ -354,18 +357,12 @@ namespace {
             state.mLoadRetryTick = owner.getChunkStreamTick() + LOAD_RETRY_TICKS;
     }
 
-    LevelChunkPacket makeChunkPacket(Level &level, int32_t chunkX, int32_t chunkZ, const PacketCodecContext &context,
-                                     const std::string &blockActors) {
-        LevelChunkPacket chunk;
-        chunk.mChunkX = chunkX;
-        chunk.mChunkZ = chunkZ;
-        chunk.mDimension = level.getDimensionId();
-        chunk.mCachingEnabled = false;
-
-        chunk.mSubChunksLength = (uint32_t) level.getChunkSubChunkCount(chunkX, chunkZ);
-        chunk.mRequestSubChunks = false;
-        chunk.mData = level.getChunkData(chunkX, chunkZ, context.getBlockNetworkIds()) + blockActors;
-        return chunk;
+    unsigned sendBudgetFor(ServerNetworkHandler &owner, bool spawning) {
+        if (spawning)
+            return (unsigned) ChunkStreamHandler::SPAWN_CHUNK_COUNT;
+        if (owner.isJoinBurst())
+            return ChunkStreamHandler::JOIN_BURST_SENDS_PER_TICK;
+        return ChunkStreamHandler::getSendsPerTick(owner);
     }
 
     // players sent the same chunk revision share one encoding and one compression
@@ -373,25 +370,16 @@ namespace {
                    int64_t hash) {
         const NetworkIdentifier &id = player.getNetworkIdentifier();
         const PacketCodecContext &context = owner.getCodecContext(id);
-
-        BlockActorStore &blockActors = level.getBlockActors();
-        ChunkPacketCache::Stamp stamp;
-        if (blockActors.isChunkLoaded(chunkX, chunkZ))
-            stamp.mBlockActors = blockActors.encodeChunkNetwork(chunkX, chunkZ);
-        else
-            stamp.mBlockActors = BlockActorStore::encodeNetwork(level.loadBlockEntities(chunkX, chunkZ));
-
-        const LevelChunk &levelChunk = level.getChunk(chunkX, chunkZ);
-        stamp.mInstance = levelChunk.getNetworkInstance();
-        stamp.mRevision = levelChunk.getNetworkRevision();
+        const ChunkPacketCache::Stamp stamp = ChunkStreamHandler::chunkStamp(owner, level, chunkX, chunkZ);
 
         const ChunkPacketCache::Key key{&level, hash, &context};
         owner.getNetworkHandler().sendShared(
                 id, owner.getChunkPacketCache().get(key, stamp, owner.getChunkStreamTick(), [&]() {
-                    BinaryStream stream;
-                    makeChunkPacket(level, chunkX, chunkZ, context, stamp.mBlockActors)
-                            .writeWithHeader(stream, context);
-                    return stream.getBuffer();
+                    const uint32_t subChunks = (uint32_t) level.getChunkSubChunkCount(chunkX, chunkZ);
+                    return ChunkStreamHandler::writeChunkPacket(
+                            chunkX, chunkZ, level.getDimensionId(), subChunks,
+                            level.getChunkData(chunkX, chunkZ, context.getBlockNetworkIds()) + stamp.mBlockActors,
+                            context);
                 }));
     }
 
@@ -403,11 +391,7 @@ namespace {
         // the spawn status waits on the nearest chunks: one tick sends them, their compression is shared;
         // meanwhile players already in hold back the link and the clients' decoding
         const bool spawning = !player.hasSpawnChunksReady();
-        unsigned budget = ChunkStreamHandler::getSendsPerTick(owner);
-        if (spawning)
-            budget = (unsigned) ChunkStreamHandler::SPAWN_CHUNK_COUNT;
-        else if (owner.isJoinBurst())
-            budget = ChunkStreamHandler::JOIN_BURST_SENDS_PER_TICK;
+        const unsigned budget = sendBudgetFor(owner, spawning);
         if (state.mReadyToSend.empty() || state.mSendsThisTick >= budget)
             return;
 
@@ -477,6 +461,88 @@ namespace {
         }
 
         player.addSentChunkCount(added);
+    }
+}
+
+ChunkPacketCache::Stamp ChunkStreamHandler::chunkStamp(ServerNetworkHandler &owner, Level &level, int32_t chunkX,
+                                                       int32_t chunkZ) {
+    ChunkPacketCache::Stamp stamp;
+    const LevelChunk &levelChunk = level.getChunk(chunkX, chunkZ);
+    stamp.mInstance = levelChunk.getNetworkInstance();
+    stamp.mRevision = levelChunk.getNetworkRevision();
+
+    BlockActorStore &blockActors = level.getBlockActors();
+    if (blockActors.isChunkLoaded(chunkX, chunkZ)) {
+        stamp.mBlockActors = blockActors.encodeChunkNetwork(chunkX, chunkZ);
+        return stamp;
+    }
+    // read from storage once a tick: the copy made ahead of this send already did
+    const ChunkEncodeAhead *ahead = owner.getChunkEncodeAhead();
+    const std::string *stored =
+            ahead == nullptr ? nullptr
+                             : ahead->findStoredBlockActors(level, packChunk(chunkX, chunkZ), stamp.mInstance,
+                                                            stamp.mRevision);
+    stamp.mBlockActors =
+            stored != nullptr ? *stored : BlockActorStore::encodeNetwork(level.loadBlockEntities(chunkX, chunkZ));
+    return stamp;
+}
+
+std::string ChunkStreamHandler::writeChunkPacket(int32_t chunkX, int32_t chunkZ, int32_t dimension, uint32_t subChunks,
+                                                 std::string data, const PacketCodecContext &context) {
+    LevelChunkPacket chunk;
+    chunk.mChunkX = chunkX;
+    chunk.mChunkZ = chunkZ;
+    chunk.mDimension = dimension;
+    chunk.mCachingEnabled = false;
+    chunk.mSubChunksLength = subChunks;
+    chunk.mRequestSubChunks = false;
+    chunk.mData = std::move(data);
+
+    BinaryStream stream;
+    chunk.writeWithHeader(stream, context);
+    return stream.getBuffer();
+}
+
+void ChunkStreamHandler::peekNextSends(ServerNetworkHandler &owner, ServerPlayer &player, std::vector<int64_t> &out) {
+    const ChunkStreamState &state = player.getChunkStreamState();
+    if (state.mReadyToSend.empty() && state.mSendQueue.empty())
+        return;
+
+    // the limits sendReadyChunks applies at the start of its tick
+    const bool spawning = !player.hasSpawnChunksReady();
+    const unsigned budget = sendBudgetFor(owner, spawning);
+    unsigned picked = state.mSendTick == owner.getChunkStreamTick() ? state.mSendsThisTick : 0;
+    if (picked >= budget)
+        return;
+    if (!spawning
+        && owner.getNetworkHandler().getPendingOutboundBytes(player.getNetworkIdentifier())
+                   >= queuedChunkBytesFor(owner))
+        return;
+
+    std::vector<int64_t> queue = state.mReadyToSend;
+    // most chunks reach the ready queue in loadQueuedChunks just before their send: the ones it would move now
+    // join, from the front of the load queue
+    Level &level = owner.getLevelFor(player);
+    if (!isClientSideGeneration(owner) && owner.getChunkStreamTick() >= state.mLoadRetryTick
+        && (spawning || !owner.hasPlayersAwaitingTerrain())) {
+        std::vector<int64_t> loading = state.mSendQueue;
+        for (size_t looked = 0; looked < SEND_QUEUE_PEEK && !loading.empty(); ++looked) {
+            const int64_t hash = popQueue(state, loading);
+            const int32_t chunkX = unpackChunkX(hash);
+            const int32_t chunkZ = unpackChunkZ(hash);
+            if (level.isChunkPopulated(chunkX, chunkZ))
+                queue.push_back(hash);
+        }
+        makeQueue(state, queue);
+    }
+
+    const std::unordered_set<int64_t> &sent = player.getSentChunks();
+    while (picked < budget && !queue.empty()) {
+        const int64_t hash = popQueue(state, queue);
+        if (state.mInRadius.find(hash) == state.mInRadius.end() || sent.find(hash) != sent.end())
+            continue;
+        out.push_back(hash);
+        ++picked;
     }
 }
 

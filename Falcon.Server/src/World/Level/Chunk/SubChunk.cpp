@@ -456,6 +456,19 @@ void SubChunk::writeNetwork(BinaryStream &stream, const BlockNetworkIdMap *block
         _writeStorage(stream, false, mPalette2, mBlocks2, blockIds);
 }
 
+void SubChunk::cacheStateHashes() const {
+    for (const BlockState *state: mPalette)
+        state->getHash();
+    for (const BlockState *state: mPalette2)
+        state->getHash();
+}
+
+size_t SubChunk::copiedBytes() const {
+    return sizeof(SubChunk) + (mPalette.size() + mPalette2.size()) * sizeof(const BlockState *)
+           + mBiomePalette.size() * sizeof(uint32_t)
+           + (mBlocks.words().size() + mBlocks2.words().size() + mBiomes.words().size()) * sizeof(uint32_t);
+}
+
 void SubChunk::_writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const {
     stream.putByte((unsigned char) ((1 << 1) | (persistent ? 0 : 1)));
     putIndexWords(stream, PaletteIndices(), 1);
