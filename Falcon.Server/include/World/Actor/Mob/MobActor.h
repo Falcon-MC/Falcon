@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Actor/Definition/EntityDefinitions.h"
+
 #include "World/Actor/ActorDamageSource.h"
 
 #include "World/Actor/AI/Control/BodyControl.h"
@@ -249,6 +251,8 @@ public:
     const PushableByEntityPresets &getPushPresets() const;
 
     std::vector<std::string> getFamilies() const;
+
+    const std::vector<std::string> &getTypeFamilies() const;
 
     // the game overrides the movement attribute of a few mobs
     virtual float getMovementSpeed() const;
@@ -706,7 +710,7 @@ private:
         explicit InventoryView(MobActor &mob) : mMob(mob) {}
 
         int getContainerSize() const override {
-            if (mMob._isMountInventory() && mMob.getComponent("minecraft:is_chested") == nullptr)
+            if (mMob._isMountInventory() && mMob._component(EntityDefinitions::ComponentId::IsChested) == nullptr)
                 return getEquipmentSlotCount();
             return mMob.getInventoryCapacity();
         }
@@ -767,6 +771,16 @@ private:
     void _rebuildComponents() const;
 
     const json::Value *_findComponent(std::string_view name) const;
+
+    const json::Value *getComponent(EntityDefinitions::ComponentId id) const;
+
+    const EntityDefinitions::Component *_component(EntityDefinitions::ComponentId id) const;
+
+    template<class Fields>
+    const Fields *_fields(EntityDefinitions::ComponentId id) const {
+        const auto *component = _component(id);
+        return component == nullptr ? nullptr : std::get_if<Fields>(&component->mFields);
+    }
 
     const SensorComponents &_getSensorComponents() const;
 
@@ -869,7 +883,7 @@ private:
 
     const json::Value *_seatFor(size_t index, size_t passengerCount) const;
 
-    float _rolledValue(const json::Value *component, float &rolled, float fallback) const;
+    float _rolledValue(const EntityDefinitions::NumericValue *component, float &rolled, float fallback) const;
 
     // by place in the definition's list: the game keeps the equippable items at the head of the inventory in
     // that order, whatever "slot" says (the llama's only slot is numbered 1 and sits first)
@@ -976,9 +990,7 @@ private:
     mutable bool mDefinitionResolved = false;
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
-    // mComponents by definition component id, filled as names are looked up; emptied with the components: a group
-    // added or removed changes what a name finds
-    mutable std::vector<const json::Value *> mRecentComponents;
+    mutable std::vector<const EntityDefinitions::Component *> mActiveComponents;
     mutable SensorComponents mSensorComponents;
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;

@@ -4,11 +4,13 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
+#include "Scripting/BehaviorPackManager.h"
 #include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Mob/Passive/CowActor.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -67,6 +69,87 @@ namespace {
         return false;
     }
 
+    void require(bool condition, const std::string &message) {
+        if (!condition)
+            throw std::runtime_error(message);
+    }
+
+    void compiledComponentsMatch(const json::Value &root) {
+        using Definitions = EntityDefinitions;
+        using Id = Definitions::ComponentId;
+        const auto checkGroup = [](const json::Value *data, const Definitions::ComponentGroup &compiled) {
+            const auto matches = [](const std::optional<float> &number, const json::Value *field) {
+                return field != nullptr && field->isNumber() ? number == (float) field->number()
+                                                              : !number.has_value();
+            };
+            require(compiled.size() == (data == nullptr ? 0 : data->mKeys.size()), "component group size changed");
+            for (size_t i = 0; i < compiled.size(); ++i) {
+                const auto &entry = compiled[i];
+                const std::string &name = data->mKeys[i];
+                const auto *raw = data->get(name);
+                require(entry.mId == Definitions::findComponentId(name) && entry.mJson == raw,
+                        "component lookup changed for " + name);
+                if (entry.mId == (uint32_t) Id::TypeFamily) {
+                    std::vector<std::string> families;
+                    if (const auto *list = raw->get("family")) {
+                        for (const auto &family: list->mArray)
+                            families.push_back(family->string());
+                    }
+                    require(std::get<std::vector<std::string>>(entry.mFields) == families, "compiled families differ");
+                } else if (entry.mId == (uint32_t) Id::Inventory) {
+                    const auto &fields = std::get<Definitions::Inventory>(entry.mFields);
+                    const auto *size = raw->get("inventory_size");
+                    const auto *slots = raw->get("additional_slots_per_strength");
+                    const auto *type = raw->get("container_type");
+                    require(fields.mSize == (size == nullptr ? 5.0f : (float) size->number(5))
+                            && fields.mSlotsPerStrength == (slots == nullptr ? 0.0f : (float) slots->number())
+                            && fields.mMount == (type != nullptr && type->string() == "horse"),
+                            "compiled inventory differs");
+                } else if (entry.mId == (uint32_t) Id::Equippable) {
+                    const auto &fields = std::get<Definitions::Equippable>(entry.mFields);
+                    const auto *slots = raw->get("slots");
+                    const size_t count = slots == nullptr || !slots->isArray() ? 0 : slots->mArray.size();
+                    require(fields.mSlots == count, "compiled equippable slots differ");
+                } else if (entry.mId == (uint32_t) Id::Strength) {
+                    const auto &fields = std::get<Definitions::Strength>(entry.mFields);
+                    const auto *value = raw->get("value");
+                    const auto *maximum = raw->get("max");
+                    require(fields.mValue == (value == nullptr ? 0.0f : (float) value->number())
+                            && fields.mMaximum == (maximum == nullptr ? 5.0f : (float) maximum->number(5)),
+                            "compiled strength differs");
+                } else if (entry.mId == (uint32_t) Id::CollisionBox) {
+                    const auto &box = std::get<Definitions::CollisionBox>(entry.mFields);
+                    require(matches(box.mWidth, raw->get("width")) && matches(box.mHeight, raw->get("height")),
+                            "compiled collision box differs");
+                } else if (entry.mId == (uint32_t) Id::Movement || entry.mId == (uint32_t) Id::JumpStrength
+                           || entry.mId == (uint32_t) Id::FollowRange) {
+                    const auto &fields = std::get<Definitions::NumericValue>(entry.mFields);
+                    const auto *value = raw->get("value");
+                    const bool range = value != nullptr && value->isObject();
+                    require(fields.mRange == range, "compiled numeric form differs");
+                    if (range)
+                        require(matches(fields.mMinimum, value->get("range_min"))
+                                && matches(fields.mMaximum, value->get("range_max")), "compiled range differs");
+                    else
+                        require(matches(fields.mValue, value), "compiled number differs");
+                }
+            }
+        };
+        for (const auto &name: root.mKeys) {
+            const auto *raw = Definitions::find(name);
+            const auto *compiled = Definitions::findCompiled(raw);
+            require(raw != nullptr && compiled != nullptr, "definition did not compile: " + name);
+            checkGroup(raw->get("components"), compiled->mBase);
+            const auto *groups = raw->get("component_groups");
+            require(compiled->mGroups.size() == (groups == nullptr ? 0 : groups->mKeys.size()),
+                    "compiled group count differs for " + name);
+            if (groups != nullptr) {
+                for (const auto &group: groups->mKeys)
+                    checkGroup(groups->get(group), compiled->mGroups.at(group));
+            }
+        }
+    }
+
     // every filter of a definition: goals, sensors, events and the rest, nested ones included
     void collect(const json::Value &value, std::vector<const json::Value *> &filters) {
         if (!value.isArray() && !value.isObject())
@@ -113,6 +196,57 @@ namespace {
             return dynamic_cast<MobActor *>(mActors[index % mActors.size()]);
         }
     };
+
+    void packComponentPrecedence(Arena &arena, const std::filesystem::path &directory) {
+        const auto packRoot = directory / "typed-pack";
+        std::filesystem::create_directories(packRoot / "entities");
+        std::ofstream(packRoot / "entities" / "test.json") << R"({
+            "minecraft:entity": {
+                "description": {"identifier": "test:typed"},
+                "components": {
+                    "minecraft:type_family": {"family": ["base"]},
+                    "minecraft:inventory": {"inventory_size": 9},
+                    "minecraft:movement": {"value": 0.25}
+                },
+                "component_groups": {
+                    "first": {
+                        "minecraft:type_family": {"family": ["first"]},
+                        "minecraft:movement": {"value": 0.5}
+                    },
+                    "second": {
+                        "minecraft:type_family": {"family": ["second"]},
+                        "minecraft:inventory": {"inventory_size": 12}
+                    }
+                },
+                "events": {"test:family": {"filters": {"test": "is_family", "value": "first"}}}
+            }
+        })";
+        BehaviorPack pack;
+        pack.mPath = packRoot.string();
+        EntityDefinitions::loadPacks({pack});
+        {
+            CowActor actor(54321, "test:typed");
+            const auto *definition = actor.getDefinition();
+            require(definition != nullptr, "test pack entity did not load");
+            const auto &filter = *definition->get("events")->get("test:family")->get("filters");
+            require(actor.getMovementSpeed() == 0.25f && actor.getInventoryCapacity() == 9,
+                    "base pack components were not selected");
+            require(!EntityFilter::test(filter, arena.mOwner, actor), "the group filter matched the base family");
+            actor.addComponentGroup("first");
+            require(actor.getMovementSpeed() == 0.5f && EntityFilter::test(filter, arena.mOwner, actor),
+                    "compiled fields were not applied with the group");
+            actor.addComponentGroup("second");
+            require(actor.getInventoryCapacity() == 12 && !EntityFilter::test(filter, arena.mOwner, actor),
+                    "the last active group did not replace the family and inventory");
+            actor.removeComponentGroup("second");
+            require(actor.getInventoryCapacity() == 9 && EntityFilter::test(filter, arena.mOwner, actor),
+                    "removing the last group did not restore the previous components");
+            actor.removeComponentGroup("first");
+            require(actor.getMovementSpeed() == 0.25f && actor.getTypeFamilies() == std::vector<std::string>{"base"},
+                    "removing the groups did not restore the base");
+        }
+        EntityDefinitions::loadPacks({});
+    }
 
     struct Totals {
         size_t mChecks = 0;
@@ -210,6 +344,7 @@ int main() {
         const std::unique_ptr<json::Value> listing = json::parse(FalconEntityData::kEntityDefinitionsJson);
         if (listing == nullptr)
             throw std::runtime_error("the embedded definitions did not parse");
+        compiledComponentsMatch(*listing);
         std::vector<const json::Value *> filters;
         for (const std::string &identifier: listing->mKeys) {
             if (const json::Value *definition = EntityDefinitions::find(identifier))
@@ -221,6 +356,7 @@ int main() {
         Arena arena(directory);
         Totals totals;
         situations(arena, filters, totals);
+        packComponentPrecedence(arena, directory);
         std::cout << filters.size() << " filters, " << totals.mChecks << " checks, " << totals.mPassed
                   << " passed, " << totals.mMismatches << " mismatches\n";
         if (totals.mMismatches != 0)

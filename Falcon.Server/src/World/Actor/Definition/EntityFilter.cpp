@@ -81,7 +81,6 @@ namespace {
     }
 
     const char *const PLAYER_FAMILY = "player";
-    const char *const TYPE_FAMILY_COMPONENT = "minecraft:type_family";
 
     Vector3i blockPosition(const Actor &actor) {
         const Vector3f position = actor.getPosition();
@@ -721,15 +720,23 @@ namespace {
         return filters;
     }
 
-    void compileTree(const json::Value &value) {
+    std::vector<const json::Value *> &packFilters() {
+        static std::vector<const json::Value *> filters;
+        return filters;
+    }
+
+    void compileTree(const json::Value &value, std::vector<const json::Value *> *pack) {
         if (!value.isArray() && !value.isObject())
             return;
-        if (looksLikeFilter(value))
+        if (looksLikeFilter(value)) {
             compiledFilters().emplace(&value, compileNode(value));
+            if (pack != nullptr)
+                pack->push_back(&value);
+        }
         for (const std::unique_ptr<json::Value> &entry: value.mArray)
-            compileTree(*entry);
+            compileTree(*entry, pack);
         for (const auto &entry: value.mObject)
-            compileTree(*entry.second);
+            compileTree(*entry.second, pack);
     }
 
     bool compareNumbers(int64_t left, int64_t right, FilterOperator op) {
@@ -1291,22 +1298,20 @@ bool EntityFilter::hasFamily(const Actor &actor, const std::string &family) {
     if (actor.isPlayer())
         return family == PLAYER_FAMILY;
 
-    const json::Value *typeFamily = nullptr;
     if (const MobActor *mob = mobOf(actor)) {
-        typeFamily = mob->getComponent(TYPE_FAMILY_COMPONENT);
-    } else if (const ServerActor *serverActor = serverActorOf(actor)) {
-        const json::Value *definition = EntityDefinitions::find(serverActor->getIdentifier());
-        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
-        typeFamily = components == nullptr ? nullptr : components->get(TYPE_FAMILY_COMPONENT);
+        const auto &families = mob->getTypeFamilies();
+        return std::find(families.begin(), families.end(), family) != families.end();
     }
-
-    const json::Value *families = typeFamily == nullptr ? nullptr : typeFamily->get("family");
-    if (families == nullptr)
-        return false;
-
-    for (const std::unique_ptr<json::Value> &entry: families->mArray) {
-        if (textOf(*entry) == family)
-            return true;
+    if (const ServerActor *serverActor = serverActorOf(actor)) {
+        const auto *definition = EntityDefinitions::findCompiled(EntityDefinitions::find(serverActor->getIdentifier()));
+        if (definition == nullptr)
+            return false;
+        for (const auto &component: definition->mBase) {
+            if (component.mId == (uint32_t) EntityDefinitions::ComponentId::TypeFamily) {
+                const auto &families = std::get<std::vector<std::string>>(component.mFields);
+                return std::find(families.begin(), families.end(), family) != families.end();
+            }
+        }
     }
     return false;
 }
@@ -1327,8 +1332,20 @@ std::shared_ptr<const EntityFilter::Group> EntityFilter::compile(const json::Val
 
 void EntityFilter::compileDefinitions(const json::Value *root) {
     compiledFilters().clear();
+    packFilters().clear();
     if (root != nullptr)
-        compileTree(*root);
+        compileTree(*root, nullptr);
+}
+
+void EntityFilter::clearPackDefinitions() {
+    auto &filters = compiledFilters();
+    for (const auto *filter: packFilters())
+        filters.erase(filter);
+    packFilters().clear();
+}
+
+void EntityFilter::compilePackDefinition(const json::Value &definition) {
+    compileTree(definition, &packFilters());
 }
 
 bool EntityFilter::test(const Group &filter, ServerNetworkHandler &owner, const ServerActor &self,
